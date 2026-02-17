@@ -1,0 +1,105 @@
+const {
+  DataTypes
+} = require('sequelize');
+module.exports = sequelize => {
+  const attributes = {
+    id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: true,
+      field: "id",
+      autoIncrement: true
+    },
+    nro_documento: {
+      type: DataTypes.CHAR(30),
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "nro_documento",
+      autoIncrement: false,
+      unique: "clientes_nro_documento_key"
+    },
+    razon_social: {
+      type: DataTypes.CHAR(200),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "razon_social",
+      autoIncrement: false
+    },
+    direccion: {
+      type: DataTypes.CHAR(200),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "direccion",
+      autoIncrement: false
+    },
+    ciudad: {
+      type: DataTypes.CHAR(120),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "ciudad",
+      autoIncrement: false
+    },
+    barrio: {
+      type: DataTypes.CHAR(120),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "barrio",
+      autoIncrement: false
+    },
+    condicion_pago: {
+      type: DataTypes.CHAR(50),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "condicion_pago",
+      autoIncrement: false
+    },
+    tipo_negocio: {
+      type: DataTypes.CHAR(150),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "tipo_negocio",
+      autoIncrement: false
+    },
+    subcanal: {
+      type: DataTypes.CHAR(150),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "subcanal",
+      autoIncrement: false
+    },
+    subcanal_detallado: {
+      type: DataTypes.CHAR(150),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "subcanal_detallado",
+      autoIncrement: false
+    }
+  };
+  const options = {
+    tableName: "clientes",
+    comment: "",
+    indexes: []
+  };
+  const ClientesModel = sequelize.define("clientes_model", attributes, options);
+  return ClientesModel;
+};
