@@ -1,7 +1,5 @@
-const {
-  DataTypes
-} = require('sequelize');
-module.exports = sequelize => {
+const { DataTypes } = require("sequelize");
+module.exports = (sequelize) => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -10,7 +8,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true
+      autoIncrement: true,
     },
     venta_id: {
       type: DataTypes.INTEGER,
@@ -22,8 +20,8 @@ module.exports = sequelize => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "ventas_model"
-      }
+        model: "ventas_model",
+      },
     },
     producto_id: {
       type: DataTypes.INTEGER,
@@ -35,8 +33,8 @@ module.exports = sequelize => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "productos_model"
-      }
+        model: "productos_model",
+      },
     },
     unidad_medida_id: {
       type: DataTypes.INTEGER,
@@ -48,8 +46,8 @@ module.exports = sequelize => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "unidades_medida_model"
-      }
+        model: "unidades_medida_model",
+      },
     },
     cantidad_emp: {
       type: DataTypes.DOUBLE,
@@ -58,7 +56,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cantidad_emp",
-      autoIncrement: false
+      autoIncrement: false,
     },
     cantidad: {
       type: DataTypes.DOUBLE,
@@ -67,7 +65,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cantidad",
-      autoIncrement: false
+      autoIncrement: false,
     },
     costo_promedio_total: {
       type: DataTypes.DOUBLE,
@@ -76,7 +74,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "costo_promedio_total",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_bruto: {
       type: DataTypes.DOUBLE,
@@ -85,7 +83,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_bruto",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_descuentos: {
       type: DataTypes.DOUBLE,
@@ -94,7 +92,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_descuentos",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_subtotal: {
       type: DataTypes.DOUBLE,
@@ -103,7 +101,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_subtotal",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_impuestos: {
       type: DataTypes.DOUBLE,
@@ -112,7 +110,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_impuestos",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_neto: {
       type: DataTypes.DOUBLE,
@@ -121,7 +119,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_neto",
-      autoIncrement: false
+      autoIncrement: false,
     },
     margen_promedio: {
       type: DataTypes.DOUBLE,
@@ -130,7 +128,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "margen_promedio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     impuesto_afecta_margen: {
       type: DataTypes.DOUBLE,
@@ -139,7 +137,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "impuesto_afecta_margen",
-      autoIncrement: false
+      autoIncrement: false,
     },
     factor_um_emp: {
       type: DataTypes.DOUBLE,
@@ -148,7 +146,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "factor_um_emp",
-      autoIncrement: false
+      autoIncrement: false,
     },
     factor_um_orden: {
       type: DataTypes.DOUBLE,
@@ -157,7 +155,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "factor_um_orden",
-      autoIncrement: false
+      autoIncrement: false,
     },
     peso_kilo: {
       type: DataTypes.DOUBLE,
@@ -166,22 +164,33 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "peso_kilo",
-      autoIncrement: false
-    }
+      autoIncrement: false,
+    },
   };
   const options = {
     tableName: "ventas_detalle",
     comment: "",
-    indexes: [{
-      name: "idx_detalle_producto",
-      unique: false,
-      fields: ["producto_id"]
-    }, {
-      name: "idx_detalle_venta",
-      unique: false,
-      fields: ["venta_id"]
-    }]
+    indexes: [
+      {
+        name: "idx_detalle_producto",
+        unique: false,
+        fields: ["producto_id"],
+      },
+      {
+        name: "idx_detalle_venta",
+        unique: false,
+        fields: ["venta_id"],
+      },
+    ],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: "public",
   };
-  const VentasDetalleModel = sequelize.define("ventas_detalle_model", attributes, options);
+  const VentasDetalleModel = sequelize.define(
+    "ventas_detalle_model",
+    attributes,
+    options,
+  );
   return VentasDetalleModel;
 };

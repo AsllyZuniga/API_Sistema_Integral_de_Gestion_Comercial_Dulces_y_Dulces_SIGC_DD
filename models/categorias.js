@@ -1,7 +1,5 @@
-const {
-  DataTypes
-} = require('sequelize');
-module.exports = sequelize => {
+const { DataTypes } = require("sequelize");
+module.exports = (sequelize) => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -10,7 +8,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true
+      autoIncrement: true,
     },
     categoria: {
       type: DataTypes.CHAR(150),
@@ -19,7 +17,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "categoria",
-      autoIncrement: false
+      autoIncrement: false,
     },
     megacategoria: {
       type: DataTypes.CHAR(150),
@@ -28,7 +26,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "megacategoria",
-      autoIncrement: false
+      autoIncrement: false,
     },
     subcategoria: {
       type: DataTypes.CHAR(150),
@@ -37,14 +35,22 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "subcategoria",
-      autoIncrement: false
-    }
+      autoIncrement: false,
+    },
   };
   const options = {
     tableName: "categorias",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: "public",
   };
-  const CategoriasModel = sequelize.define("categorias_model", attributes, options);
+  const CategoriasModel = sequelize.define(
+    "categorias_model",
+    attributes,
+    options,
+  );
   return CategoriasModel;
 };
