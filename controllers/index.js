@@ -4,7 +4,7 @@ const cuotas_vendedoresController = require("./cuotas_vendedoresController");
 const productosController = require("./productosController");
 const staging_ventasController = require("./staging_ventasController");
 const tipos_documentoController = require("./tipos_documentoController");
-const unidadades_medidaController = require("./unidadades_medidaController");
+const unidades_medidaController = require("./unidades_medidaController");
 const vendedoresController = require("./vendedoresController");
 const ventasController = require("./ventasController");
 const ventas_detalleController = require("./ventas_detalleController");
@@ -16,7 +16,7 @@ module.exports = {
   productosController,
   staging_ventasController,
   tipos_documentoController,
-  unidadades_medidaController,
+  unidades_medidaController,
   vendedoresController,
   ventasController,
   ventas_detalleController,
