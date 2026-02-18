@@ -5,7 +5,13 @@
     "database": "REDACTED_DB",
     "host": "REDACTED_HOST",
     "port": 5432,
-    "dialect": "postgres"
+    "dialect": "postgres",
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
   },
   "test": {
     "username": "REDACTED_USER",
@@ -13,7 +19,13 @@
     "database": "REDACTED_DB",
     "host": "REDACTED_HOST",
     "port": 5432,
-    "dialect": "postgres"
+    "dialect": "postgres",
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
   },
   "production": {
     "username": "REDACTED_USER",
@@ -21,6 +33,12 @@
     "database": "REDACTED_DB",
     "host": "REDACTED_HOST",
     "port": 5432,
-    "dialect": "postgres"
+    "dialect": "postgres",
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
   }
 }
