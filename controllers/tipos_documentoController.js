@@ -8,4 +8,19 @@ module.exports = {
         res.status(400).send(error);
       });
   },
+  getById(req, res) {
+    console.log(req.params.id);
+    return tipos_documento
+      .findByPk(req.params.id)
+      .then((tipos_documento) => {
+        console.log(tipos_documento);
+        if (!tipos_documento) {
+          return res.status(404).send({
+            message: "tipos_documento Not Found",
+          });
+        }
+        return res.status(200).send(tipos_documento);
+      })
+      .catch((error) => res.status(400).send(error));
+  },
 };
