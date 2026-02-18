@@ -23,4 +23,32 @@ module.exports = {
       })
       .catch((error) => res.status(400).send(error));
   },
+  add(req, res) {
+    return vendedores
+      .create({
+        codigo: req.body.codigo,
+        nombre: req.body.nombre,
+      })
+      .then((vendedores) => res.status(201).send(vendedores))
+      .catch((error) => res.status(400).send(error));
+  },
+  update(req, res) {
+    return vendedores
+      .findByPk(req.params.id)
+      .then((vendedores) => {
+        if (!vendedores) {
+          return res.status(404).send({
+            message: "vendedores Not Found",
+          });
+        }
+        return vendedores
+          .update({
+            codigo: req.body.codigo || vendedores.codigo,
+            nombre: req.body.nombre || vendedores.nombre,
+          })
+          .then(() => res.status(200).send(project))
+          .catch((error) => res.status(400).send(error));
+      })
+      .catch((error) => res.status(400).send(error));
+  },
 };
