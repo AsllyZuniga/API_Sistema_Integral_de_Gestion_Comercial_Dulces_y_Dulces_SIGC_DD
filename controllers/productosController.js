@@ -26,11 +26,33 @@ module.exports = {
   add(req, res) {
     return productos
       .create({
-        title: req.body.title,
-        description: req.body.description,
-        state: req.body.state,
+        codigo: req.body.codigo,
+        descripcion: req.body.descripcion,
+        categoria_id: req.body.categoria_id,
       })
-      .then((productos) => res.status(201).send(productos))
+      .then((producto) => res.status(201).send(producto))
+      .catch((error) => res.status(400).send(error));
+  },
+
+  update(req, res) {
+    return productos
+      .findByPk(req.params.id)
+      .then((producto) => {
+        if (!producto) {
+          return res.status(404).send({
+            message: "Producto not found",
+          });
+        }
+
+        return producto
+          .update({
+            codigo: req.body.codigo ?? producto.codigo,
+            descripcion: req.body.descripcion ?? producto.descripcion,
+            categoria_id: req.body.categoria_id ?? producto.categoria_id,
+          })
+          .then(() => res.status(200).send(producto))
+          .catch((error) => res.status(400).send(error));
+      })
       .catch((error) => res.status(400).send(error));
   },
 };
