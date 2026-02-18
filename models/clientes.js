@@ -1,7 +1,5 @@
-const {
-  DataTypes
-} = require('sequelize');
-module.exports = sequelize => {
+const { DataTypes } = require("sequelize");
+module.exports = (sequelize) => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -10,7 +8,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true
+      autoIncrement: true,
     },
     nro_documento: {
       type: DataTypes.CHAR(30),
@@ -20,7 +18,7 @@ module.exports = sequelize => {
       primaryKey: false,
       field: "nro_documento",
       autoIncrement: false,
-      unique: "clientes_nro_documento_key"
+      unique: "clientes_nro_documento_key",
     },
     razon_social: {
       type: DataTypes.CHAR(200),
@@ -29,7 +27,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "razon_social",
-      autoIncrement: false
+      autoIncrement: false,
     },
     direccion: {
       type: DataTypes.CHAR(200),
@@ -38,7 +36,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "direccion",
-      autoIncrement: false
+      autoIncrement: false,
     },
     ciudad: {
       type: DataTypes.CHAR(120),
@@ -47,7 +45,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "ciudad",
-      autoIncrement: false
+      autoIncrement: false,
     },
     barrio: {
       type: DataTypes.CHAR(120),
@@ -56,7 +54,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "barrio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     condicion_pago: {
       type: DataTypes.CHAR(50),
@@ -65,7 +63,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "condicion_pago",
-      autoIncrement: false
+      autoIncrement: false,
     },
     tipo_negocio: {
       type: DataTypes.CHAR(150),
@@ -74,7 +72,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "tipo_negocio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     subcanal: {
       type: DataTypes.CHAR(150),
@@ -83,7 +81,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "subcanal",
-      autoIncrement: false
+      autoIncrement: false,
     },
     subcanal_detallado: {
       type: DataTypes.CHAR(150),
@@ -92,13 +90,17 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "subcanal_detallado",
-      autoIncrement: false
-    }
+      autoIncrement: false,
+    },
   };
   const options = {
     tableName: "clientes",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: "public",
   };
   const ClientesModel = sequelize.define("clientes_model", attributes, options);
   return ClientesModel;

@@ -1,7 +1,5 @@
-const {
-  DataTypes
-} = require('sequelize');
-module.exports = sequelize => {
+const { DataTypes } = require("sequelize");
+module.exports = (sequelize) => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -10,7 +8,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true
+      autoIncrement: true,
     },
     vendedor_id: {
       type: DataTypes.INTEGER,
@@ -22,8 +20,8 @@ module.exports = sequelize => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "vendedores_model"
-      }
+        model: "vendedores_model",
+      },
     },
     anio: {
       type: DataTypes.INTEGER,
@@ -32,7 +30,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "anio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     mes: {
       type: DataTypes.INTEGER,
@@ -41,7 +39,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "mes",
-      autoIncrement: false
+      autoIncrement: false,
     },
     cuota: {
       type: DataTypes.DOUBLE,
@@ -50,18 +48,32 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cuota",
-      autoIncrement: false
-    }
+      autoIncrement: false,
+    },
   };
   const options = {
     tableName: "cuotas_vendedores",
     comment: "",
-    indexes: [{
-      name: "cuotas_vendedores_vendedor_id_anio_mes_key",
-      unique: true,
-      fields: ["vendedor_id", "anio", "mes"]
-    }]
+    indexes: [
+      {
+        name: "cuotas_vendedores_vendedor_id_anio_mes_key",
+        unique: true,
+        fields: ["vendedor_id", "anio", "mes"],
+        timestamps: false,
+        underscored: true,
+        freezeTableName: true,
+        schema: "public",
+      },
+    ],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: "public",
   };
-  const CuotasVendedoresModel = sequelize.define("cuotas_vendedores_model", attributes, options);
+  const CuotasVendedoresModel = sequelize.define(
+    "cuotas_vendedores_model",
+    attributes,
+    options,
+  );
   return CuotasVendedoresModel;
 };

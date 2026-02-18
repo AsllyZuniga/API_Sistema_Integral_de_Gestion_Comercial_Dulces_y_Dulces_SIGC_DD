@@ -1,7 +1,5 @@
-const {
-  DataTypes
-} = require('sequelize');
-module.exports = sequelize => {
+const { DataTypes } = require("sequelize");
+module.exports = (sequelize) => {
   const attributes = {
     linea: {
       type: DataTypes.CHAR(120),
@@ -10,7 +8,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "linea",
-      autoIncrement: false
+      autoIncrement: false,
     },
     categoria: {
       type: DataTypes.CHAR(150),
@@ -19,7 +17,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "categoria",
-      autoIncrement: false
+      autoIncrement: false,
     },
     canal: {
       type: DataTypes.CHAR(120),
@@ -28,7 +26,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "canal",
-      autoIncrement: false
+      autoIncrement: false,
     },
     codigo_vendedor: {
       type: DataTypes.CHAR(20),
@@ -37,7 +35,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "codigo_vendedor",
-      autoIncrement: false
+      autoIncrement: false,
     },
     nombre_vendedor: {
       type: DataTypes.CHAR(150),
@@ -46,7 +44,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "nombre_vendedor",
-      autoIncrement: false
+      autoIncrement: false,
     },
     nro_documento: {
       type: DataTypes.CHAR(40),
@@ -55,7 +53,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "nro_documento",
-      autoIncrement: false
+      autoIncrement: false,
     },
     item: {
       type: DataTypes.CHAR(30),
@@ -64,7 +62,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "item",
-      autoIncrement: false
+      autoIncrement: false,
     },
     desc_item: {
       type: DataTypes.CHAR(200),
@@ -73,7 +71,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "desc_item",
-      autoIncrement: false
+      autoIncrement: false,
     },
     um_orden: {
       type: DataTypes.CHAR(20),
@@ -82,7 +80,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "um_orden",
-      autoIncrement: false
+      autoIncrement: false,
     },
     fecha: {
       type: DataTypes.DATEONLY,
@@ -91,7 +89,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "fecha",
-      autoIncrement: false
+      autoIncrement: false,
     },
     cliente_factura: {
       type: DataTypes.CHAR(30),
@@ -100,7 +98,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cliente_factura",
-      autoIncrement: false
+      autoIncrement: false,
     },
     sucursal_factura: {
       type: DataTypes.CHAR(20),
@@ -109,7 +107,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "sucursal_factura",
-      autoIncrement: false
+      autoIncrement: false,
     },
     razon_social_cliente: {
       type: DataTypes.CHAR(200),
@@ -118,7 +116,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "razon_social_cliente",
-      autoIncrement: false
+      autoIncrement: false,
     },
     direccion_1: {
       type: DataTypes.CHAR(200),
@@ -127,7 +125,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "direccion_1",
-      autoIncrement: false
+      autoIncrement: false,
     },
     ciudad: {
       type: DataTypes.CHAR(120),
@@ -136,7 +134,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "ciudad",
-      autoIncrement: false
+      autoIncrement: false,
     },
     cantidad_emp: {
       type: DataTypes.DOUBLE,
@@ -145,7 +143,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cantidad_emp",
-      autoIncrement: false
+      autoIncrement: false,
     },
     cantidad: {
       type: DataTypes.DOUBLE,
@@ -154,7 +152,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cantidad",
-      autoIncrement: false
+      autoIncrement: false,
     },
     costo_promedio_total: {
       type: DataTypes.DOUBLE,
@@ -163,7 +161,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "costo_promedio_total",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_bruto: {
       type: DataTypes.DOUBLE,
@@ -172,7 +170,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_bruto",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_descuentos: {
       type: DataTypes.DOUBLE,
@@ -181,7 +179,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_descuentos",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_subtotal: {
       type: DataTypes.DOUBLE,
@@ -190,7 +188,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_subtotal",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_impuestos: {
       type: DataTypes.DOUBLE,
@@ -199,7 +197,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_impuestos",
-      autoIncrement: false
+      autoIncrement: false,
     },
     valor_neto: {
       type: DataTypes.DOUBLE,
@@ -208,7 +206,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "valor_neto",
-      autoIncrement: false
+      autoIncrement: false,
     },
     margen_promedio: {
       type: DataTypes.DOUBLE,
@@ -217,7 +215,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "margen_promedio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     impuesto_afecta_margen: {
       type: DataTypes.DOUBLE,
@@ -226,7 +224,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "impuesto_afecta_margen",
-      autoIncrement: false
+      autoIncrement: false,
     },
     factor_um_emp: {
       type: DataTypes.DOUBLE,
@@ -235,7 +233,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "factor_um_emp",
-      autoIncrement: false
+      autoIncrement: false,
     },
     factor_um_orden: {
       type: DataTypes.DOUBLE,
@@ -244,7 +242,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "factor_um_orden",
-      autoIncrement: false
+      autoIncrement: false,
     },
     peso_kilo: {
       type: DataTypes.DOUBLE,
@@ -253,7 +251,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "peso_kilo",
-      autoIncrement: false
+      autoIncrement: false,
     },
     barrio: {
       type: DataTypes.CHAR(120),
@@ -262,7 +260,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "barrio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     detalle_tipo_negocio: {
       type: DataTypes.CHAR(150),
@@ -271,7 +269,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "detalle_tipo_negocio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     cond_pago_fact: {
       type: DataTypes.CHAR(50),
@@ -280,7 +278,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "cond_pago_fact",
-      autoIncrement: false
+      autoIncrement: false,
     },
     nombre_establecimiento: {
       type: DataTypes.CHAR(200),
@@ -289,7 +287,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "nombre_establecimiento",
-      autoIncrement: false
+      autoIncrement: false,
     },
     tipo_negocio: {
       type: DataTypes.CHAR(150),
@@ -298,7 +296,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "tipo_negocio",
-      autoIncrement: false
+      autoIncrement: false,
     },
     subcanal: {
       type: DataTypes.CHAR(150),
@@ -307,7 +305,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "subcanal",
-      autoIncrement: false
+      autoIncrement: false,
     },
     subcanal_detallado: {
       type: DataTypes.CHAR(150),
@@ -316,7 +314,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "subcanal_detallado",
-      autoIncrement: false
+      autoIncrement: false,
     },
     megacategoria: {
       type: DataTypes.CHAR(150),
@@ -325,7 +323,7 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "megacategoria",
-      autoIncrement: false
+      autoIncrement: false,
     },
     subcategoria: {
       type: DataTypes.CHAR(150),
@@ -334,30 +332,43 @@ module.exports = sequelize => {
       comment: null,
       primaryKey: false,
       field: "subcategoria",
-      autoIncrement: false
-    }
+      autoIncrement: false,
+    },
   };
   const options = {
     tableName: "staging_ventas_txt",
     comment: "",
-    indexes: [{
-      name: "idx_staging_cliente_factura",
-      unique: false,
-      fields: ["cliente_factura"]
-    }, {
-      name: "idx_staging_item",
-      unique: false,
-      fields: ["item"]
-    }, {
-      name: "idx_staging_nro_documento",
-      unique: false,
-      fields: ["nro_documento"]
-    }, {
-      name: "idx_staging_vendedor",
-      unique: false,
-      fields: ["codigo_vendedor"]
-    }]
+    indexes: [
+      {
+        name: "idx_staging_cliente_factura",
+        unique: false,
+        fields: ["cliente_factura"],
+      },
+      {
+        name: "idx_staging_item",
+        unique: false,
+        fields: ["item"],
+      },
+      {
+        name: "idx_staging_nro_documento",
+        unique: false,
+        fields: ["nro_documento"],
+      },
+      {
+        name: "idx_staging_vendedor",
+        unique: false,
+        fields: ["codigo_vendedor"],
+      },
+    ],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: "public",
   };
-  const StagingVentasTxtModel = sequelize.define("staging_ventas_txt_model", attributes, options);
+  const StagingVentasTxtModel = sequelize.define(
+    "staging_ventas_txt_model",
+    attributes,
+    options,
+  );
   return StagingVentasTxtModel;
 };
