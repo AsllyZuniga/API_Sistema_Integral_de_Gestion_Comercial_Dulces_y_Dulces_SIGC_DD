@@ -1,0 +1,5 @@
+var express = require('express');
+var router = express.Router();
+const ventas_detalleController = require('../controllers').ventas_detalleController;
+router.get('/', ventas_detalleController.list);
+module.exports = router;
