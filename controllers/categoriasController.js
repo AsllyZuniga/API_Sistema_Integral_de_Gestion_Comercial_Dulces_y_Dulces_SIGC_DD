@@ -26,11 +26,35 @@ module.exports = {
   add(req, res) {
     return categorias
       .create({
-        title: req.body.title,
-        description: req.body.description,
-        state: req.body.state,
+        categoria: req.body.categoria,
+        megacategoria: req.body.megacategoria,
+        subcategoria: req.body.subcategoria,
+        productos: req.body.productos,
       })
       .then((categorias) => res.status(201).send(categorias))
+      .catch((error) => res.status(400).send(error));
+  },
+
+  update(req, res) {
+    return categorias
+      .findByPk(req.params.id)
+      .then((categorias) => {
+        if (!categorias) {
+          return res.status(404).send({
+            message: "Categoria not found",
+          });
+        }
+
+        return categorias
+          .update({
+            categoria: req.body.categoria || categorias.categoria,
+            megacategoria: req.body.megacategoria || categorias.megacategoria,
+            subcategoria: req.body.subcategoria || categorias.subcategoria,
+            productos: req.body.productos || categorias.productos,
+          })
+          .then(() => res.status(200).send(categorias))
+          .catch((error) => res.status(400).send(error));
+      })
       .catch((error) => res.status(400).send(error));
   },
 };
