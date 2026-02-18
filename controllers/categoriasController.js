@@ -23,4 +23,14 @@ module.exports = {
       })
       .catch((error) => res.status(400).send(error));
   },
+  add(req, res) {
+    return categorias
+      .create({
+        title: req.body.title,
+        description: req.body.description,
+        state: req.body.state,
+      })
+      .then((categorias) => res.status(201).send(categorias))
+      .catch((error) => res.status(400).send(error));
+  },
 };
