@@ -37,7 +37,7 @@ app.use("/cuotas_vendedores", cuotas_vendedoresRouter);
 app.use("/productos", productosRouter);
 app.use("/staging_ventas", staging_ventasRouter);
 app.use("/tipos_documento", tipos_documentoRouter);
-app.use("/unidadades_medida", unidades_medidaRouter);
+app.use("/unidades_medida", unidades_medidaRouter);
 app.use("/vendedores", vendedoresRouter);
 app.use("/ventas", ventasRouter);
 app.use("/ventas_detalle", ventas_detalleRouter);
