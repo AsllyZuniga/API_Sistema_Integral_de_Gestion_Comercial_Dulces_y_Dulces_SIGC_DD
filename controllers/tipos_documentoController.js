@@ -1,4 +1,6 @@
-const tipos_documento = require("../models").tipos_documento_model;
+const db = require("../models");
+const tipos_documento = db.tipos_documento_model;
+const ventas = db.ventas_model;
 module.exports = {
   list(req, res) {
     return tipos_documento

@@ -1,4 +1,7 @@
-const vendedores = require("../models").vendedores_model;
+const db = require("../models");
+const vendedores = db.vendedores_model;
+const ventas = db.ventas_model;
+const cuotas = db.cuotas_vendedores_model;
 module.exports = {
   list(req, res) {
     return vendedores
@@ -48,7 +51,7 @@ module.exports = {
             nombre: req.body.nombre || vendedores.nombre,
             status: req.body.status || vendedores.status,
           })
-          .then(() => res.status(200).send(project))
+          .then(() => res.status(200).send(vendedores))
           .catch((error) => res.status(400).send(error));
       })
       .catch((error) => res.status(400).send(error));

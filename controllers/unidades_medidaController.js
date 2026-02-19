@@ -1,4 +1,6 @@
-const unidades_medida = require("../models").unidades_medida_model;
+const db = require("../models");
+const unidades_medida = db.unidades_medida_model;
+const ventas_detalle = db.ventas_detalle_model;
 module.exports = {
   list(req, res) {
     return unidades_medida

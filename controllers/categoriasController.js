@@ -1,4 +1,6 @@
-const categorias = require("../models").categorias_model;
+const db = require("../models");
+const categorias = db.categorias_model;
+const productos = db.productos_model;
 module.exports = {
   list(req, res) {
     return categorias
