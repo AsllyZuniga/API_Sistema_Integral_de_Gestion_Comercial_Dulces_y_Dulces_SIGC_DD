@@ -29,6 +29,10 @@ module.exports = (sequelize) => {
       field: "nombre",
       autoIncrement: false,
     },
+    status: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+    },
   };
   const options = {
     tableName: "vendedores",
