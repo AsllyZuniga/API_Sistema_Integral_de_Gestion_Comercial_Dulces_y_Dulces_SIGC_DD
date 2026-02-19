@@ -28,6 +28,7 @@ module.exports = {
       .create({
         codigo: req.body.codigo,
         nombre: req.body.nombre,
+        status: req.body.status,
       })
       .then((vendedores) => res.status(201).send(vendedores))
       .catch((error) => res.status(400).send(error));
@@ -45,6 +46,7 @@ module.exports = {
           .update({
             codigo: req.body.codigo || vendedores.codigo,
             nombre: req.body.nombre || vendedores.nombre,
+            status: req.body.status || vendedores.status,
           })
           .then(() => res.status(200).send(project))
           .catch((error) => res.status(400).send(error));
