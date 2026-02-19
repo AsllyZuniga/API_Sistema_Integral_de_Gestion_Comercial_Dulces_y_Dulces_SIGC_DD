@@ -1,4 +1,6 @@
-const cuotas_vendedores = require("../models").cuotas_vendedores_model;
+const db = require("../models");
+const cuotas_vendedores = db.cuotas_vendedores_model;
+const vendedores = db.vendedores_model;
 module.exports = {
   list(req, res) {
     return cuotas_vendedores

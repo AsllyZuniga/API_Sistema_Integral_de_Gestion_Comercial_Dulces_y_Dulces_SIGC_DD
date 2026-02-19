@@ -1,4 +1,6 @@
-const productos = require("../models").productos_model;
+const db = require("../models");
+const productos = db.productos_model;
+const categorias = db.categorias_model;
 module.exports = {
   list(req, res) {
     return productos

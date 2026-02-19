@@ -1,4 +1,5 @@
-const staging_ventas = require("../models").staging_ventas_model;
+const db = require("../models");
+const staging_ventas = db.staging_ventas_model;
 module.exports = {
   list(req, res) {
     return staging_ventas

@@ -1,4 +1,11 @@
-const ventas = require("../models").ventas_model;
+const db = require("../models");
+const ventas = db.ventas_model;
+const clientes = db.clientes_model;
+const vendedores = db.vendedores_model;
+const tiposDocumento = db.tipos_documento_model;
+const ventasDetalle = db.ventas_detalle_model;
+const productos = db.productos_model;
+const unidadesMedida = db.unidades_medida_model;
 module.exports = {
   list(req, res) {
     return ventas
