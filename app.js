@@ -16,6 +16,7 @@ var unidades_medidaRouter = require("./routes/unidades_medida");
 var vendedoresRouter = require("./routes/vendedores");
 var ventasRouter = require("./routes/ventas");
 var ventas_detalleRouter = require("./routes/ventas_detalle");
+var importRouter = require("./routes/import.routes");
 
 var app = express();
 
@@ -41,6 +42,7 @@ app.use("/unidades_medida", unidades_medidaRouter);
 app.use("/vendedores", vendedoresRouter);
 app.use("/ventas", ventasRouter);
 app.use("/ventas_detalle", ventas_detalleRouter);
+app.use("/import", importRouter);
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
   next(createError(404));
