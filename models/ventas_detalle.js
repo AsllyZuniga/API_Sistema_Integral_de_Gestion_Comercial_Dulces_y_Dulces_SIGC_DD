@@ -23,6 +23,11 @@ module.exports = (sequelize) => {
         model: "ventas_model",
       },
     },
+    linea: {
+      type: DataTypes.CHAR(120),
+      allowNull: true,
+      field: "linea",
+    },
     producto_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
