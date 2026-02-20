@@ -86,15 +86,6 @@ module.exports = (sequelize) => {
       field: "canal",
       autoIncrement: false,
     },
-    linea: {
-      type: DataTypes.CHAR(120),
-      allowNull: true,
-      defaultValue: null,
-      comment: null,
-      primaryKey: false,
-      field: "linea",
-      autoIncrement: false,
-    },
     nombre_establecimiento: {
       type: DataTypes.CHAR(200),
       allowNull: true,

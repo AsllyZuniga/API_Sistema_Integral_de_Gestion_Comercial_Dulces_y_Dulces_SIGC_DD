@@ -11,7 +11,7 @@ const upload = multer({
 });
 
 router.post(
-  "/import/ventas-txt",
+  "/ventas-txt",
   upload.single("file"),
   importController.importVentasTxt,
 );
