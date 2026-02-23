@@ -1,5 +1,7 @@
-const { DataTypes } = require("sequelize");
-module.exports = (sequelize) => {
+const {
+  DataTypes
+} = require('sequelize');
+module.exports = sequelize => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -8,7 +10,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true,
+      autoIncrement: true
     },
     tipo_documento_id: {
       type: DataTypes.INTEGER,
@@ -20,8 +22,8 @@ module.exports = (sequelize) => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "tipos_documento_model",
-      },
+        model: "tipos_documento_model"
+      }
     },
     numero_documento: {
       type: DataTypes.CHAR(40),
@@ -31,7 +33,7 @@ module.exports = (sequelize) => {
       primaryKey: false,
       field: "numero_documento",
       autoIncrement: false,
-      unique: "ventas_numero_documento_key",
+      unique: "ventas_numero_documento_key"
     },
     fecha: {
       type: DataTypes.DATEONLY,
@@ -40,7 +42,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "fecha",
-      autoIncrement: false,
+      autoIncrement: false
     },
     cliente_id: {
       type: DataTypes.INTEGER,
@@ -52,8 +54,8 @@ module.exports = (sequelize) => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "clientes_model",
-      },
+        model: "clientes_model"
+      }
     },
     vendedor_id: {
       type: DataTypes.INTEGER,
@@ -65,8 +67,8 @@ module.exports = (sequelize) => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "vendedores_model",
-      },
+        model: "vendedores_model"
+      }
     },
     sucursal: {
       type: DataTypes.CHAR(20),
@@ -75,7 +77,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "sucursal",
-      autoIncrement: false,
+      autoIncrement: false
     },
     canal: {
       type: DataTypes.CHAR(120),
@@ -84,7 +86,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "canal",
-      autoIncrement: false,
+      autoIncrement: false
     },
     nombre_establecimiento: {
       type: DataTypes.CHAR(200),
@@ -93,35 +95,26 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "nombre_establecimiento",
-      autoIncrement: false,
-    },
+      autoIncrement: false
+    }
   };
   const options = {
     tableName: "ventas",
     comment: "",
-    indexes: [
-      {
-        name: "idx_ventas_cliente",
-        unique: false,
-        fields: ["cliente_id"],
-      },
-      {
-        name: "idx_ventas_fecha",
-        unique: false,
-        fields: ["fecha"],
-      },
-      {
-        name: "idx_ventas_vendedor",
-        unique: false,
-        fields: ["vendedor_id"],
-      },
-    ],
-    timestamps: false,
-    underscored: true,
-    freezeTableName: true,
-    schema: "public",
+    indexes: [{
+      name: "idx_ventas_cliente",
+      unique: false,
+      fields: ["cliente_id"]
+    }, {
+      name: "idx_ventas_fecha",
+      unique: false,
+      fields: ["fecha"]
+    }, {
+      name: "idx_ventas_vendedor",
+      unique: false,
+      fields: ["vendedor_id"]
+    }]
   };
-
   const VentasModel = sequelize.define("ventas_model", attributes, options);
   return VentasModel;
 };

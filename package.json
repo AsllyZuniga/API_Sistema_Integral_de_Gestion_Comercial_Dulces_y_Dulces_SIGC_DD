@@ -16,7 +16,8 @@
     "multer": "^2.0.2",
     "pg": "^8.18.0",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.37.7"
+    "sequelize": "^6.37.7",
+    "sequelize-auto": "^0.8.8"
   },
   "devDependencies": {
     "sequelize-cli": "^6.6.5"

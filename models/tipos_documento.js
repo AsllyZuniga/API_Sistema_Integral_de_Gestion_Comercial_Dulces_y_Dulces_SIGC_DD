@@ -1,5 +1,7 @@
-const { DataTypes } = require("sequelize");
-module.exports = (sequelize) => {
+const {
+  DataTypes
+} = require('sequelize');
+module.exports = sequelize => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -8,7 +10,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true,
+      autoIncrement: true
     },
     codigo: {
       type: DataTypes.CHAR(10),
@@ -18,7 +20,7 @@ module.exports = (sequelize) => {
       primaryKey: false,
       field: "codigo",
       autoIncrement: false,
-      unique: "tipos_documento_codigo_key",
+      unique: "tipos_documento_codigo_key"
     },
     descripcion: {
       type: DataTypes.CHAR(100),
@@ -27,7 +29,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "descripcion",
-      autoIncrement: false,
+      autoIncrement: false
     },
     afecta_venta: {
       type: DataTypes.BOOLEAN,
@@ -36,22 +38,14 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "afecta_venta",
-      autoIncrement: false,
-    },
+      autoIncrement: false
+    }
   };
   const options = {
     tableName: "tipos_documento",
     comment: "",
-    indexes: [],
-    timestamps: false,
-    underscored: true,
-    freezeTableName: true,
-    schema: "public",
+    indexes: []
   };
-  const TiposDocumentoModel = sequelize.define(
-    "tipos_documento_model",
-    attributes,
-    options,
-  );
+  const TiposDocumentoModel = sequelize.define("tipos_documento_model", attributes, options);
   return TiposDocumentoModel;
 };
