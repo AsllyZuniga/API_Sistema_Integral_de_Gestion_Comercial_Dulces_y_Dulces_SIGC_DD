@@ -4,7 +4,7 @@ const {
 module.exports = sequelize => {
   const attributes = {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.BIGINT,
       allowNull: false,
       defaultValue: null,
       comment: null,
@@ -12,77 +12,65 @@ module.exports = sequelize => {
       field: "id",
       autoIncrement: true
     },
-    vendedor_id: {
+    fecha_inicio: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "fecha_inicio",
+      autoIncrement: false
+    },
+    fecha_fin: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "fecha_fin",
+      autoIncrement: false
+    },
+    cuota: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "cuota",
+      autoIncrement: false
+    },
+    id_vendedor: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "vendedor_id",
+      field: "id_vendedor",
       autoIncrement: false,
       references: {
         key: "id",
         model: "vendedores_model"
       }
     },
-    id_cuota_anio: {
+    id_producto: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "id_cuota_anio",
+      field: "id_producto",
       autoIncrement: false,
       references: {
         key: "id",
-        model: "cuota_anio_model"
-      }
-    },
-    id_cuota_mes: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: null,
-      comment: null,
-      primaryKey: false,
-      field: "id_cuota_mes",
-      autoIncrement: false,
-      references: {
-        key: "id",
-        model: "cuota_mes_model"
-      }
-    },
-    id_cuota_semana: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: null,
-      comment: null,
-      primaryKey: false,
-      field: "id_cuota_semana",
-      autoIncrement: false,
-      references: {
-        key: "id",
-        model: "cuota_semana_model"
-      }
-    },
-    id_cuota_dia: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: null,
-      comment: null,
-      primaryKey: false,
-      field: "id_cuota_dia",
-      autoIncrement: false,
-      references: {
-        key: "id",
-        model: "cuota_dia_model"
+        model: "productos_model"
       }
     }
   };
   const options = {
-    tableName: "cuotas_vendedores",
+    tableName: "cuota_anio",
     comment: "",
     indexes: []
   };
-  const CuotasVendedoresModel = sequelize.define("cuotas_vendedores_model", attributes, options);
-  return CuotasVendedoresModel;
+  const CuotaAnioModel = sequelize.define("cuota_anio_model", attributes, options);
+  return CuotaAnioModel;
 };

@@ -1,5 +1,7 @@
-const { DataTypes } = require("sequelize");
-module.exports = (sequelize) => {
+const {
+  DataTypes
+} = require('sequelize');
+module.exports = sequelize => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -8,7 +10,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true,
+      autoIncrement: true
     },
     codigo: {
       type: DataTypes.CHAR(20),
@@ -18,22 +20,14 @@ module.exports = (sequelize) => {
       primaryKey: false,
       field: "codigo",
       autoIncrement: false,
-      unique: "unidades_medida_codigo_key",
-    },
+      unique: "unidades_medida_codigo_key"
+    }
   };
   const options = {
     tableName: "unidades_medida",
     comment: "",
-    indexes: [],
-    timestamps: false,
-    underscored: true,
-    freezeTableName: true,
-    schema: "public",
+    indexes: []
   };
-  const UnidadesMedidaModel = sequelize.define(
-    "unidades_medida_model",
-    attributes,
-    options,
-  );
+  const UnidadesMedidaModel = sequelize.define("unidades_medida_model", attributes, options);
   return UnidadesMedidaModel;
 };
