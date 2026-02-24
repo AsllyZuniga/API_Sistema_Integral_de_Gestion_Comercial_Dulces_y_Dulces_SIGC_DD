@@ -344,6 +344,96 @@ module.exports = {
             console.error(error);
             res.status(500).send({ message: "Error al filtrar por vendedor y línea", error: error.message });
         }
+    },
+    async getCumplimientoVendedorDetalleLineas(req, res) {
+        try {
+            const { codigo } = req.params;
+
+            // 1. Obtener registro de días para cálculos de proyección
+            const diasInfo = await RegistroDias.findOne({ order: [['id', 'DESC']] });
+            if (!diasInfo) return res.status(404).send({ message: "Registro de días no encontrado." });
+
+            const dCorridos = parseFloat(diasInfo.dias_corridos) || 1;
+            const dHabiles = parseFloat(diasInfo.dias_habiles) || 1;
+
+            // 2. Buscar al vendedor y su cuota general
+            const v = await Vendedores.findOne({
+                where: { codigo: codigo },
+                attributes: ['id', 'codigo', 'nombre'],
+                include: [{
+                    model: CuotasVendedores,
+                    as: 'cuotas',
+                    include: [{
+                        model: CuotaMes,
+                        as: 'cuota_mes',
+                        attributes: ['cuota'],
+                        required: false
+                    }]
+                }]
+            });
+
+            if (!v) return res.status(404).send({ message: "Vendedor no encontrado." });
+
+            // Extraer cuota general (o 0 si no tiene)
+            let cuotaGeneral = 0;
+            if (v.cuotas && v.cuotas.length > 0) {
+                const relacion = v.cuotas.find(c => c.cuota_mes);
+                cuotaGeneral = relacion ? parseFloat(relacion.cuota_mes.cuota) : 0;
+            }
+
+            // 3. Obtener todas las líneas únicas que ha vendido este vendedor
+            // Usamos una consulta de agregación para agrupar por línea
+            const ventasPorLinea = await VentasDetalle.findAll({
+                attributes: [
+                    'linea',
+                    [db.sequelize.fn('SUM', db.sequelize.col('valor_neto')), 'totalVenta']
+                ],
+                where: {
+                    // Filtramos por las ventas del vendedor
+                    '$venta.vendedor_id$': v.id,
+                    linea: { [Op.ne]: null }
+                },
+                include: [{
+                    model: Ventas,
+                    as: 'venta',
+                    attributes: []
+                }],
+                group: ['ventas_detalle_model.linea'] // Agrupamos por el nombre de la línea
+            });
+
+            // 4. Procesar los resultados y aplicar fórmulas por cada línea
+            const lineasResult = ventasPorLinea.map(item => {
+                const nombreLinea = item.linea ? item.linea.trim() : 'SIN LÍNEA';
+                const ventaAcum = parseFloat(item.getDataValue('totalVenta')) || 0;
+
+                // Nota: Aquí el % de cumplimiento se calcula sobre la cuota general del vendedor
+                // a menos que tengas cuotas específicas por línea.
+                const porcCump = cuotaGeneral > 0 ? (ventaAcum / cuotaGeneral) : 0;
+                const proyVenta = (ventaAcum / dCorridos) * dHabiles;
+                const porcCumpProy = cuotaGeneral > 0 ? (proyVenta / cuotaGeneral) : 0;
+
+                return {
+                    linea: nombreLinea,
+                    ventaAcum: ventaAcum.toFixed(2),
+                    porcCump: (porcCump * 100).toFixed(2) + '%',
+                    proyeccionVenta: proyVenta.toFixed(2),
+                    porcCumProy: (porcCumpProy * 100).toFixed(2) + '%'
+                };
+            });
+
+            // 5. Respuesta final
+            res.status(200).send({
+                vendedor: v.nombre.trim(),
+                codigo: v.codigo.trim(),
+                cuotaMensualGeneral: cuotaGeneral,
+                totalVentaTodasLineas: lineasResult.reduce((acc, l) => acc + parseFloat(l.ventaAcum), 0).toFixed(2),
+                detallePorLinea: lineasResult
+            });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).send({ message: "Error al obtener detalle por líneas", error: error.message });
+        }
     }
 };
 
