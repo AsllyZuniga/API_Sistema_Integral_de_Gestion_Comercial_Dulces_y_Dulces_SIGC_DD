@@ -60,7 +60,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "cuota_mes",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const CuotaMesModel = sequelize.define("cuota_mes_model", attributes, options);
   return CuotaMesModel;

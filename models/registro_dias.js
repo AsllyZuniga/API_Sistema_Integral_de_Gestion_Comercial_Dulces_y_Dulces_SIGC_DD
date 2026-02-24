@@ -52,7 +52,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "registro_dias",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const RegistroDiasModel = sequelize.define("registro_dias_model", attributes, options);
   return RegistroDiasModel;

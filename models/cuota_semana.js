@@ -52,7 +52,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "cuota_semana",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const CuotaSemanaModel = sequelize.define("cuota_semana_model", attributes, options);
   return CuotaSemanaModel;

@@ -69,7 +69,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "cuota_anio",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const CuotaAnioModel = sequelize.define("cuota_anio_model", attributes, options);
   return CuotaAnioModel;
