@@ -55,6 +55,15 @@ module.exports = sequelize => {
         key: "id",
         model: "productos_model"
       }
+    },
+    cuota: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "cuota",
+      autoIncrement: false
     }
   };
   const options = {

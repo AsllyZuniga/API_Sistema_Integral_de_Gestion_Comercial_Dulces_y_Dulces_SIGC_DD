@@ -31,7 +31,7 @@ module.exports = sequelize => {
       autoIncrement: false
     },
     dias_corridos: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: null,
       comment: null,
@@ -40,7 +40,7 @@ module.exports = sequelize => {
       autoIncrement: false
     },
     dias_habiles: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: null,
       comment: null,
