@@ -3,4 +3,6 @@ var router = express.Router();
 const cumplimientoMesController = require("../controllers").cumplimientoMesController;
 router.get("/cumplimiento", cumplimientoMesController.getCumplimientoCuotaMes);
 router.get("/cumplimiento/:codigo", cumplimientoMesController.getCumplimientoPorCodigo);
+router.get("/cumplimiento/linea/:linea", cumplimientoMesController.getCumplimientoPorLinea);
+router.get("/cumplimiento/vendedor/:codigo/linea/:linea", cumplimientoMesController.getCumplimientoVendedorYLinea);
 module.exports = router;
