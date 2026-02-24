@@ -26,7 +26,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "unidades_medida",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const UnidadesMedidaModel = sequelize.define("unidades_medida_model", attributes, options);
   return UnidadesMedidaModel;

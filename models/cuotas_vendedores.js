@@ -81,7 +81,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "cuotas_vendedores",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const CuotasVendedoresModel = sequelize.define("cuotas_vendedores_model", attributes, options);
   return CuotasVendedoresModel;

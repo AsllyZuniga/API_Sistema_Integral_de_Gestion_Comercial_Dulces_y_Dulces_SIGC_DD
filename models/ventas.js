@@ -113,7 +113,11 @@ module.exports = sequelize => {
       name: "idx_ventas_vendedor",
       unique: false,
       fields: ["vendedor_id"]
-    }]
+    }],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const VentasModel = sequelize.define("ventas_model", attributes, options);
   return VentasModel;
