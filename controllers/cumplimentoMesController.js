@@ -7,6 +7,7 @@ const VentasDetalle = db.ventas_detalle_model;
 const CuotasVendedores = db.cuotas_vendedores_model;
 const CuotaMes = db.cuota_mes_model;
 const RegistroDias = db.registro_dias_model;
+const Clientes = db.clientes_model;
 
 module.exports = {
     async getCumplimientoCuotaMes(req, res) {
@@ -433,6 +434,95 @@ module.exports = {
         } catch (error) {
             console.error(error);
             res.status(500).send({ message: "Error al obtener detalle por líneas", error: error.message });
+        }
+    },
+    // NUEVA FUNCIÓN: Desglose de ventas por CIUDAD (Desde la tabla Clientes)
+    async getCumplimientoVendedorPorCiudad(req, res) {
+        try {
+            const { codigo } = req.params;
+
+            const diasInfo = await RegistroDias.findOne({ order: [['id', 'DESC']] });
+            if (!diasInfo) return res.status(404).send({ message: "Registro de días no encontrado." });
+
+            const dCorridos = parseFloat(diasInfo?.dias_corridos) || 1;
+            const dHabiles = parseFloat(diasInfo?.dias_habiles) || 1;
+
+            // 1. Buscar al vendedor
+            const v = await Vendedores.findOne({
+                where: { codigo: codigo },
+                attributes: ['id', 'codigo', 'nombre'],
+                include: [{
+                    model: CuotasVendedores,
+                    as: 'cuotas',
+                    include: [{
+                        model: CuotaMes,
+                        as: 'cuota_mes',
+                        attributes: ['cuota'],
+                        required: false
+                    }]
+                }]
+            });
+
+            if (!v) return res.status(404).send({ message: "Vendedor no encontrado." });
+
+            let cuotaGeneral = 0;
+            if (v.cuotas && v.cuotas.length > 0) {
+                const relacion = v.cuotas.find(c => c.cuota_mes);
+                cuotaGeneral = relacion ? parseFloat(relacion.cuota_mes.cuota) : 0;
+            }
+
+            // 2. Agrupar por CIUDAD cruzando con la tabla CLIENTES
+            const ventasPorCiudad = await VentasDetalle.findAll({
+                attributes: [
+                    // Extraemos la ciudad navegando por los alias de las relaciones
+                    [db.sequelize.col('venta.cliente.ciudad'), 'ciudad'], 
+                    [db.sequelize.fn('SUM', db.sequelize.col('valor_neto')), 'totalVenta']
+                ],
+                include: [{
+                    model: Ventas,
+                    as: 'venta',
+                    attributes: [],
+                    where: { vendedor_id: v.id },
+                    include: [{
+                        model: Clientes,
+                        as: 'cliente', // <-- Hacemos JOIN con Clientes
+                        attributes: []
+                    }]
+                }],
+                // Agrupamos usando la columna de la tabla unida
+                group: [db.sequelize.col('venta.cliente.ciudad')],
+                raw: true // Mantiene el resultado limpio
+            });
+
+            // 3. Procesar resultados
+            const ciudadesResult = ventasPorCiudad.map(item => {
+                const nombreCiudad = item.ciudad ? item.ciudad.trim() : 'SIN CIUDAD';
+                const ventaAcum = parseFloat(item.totalVenta) || 0;
+
+                const porcCump = cuotaGeneral > 0 ? (ventaAcum / cuotaGeneral) : 0;
+                const proyVenta = (ventaAcum / dCorridos) * dHabiles;
+                const porcCumpProy = cuotaGeneral > 0 ? (proyVenta / cuotaGeneral) : 0;
+
+                return {
+                    ciudad: nombreCiudad,
+                    ventaAcum: ventaAcum.toFixed(2),
+                    porcCump: (porcCump * 100).toFixed(2) + '%',
+                    proyeccionVenta: proyVenta.toFixed(2),
+                    porcCumProy: (porcCumpProy * 100).toFixed(2) + '%'
+                };
+            });
+
+            res.status(200).send({
+                vendedor: v.nombre.trim(),
+                codigo: v.codigo.trim(),
+                cuotaMensualGeneral: cuotaGeneral,
+                totalVentaTodasCiudades: ciudadesResult.reduce((acc, c) => acc + parseFloat(c.ventaAcum), 0).toFixed(2),
+                detallePorCiudad: ciudadesResult
+            });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).send({ message: "Error al obtener cumplimiento por ciudades", error: error.message });
         }
     }
 };

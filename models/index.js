@@ -83,6 +83,18 @@ Ventas.belongsTo(Vendedores, {
   as: "vendedor",
 });
 
+// Relación: Ventas N:1 Clientes
+Ventas.belongsTo(db.clientes_model, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
+
+// Relación: Clientes 1:N Ventas
+db.clientes_model.hasMany(Ventas, {
+  foreignKey: "cliente_id",
+  as: "ventas",
+});
+
 // Relación: Productos con Detalles y Cuotas (Opcional según tu lógica)
 Productos.hasMany(VentasDetalle, { foreignKey: "producto_id", as: "detalles_ventas" });
 VentasDetalle.belongsTo(Productos, { foreignKey: "producto_id", as: "producto" });
