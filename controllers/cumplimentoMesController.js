@@ -8,6 +8,7 @@ const CuotasVendedores = db.cuotas_vendedores_model;
 const CuotaMes = db.cuota_mes_model;
 const RegistroDias = db.registro_dias_model;
 const Clientes = db.clientes_model;
+const Productos = db.productos_model;
 
 module.exports = {
     async getCumplimientoCuotaMes(req, res) {
@@ -523,6 +524,77 @@ module.exports = {
         } catch (error) {
             console.error(error);
             res.status(500).send({ message: "Error al obtener cumplimiento por ciudades", error: error.message });
+        }
+    },
+    // NUEVA FUNCIÓN: Obtener detalle de ítems vendidos por fecha, proveedor y producto
+    async getProductosVendidosPorVendedor(req, res) {
+        try {
+            const { codigo } = req.params;
+
+            // 1. Buscar al vendedor
+            const v = await Vendedores.findOne({
+                where: { codigo: codigo },
+                attributes: ['id', 'codigo', 'nombre']
+            });
+
+            if (!v) return res.status(404).send({ message: "Vendedor no encontrado." });
+
+            // 2. Realizar la consulta cruzando VentasDetalle, Ventas y Productos
+            const productosVendidos = await VentasDetalle.findAll({
+                attributes: [
+                    [db.sequelize.col('venta.fecha'), 'Fecha'],
+                    [db.sequelize.col('ventas_detalle_model.linea'), 'Proveedor'],
+                    [db.sequelize.col('producto.codigo'), 'Cod_Item'],
+                    [db.sequelize.col('producto.descripcion'), 'Descripcion'],
+                    // Usamos cantidad_emp para "Cajas". Si necesitas unidades sueltas, cambia a 'cantidad'
+                    [db.sequelize.fn('SUM', db.sequelize.col('ventas_detalle_model.cantidad_emp')), 'Venta_Unid_Cajas']
+                ],
+                include: [
+                    {
+                        model: Ventas,
+                        as: 'venta',
+                        attributes: [],
+                        where: { vendedor_id: v.id }
+                    },
+                    {
+                        model: Productos,
+                        as: 'producto',
+                        attributes: []
+                    }
+                ],
+                // Agrupamos para sumar las cantidades de un mismo producto en el mismo día
+                group: [
+                    db.sequelize.col('venta.fecha'),
+                    db.sequelize.col('ventas_detalle_model.linea'),
+                    db.sequelize.col('producto.codigo'),
+                    db.sequelize.col('producto.descripcion')
+                ],
+                // Ordenamos del más reciente al más antiguo
+                order: [
+                    [db.sequelize.col('venta.fecha'), 'DESC']
+                ],
+                raw: true // Trae un JSON plano sin anidaciones complejas
+            });
+
+            // 3. Formatear la respuesta con el orden y limpieza solicitados
+            const resultadoFormateado = productosVendidos.map(item => ({
+                Fecha: item.Fecha,
+                Proveedor: item.Proveedor ? item.Proveedor.trim() : 'SIN PROVEEDOR',
+                Cod_Item: item.Cod_Item ? item.Cod_Item.trim() : '',
+                Descripcion: item.Descripcion ? item.Descripcion.trim() : '',
+                Venta_Unid_Cajas: parseFloat(item.Venta_Unid_Cajas || 0).toFixed(2)
+            }));
+
+            res.status(200).send({
+                vendedor: v.nombre.trim(),
+                codigo: v.codigo.trim(),
+                totalFilas: resultadoFormateado.length,
+                data: resultadoFormateado
+            });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).send({ message: "Error al obtener los productos vendidos", error: error.message });
         }
     }
 };
