@@ -6,4 +6,5 @@ router.get("/cumplimiento/:codigo", cumplimientoMesController.getCumplimientoPor
 router.get("/cumplimiento/linea/:linea", cumplimientoMesController.getCumplimientoPorLinea);
 router.get("/cumplimiento/vendedor/:codigo/linea/:linea", cumplimientoMesController.getCumplimientoVendedorYLinea);
 router.get("/cumplimiento/vendedor/:codigo/lineas", cumplimientoMesController.getCumplimientoVendedorDetalleLineas);
+router.get("/cumplimiento/vendedor/:codigo/ciudades", cumplimientoMesController.getCumplimientoVendedorPorCiudad);
 module.exports = router;
