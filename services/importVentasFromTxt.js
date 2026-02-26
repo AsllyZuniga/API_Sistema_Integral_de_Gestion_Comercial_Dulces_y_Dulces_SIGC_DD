@@ -383,7 +383,6 @@ async function processBatch(db, batchLines) {
       // tipo_documento_id, cliente_id, vendedor_id se completan después de mapear
       sucursal: row.sucursal_factura,
       canal: row.canal,
-      linea: row.linea,
       nombre_establecimiento: row.nombre_establecimiento,
     });
   }
@@ -426,10 +425,24 @@ async function processBatch(db, batchLines) {
 
   const ventaMap = await ensureVentas(db, ventasConFk);
 
+  // ANTES de insertar nuevos detalles, borramos los existentes para las ventas de este batch.
+  // Esto previene duplicados si se re-importa el mismo archivo.
+  const ventaIds = [...new Set([...ventaMap.values()])];
+  if (ventaIds.length > 0) {
+    await db.ventas_detalle_model.destroy({
+      where: {
+        venta_id: {
+          [Op.in]: ventaIds,
+        },
+      },
+    });
+  }
+
   // 4) Detalles (bulk)
   const detalles = batchLines.map((row) => ({
     venta_id: ventaMap.get(row.numero_documento_venta),
     producto_id: productoMap.get(row.item_codigo),
+    linea: row.linea,
     unidad_medida_id: row.um_orden ? umMap.get(row.um_orden) : null,
     cantidad_emp: row.cantidad_emp,
     cantidad: row.cantidad,
@@ -474,10 +487,6 @@ async function importVentasFromTxtFile(db, filePath, options = {}) {
 
     const cols = line.split("\t");
     if (isTotalLine(cols)) {
-      skipped++;
-      continue;
-    }
-    if (cols.length < 37) {
       skipped++;
       continue;
     }

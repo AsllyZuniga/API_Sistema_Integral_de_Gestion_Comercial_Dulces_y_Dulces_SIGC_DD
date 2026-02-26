@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 const Sequelize = require("sequelize");
-
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || "development";
 const config = require(__dirname + "/../config/config.json")[env];
@@ -11,21 +10,13 @@ const config = require(__dirname + "/../config/config.json")[env];
 const db = {};
 let sequelize;
 
-// Crear instancia de Sequelize según configuración
 if (config.use_env_variable) {
   sequelize = new Sequelize(process.env[config.use_env_variable], config);
 } else {
-  sequelize = new Sequelize(
-    config.database,
-    config.username,
-    config.password,
-    config
-  );
+  sequelize = new Sequelize(config.database, config.username, config.password, config);
 }
 
-// --------------------------------------------------
-// Carga automática de todos los modelos del directorio
-// --------------------------------------------------
+// 1. Carga automática de modelos
 fs.readdirSync(__dirname)
   .filter((file) => {
     return (
@@ -35,83 +26,44 @@ fs.readdirSync(__dirname)
     );
   })
   .forEach((file) => {
-    const model = require(path.join(__dirname, file))(
-      sequelize,
-      Sequelize.DataTypes
-    );
+    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
     db[model.name] = model;
   });
 
-// --------------------------------------------------
-// Definición de relaciones entre modelos
-// --------------------------------------------------
-
-const Categorias = db.categorias_model;
-const Productos = db.productos_model;
-const Clientes = db.clientes_model;
+// 2. Definición de Alias para facilitar la lectura
 const Vendedores = db.vendedores_model;
-const TiposDocumento = db.tipos_documento_model;
-const UnidadesMedida = db.unidades_medida_model;
+const CuotasVendedores = db.cuotas_vendedores_model;
+const CuotaMes = db.cuota_mes_model;
 const Ventas = db.ventas_model;
 const VentasDetalle = db.ventas_detalle_model;
-const CuotasVendedores = db.cuotas_vendedores_model;
+const Productos = db.productos_model;
+const TiposDocumento = db.tipos_documento_model;
+const UnidadesMedida = db.unidades_medida_model;
 
-/*
-  Categorias 1:N Productos
-  productos.categoria_id -> categorias.id
-*/
-Categorias.hasMany(Productos, {
-  foreignKey: "categoria_id",
-  as: "productos",
-});
-Productos.belongsTo(Categorias, {
-  foreignKey: "categoria_id",
-  as: "categoria",
-});
+// 3. RELACIONES (ASOCIACIONES) - CORREGIDAS
 
-/*
-  Clientes 1:N Ventas
-  ventas.cliente_id -> clientes.id
-*/
-Clientes.hasMany(Ventas, {
-  foreignKey: "cliente_id",
-  as: "ventas",
-});
-Ventas.belongsTo(Clientes, {
-  foreignKey: "cliente_id",
-  as: "cliente",
-});
-
-/*
-  Vendedores 1:N Ventas
-  ventas.vendedor_id -> vendedores.id
-*/
-Vendedores.hasMany(Ventas, {
+// Relación: Vendedores 1:N CuotasVendedores
+Vendedores.hasMany(CuotasVendedores, {
   foreignKey: "vendedor_id",
-  as: "ventas",
+  as: "cuotas", // Alias usado en el controlador
 });
-Ventas.belongsTo(Vendedores, {
+CuotasVendedores.belongsTo(Vendedores, {
   foreignKey: "vendedor_id",
   as: "vendedor",
 });
 
-/*
-  TiposDocumento 1:N Ventas
-  ventas.tipo_documento_id -> tipos_documento.id
-*/
-TiposDocumento.hasMany(Ventas, {
-  foreignKey: "tipo_documento_id",
-  as: "ventas",
+// Relación: CuotasVendedores N:1 CuotaMes
+// Esta es la conexión crítica para obtener el valor numérico de la cuota
+CuotasVendedores.belongsTo(CuotaMes, {
+  foreignKey: "id_cuota_mes",
+  as: "cuota_mes", // Alias usado en el include anidado
 });
-Ventas.belongsTo(TiposDocumento, {
-  foreignKey: "tipo_documento_id",
-  as: "tipo_documento",
+CuotaMes.hasMany(CuotasVendedores, {
+  foreignKey: "id_cuota_mes",
+  as: "asignaciones",
 });
 
-/*
-  Ventas 1:N VentasDetalle
-  ventas_detalle.venta_id -> ventas.id
-*/
+// Relación: Ventas 1:N VentasDetalle
 Ventas.hasMany(VentasDetalle, {
   foreignKey: "venta_id",
   as: "detalle",
@@ -121,48 +73,33 @@ VentasDetalle.belongsTo(Ventas, {
   as: "venta",
 });
 
-/*
-  Productos 1:N VentasDetalle
-  ventas_detalle.producto_id -> productos.id
-*/
-Productos.hasMany(VentasDetalle, {
-  foreignKey: "producto_id",
-  as: "detalles",
-});
-VentasDetalle.belongsTo(Productos, {
-  foreignKey: "producto_id",
-  as: "producto",
-});
-
-/*
-  UnidadesMedida 1:N VentasDetalle
-  ventas_detalle.unidad_medida_id -> unidades_medida.id
-*/
-UnidadesMedida.hasMany(VentasDetalle, {
-  foreignKey: "unidad_medida_id",
-  as: "detalles",
-});
-VentasDetalle.belongsTo(UnidadesMedida, {
-  foreignKey: "unidad_medida_id",
-  as: "unidad_medida",
-});
-
-/*
-  Vendedores 1:N CuotasVendedores
-  cuotas_vendedores.vendedor_id -> vendedores.id
-*/
-Vendedores.hasMany(CuotasVendedores, {
+// Relación: Vendedores 1:N Ventas
+Vendedores.hasMany(Ventas, {
   foreignKey: "vendedor_id",
-  as: "cuotas",
+  as: "ventas",
 });
-CuotasVendedores.belongsTo(Vendedores, {
+Ventas.belongsTo(Vendedores, {
   foreignKey: "vendedor_id",
   as: "vendedor",
 });
 
-// --------------------------------------------------
-// Exportación
-// --------------------------------------------------
+// Relación: Ventas N:1 Clientes
+Ventas.belongsTo(db.clientes_model, {
+  foreignKey: "cliente_id",
+  as: "cliente",
+});
+
+// Relación: Clientes 1:N Ventas
+db.clientes_model.hasMany(Ventas, {
+  foreignKey: "cliente_id",
+  as: "ventas",
+});
+
+// Relación: Productos con Detalles y Cuotas (Opcional según tu lógica)
+Productos.hasMany(VentasDetalle, { foreignKey: "producto_id", as: "detalles_ventas" });
+VentasDetalle.belongsTo(Productos, { foreignKey: "producto_id", as: "producto" });
+
+// 4. Exportar la base de datos
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 

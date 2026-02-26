@@ -8,6 +8,7 @@ const unidades_medidaController = require("./unidades_medidaController");
 const vendedoresController = require("./vendedoresController");
 const ventasController = require("./ventasController");
 const ventas_detalleController = require("./ventas_detalleController");
+const cumplimientoMesController = require("./cumplimentoMesController");
 
 module.exports = {
   categoriasController,
@@ -20,4 +21,5 @@ module.exports = {
   vendedoresController,
   ventasController,
   ventas_detalleController,
+  cumplimientoMesController
 };

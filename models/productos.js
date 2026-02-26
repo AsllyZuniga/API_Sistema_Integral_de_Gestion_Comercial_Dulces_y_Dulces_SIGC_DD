@@ -1,5 +1,7 @@
-const { DataTypes } = require("sequelize");
-module.exports = (sequelize) => {
+const {
+  DataTypes
+} = require('sequelize');
+module.exports = sequelize => {
   const attributes = {
     id: {
       type: DataTypes.INTEGER,
@@ -8,7 +10,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: true,
       field: "id",
-      autoIncrement: true,
+      autoIncrement: true
     },
     codigo: {
       type: DataTypes.CHAR(30),
@@ -18,7 +20,7 @@ module.exports = (sequelize) => {
       primaryKey: false,
       field: "codigo",
       autoIncrement: false,
-      unique: "productos_codigo_key",
+      unique: "productos_codigo_key"
     },
     descripcion: {
       type: DataTypes.CHAR(200),
@@ -27,7 +29,7 @@ module.exports = (sequelize) => {
       comment: null,
       primaryKey: false,
       field: "descripcion",
-      autoIncrement: false,
+      autoIncrement: false
     },
     categoria_id: {
       type: DataTypes.INTEGER,
@@ -39,9 +41,9 @@ module.exports = (sequelize) => {
       autoIncrement: false,
       references: {
         key: "id",
-        model: "categorias_model",
-      },
-    },
+        model: "categorias_model"
+      }
+    }
   };
   const options = {
     tableName: "productos",
@@ -50,12 +52,8 @@ module.exports = (sequelize) => {
     timestamps: false,
     underscored: true,
     freezeTableName: true,
-    schema: "public",
+    schema: 'public'
   };
-  const ProductosModel = sequelize.define(
-    "productos_model",
-    attributes,
-    options,
-  );
+  const ProductosModel = sequelize.define("productos_model", attributes, options);
   return ProductosModel;
 };
