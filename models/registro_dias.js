@@ -4,7 +4,7 @@ const {
 module.exports = sequelize => {
   const attributes = {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.BIGINT,
       allowNull: false,
       defaultValue: null,
       comment: null,
@@ -12,44 +12,52 @@ module.exports = sequelize => {
       field: "id",
       autoIncrement: true
     },
-    categoria: {
-      type: DataTypes.CHAR(150),
-      allowNull: true,
+    fecha_inicio: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "categoria",
+      field: "fecha_inicio",
       autoIncrement: false
     },
-    megacategoria: {
-      type: DataTypes.CHAR(150),
-      allowNull: true,
+    fecha_fin: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "megacategoria",
+      field: "fecha_fin",
       autoIncrement: false
     },
-    subcategoria: {
-      type: DataTypes.CHAR(150),
-      allowNull: true,
+    dias_corridos: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "subcategoria",
+      field: "dias_corridos",
+      autoIncrement: false
+    },
+    dias_habiles: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "dias_habiles",
       autoIncrement: false
     }
   };
   const options = {
-    tableName: "categorias",
+    tableName: "registro_dias",
     comment: "",
     indexes: [],
     timestamps: false,
     underscored: true,
     freezeTableName: true,
     schema: 'public'
-
   };
-  const CategoriasModel = sequelize.define("categorias_model", attributes, options);
-  return CategoriasModel;
+  const RegistroDiasModel = sequelize.define("registro_dias_model", attributes, options);
+  return RegistroDiasModel;
 };
