@@ -461,7 +461,12 @@ async function getProductosVendidosPorVendedorService(codigo, fechaInicio, fecha
             [db.sequelize.col('ventas_detalle_model.linea'), 'Proveedor'],
             [db.sequelize.col('producto.codigo'), 'Cod_Item'],
             [db.sequelize.col('producto.descripcion'), 'Descripcion'],
-            [db.sequelize.fn('SUM', db.sequelize.col('ventas_detalle_model.cantidad_emp')), 'Venta_Unid_Cajas']
+            // Suma de las Cajas
+            [db.sequelize.fn('SUM', db.sequelize.col('ventas_detalle_model.cantidad_emp')), 'Venta_Unid_Cajas'],
+            // NUEVO: Suma de la cantidad en unidades
+            [db.sequelize.fn('SUM', db.sequelize.col('ventas_detalle_model.cantidad')), 'Cantidad'],
+            // NUEVO: Suma del valor de la venta (usamos valor_neto para mantener coherencia con los otros reportes)
+            [db.sequelize.fn('SUM', db.sequelize.col('ventas_detalle_model.valor_subtotal')), 'Subtotal']
         ],
         include: [
             {
@@ -488,12 +493,15 @@ async function getProductosVendidosPorVendedorService(codigo, fechaInicio, fecha
         raw: true
     });
 
+    // Mapeamos y damos el orden estricto solicitado
     const resultadoFormateado = productosVendidos.map(item => ({
         Fecha: item.Fecha,
         Proveedor: item.Proveedor ? item.Proveedor.trim() : 'SIN PROVEEDOR',
         Cod_Item: item.Cod_Item ? item.Cod_Item.trim() : '',
         Descripcion: item.Descripcion ? item.Descripcion.trim() : '',
-        Venta_Unid_Cajas: parseFloat(item.Venta_Unid_Cajas || 0).toFixed(2)
+        Venta_Unid_Cajas: parseFloat(item.Venta_Unid_Cajas || 0).toFixed(2),
+        Cantidad: parseFloat(item.Cantidad || 0).toFixed(2), // Agregado formato a 2 decimales
+        Subtotal: parseFloat(item.Subtotal || 0).toFixed(2)  // Agregado formato a 2 decimales
     }));
 
     return {
