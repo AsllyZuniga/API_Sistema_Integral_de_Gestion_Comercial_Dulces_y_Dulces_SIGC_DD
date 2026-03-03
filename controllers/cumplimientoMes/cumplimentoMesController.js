@@ -99,4 +99,4 @@ module.exports = {
             res.status(500).send({ message: "Error al obtener los productos vendidos", error: error.message });
         }
     }
-};
+}; 
