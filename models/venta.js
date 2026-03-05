@@ -171,7 +171,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "venta",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const VentaModel = sequelize.define("venta_model", attributes, options);
   return VentaModel;

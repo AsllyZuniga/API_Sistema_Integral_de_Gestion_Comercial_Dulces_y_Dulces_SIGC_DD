@@ -34,7 +34,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "obsequio",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const ObsequioModel = sequelize.define("obsequio_model", attributes, options);
   return ObsequioModel;

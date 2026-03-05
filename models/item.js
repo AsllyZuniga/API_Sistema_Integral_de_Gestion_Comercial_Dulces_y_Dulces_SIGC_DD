@@ -153,7 +153,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "item",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const ItemModel = sequelize.define("item_model", attributes, options);
   return ItemModel;
