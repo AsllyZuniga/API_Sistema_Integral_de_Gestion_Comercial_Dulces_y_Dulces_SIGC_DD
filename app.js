@@ -3,9 +3,25 @@ var express = require("express");
 var path = require("path");
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
-
 var indexRouter = require("./routes/index");
 
+var barrioRouter = require("./routes/barrioRouter");
+var canalRouter = require("./routes/canalRouter");
+var categoriaRouter = require("./routes/categoriaRouter");
+var clienteRouter = require("./routes/clienteRouter");
+var detalle_ventaRouter = require("./routes/detalle_ventaRouter");
+var itemRouter = require("./routes/itemRouter");
+var megacategoriaRouter = require("./routes/megacategoriaRouter");
+var obsequioRouter = require("./routes/obsequioRouter");
+var proveedorRouter = require("./routes/proveedorRouter");
+var rolRouter = require("./routes/rolRouter");
+var subcanalRouter = require("./routes/subcanalRouter");
+var subcategoriaRouter = require("./routes/subcategoriaRouter");
+var tipo_documentoRouter = require("./routes/tipo_documentoRouter");
+var tipo_negocioRouter = require("./routes/tipo_negocioRouter");
+var usuarioRouter = require("./routes/usuarioRouter");
+var vendedorRouter = require("./routes/vendedorRouter");
+var ventaRouter = require("./routes/ventaRouter");
 
 
 
@@ -28,7 +44,23 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/", indexRouter);
-
+app.use("/barrios", barrioRouter);
+app.use("/canales", canalRouter);
+app.use("/categorias", categoriaRouter);
+app.use("/clientes", clienteRouter);
+app.use("/detalle_ventas", detalle_ventaRouter);
+app.use("/items", itemRouter);
+app.use("/megacategorias", megacategoriaRouter);
+app.use("/obsequios", obsequioRouter);
+app.use("/proveedores", proveedorRouter);
+app.use("/roles", rolRouter);
+app.use("/subcanales", subcanalRouter);
+app.use("/subcategorias", subcategoriaRouter);
+app.use("/tipos_documento", tipo_documentoRouter);
+app.use("/tipos_negocio", tipo_negocioRouter);
+app.use("/usuarios", usuarioRouter);
+app.use("/vendedores", vendedorRouter);
+app.use("/ventas", ventaRouter);
 
 
 
