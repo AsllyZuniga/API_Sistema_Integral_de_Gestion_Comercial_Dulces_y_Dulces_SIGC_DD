@@ -25,7 +25,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "megacategoria",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const MegacategoriaModel = sequelize.define("megacategoria_model", attributes, options);
   return MegacategoriaModel;

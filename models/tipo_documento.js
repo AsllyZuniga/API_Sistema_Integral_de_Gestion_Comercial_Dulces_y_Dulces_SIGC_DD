@@ -20,6 +20,15 @@ module.exports = sequelize => {
       primaryKey: false,
       field: "nombre",
       autoIncrement: false
+    },
+    consecutivo: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "consecutivo",
+      autoIncrement: false
     }
   };
   const options = {

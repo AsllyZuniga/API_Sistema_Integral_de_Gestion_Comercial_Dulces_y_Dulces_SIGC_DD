@@ -26,7 +26,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "rol",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const RolModel = sequelize.define("rol_model", attributes, options);
   return RolModel;

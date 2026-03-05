@@ -38,7 +38,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "subcanal",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const SubcanalModel = sequelize.define("subcanal_model", attributes, options);
   return SubcanalModel;

@@ -25,7 +25,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "canal",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const CanalModel = sequelize.define("canal_model", attributes, options);
   return CanalModel;

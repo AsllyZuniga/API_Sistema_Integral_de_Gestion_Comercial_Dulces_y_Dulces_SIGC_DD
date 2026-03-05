@@ -25,7 +25,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "ciudad",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const CiudadModel = sequelize.define("ciudad_model", attributes, options);
   return CiudadModel;
