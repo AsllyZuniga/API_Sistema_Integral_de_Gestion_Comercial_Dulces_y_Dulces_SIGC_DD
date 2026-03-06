@@ -1,4 +1,7 @@
-const subcanal = require('../models').subcanal_model;
+const { 
+    subcanal_model, 
+    canal_model
+} = require('../models');
 module.exports = {
     list(req, res) {
         return subcanal

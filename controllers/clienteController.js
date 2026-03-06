@@ -1,16 +1,36 @@
-const cliente = require('../models').cliente_model;
+const { 
+    cliente_model, 
+    ciudad_model, 
+    barrio_model, 
+    canal_model, 
+    tipo_negocio_model
+} = require('../models');
 module.exports = {
     list(req, res) {
-        return cliente
-            .findAll({})
-            .then((cliente) => res.status(200).send(cliente))
+        return cliente_model
+            .findAll({
+                include: [
+                    { model: ciudad_model, as: 'ciudad' },
+                    { model: barrio_model, as: 'barrio' },
+                    { model: canal_model, as: 'canal' },
+                    { model: tipo_negocio_model, as: 'tipoNegocio' }
+                ]
+            })
+            .then((clientes) => res.status(200).send(clientes))
             .catch((error) => { res.status(400).send(error); });
     },
     getById(req, res) {
 
         console.log(req.params.id);
-        return cliente
-            .findByPk(req.params.id)
+        return cliente_model
+            .findByPk(req.params.id, {
+                include: [
+                    { model: ciudad_model, as: 'ciudad' },
+                    { model: barrio_model, as: 'barrio' },
+                    { model: canal_model, as: 'canal' },
+                    { model: tipo_negocio_model, as: 'tipoNegocio' }
+                ]
+            })
             .then((cliente) => {
                 console.log(cliente);
                 if (!cliente) {
@@ -24,7 +44,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return cliente
+        return cliente_model
             .create({
                 nro_documento: req.body.nro_documento,
                 razon_social: req.body.razon_social,
@@ -40,7 +60,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return cliente
+        return cliente_model
             .findByPk(req.params.id)
             .then(cliente => {
                 if (!cliente) {

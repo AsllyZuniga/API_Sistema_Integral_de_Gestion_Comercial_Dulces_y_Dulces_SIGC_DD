@@ -1,4 +1,7 @@
-const ciudad = require('../models').ciudad_model;
+const { 
+    ciudad_model, 
+    barrio_model
+} = require('../models');
 module.exports = {
     list(req, res) {
         return ciudad

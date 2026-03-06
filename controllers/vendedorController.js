@@ -1,16 +1,27 @@
-const vendedor = require('../models').vendedor_model;
+const { 
+    vendedor_model, 
+    usuario_model
+} = require('../models');
 module.exports = {
     list(req, res) {
-        return vendedor
-            .findAll({})
-            .then((vendedor) => res.status(200).send(vendedor))
+        return vendedor_model
+            .findAll({
+                include: [
+                    { model: usuario_model, as: 'usuario' }
+                ]
+            })
+            .then((vendedores) => res.status(200).send(vendedores))
             .catch((error) => { res.status(400).send(error); });
     },
     getById(req, res) {
 
         console.log(req.params.id);
-        return vendedor
-            .findByPk(req.params.id)
+        return vendedor_model
+            .findByPk(req.params.id, {
+                include: [
+                    { model: usuario_model, as: 'usuario' }
+                ]
+            })
             .then((vendedor) => {
                 console.log(vendedor);
                 if (!vendedor) {
@@ -24,7 +35,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return vendedor
+        return vendedor_model
             .create({
                 codigo_vendedor: req.body.codigo_vendedor,
                 nombre: req.body.nombre,
@@ -39,7 +50,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return vendedor
+        return vendedor_model
             .findByPk(req.params.id)
             .then(vendedor => {
                 if (!vendedor) {
