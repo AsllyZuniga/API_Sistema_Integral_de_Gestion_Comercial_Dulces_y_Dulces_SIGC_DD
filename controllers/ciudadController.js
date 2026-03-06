@@ -22,5 +22,13 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return ciudad
+            .create({
+                nombre: req.body.nombre,
+            })
+            .then((ciudad) => res.status(201).send(ciudad))
+            .catch((error) => res.status(400).send(error));
+    },
 };

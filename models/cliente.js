@@ -57,15 +57,7 @@ module.exports = sequelize => {
       field: "nombre_establecimiento",
       autoIncrement: false
     },
-    condicion_pago: {
-      type: DataTypes.CHAR(150),
-      allowNull: true,
-      defaultValue: null,
-      comment: null,
-      primaryKey: false,
-      field: "condicion_pago",
-      autoIncrement: false
-    },
+
     id_ciudad: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -90,6 +82,19 @@ module.exports = sequelize => {
       references: {
         key: "id_barrio",
         model: "barrio_model"
+      }
+    },
+    id_canal: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "id_canal",
+      autoIncrement: false,
+      references: {
+        key: "id_canal",
+        model: "canal_model"
       }
     },
     id_tipo_negocio: {

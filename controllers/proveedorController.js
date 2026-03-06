@@ -22,5 +22,17 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return proveedor
+            .create({
+                codigo: req.body.codigo,
+                nombre: req.body.nombre,
+                cuota: req.body.cuota,
+                fecha_inicio: req.body.fecha_inicio,
+                fecha_fin: req.body.fecha_fin,
+            })
+            .then((proveedor) => res.status(201).send(proveedor))
+            .catch((error) => res.status(400).send(error));
+    },
 };

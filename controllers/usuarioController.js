@@ -22,5 +22,15 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return usuario
+            .create({
+                title: req.body.title,
+                description: req.body.description,
+                state: req.body.state
+            })
+            .then((usuario) => res.status(201).send(usuario))
+            .catch((error) => res.status(400).send(error));
+    },
 };

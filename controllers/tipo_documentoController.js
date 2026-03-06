@@ -22,5 +22,14 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return tipo_documento
+            .create({
+                nombre: req.body.nombre,
+                consecutivo: req.body.consecutivo,
+            })
+            .then((project) => res.status(201).send(project))
+            .catch((error) => res.status(400).send(error));
+    },
 };

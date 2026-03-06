@@ -22,5 +22,14 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return tipo_negocio
+            .create({
+                tipo_negocio: req.body.tipo_negocio,
+                detalle_tipo_negocio: req.body.detalle_tipo_negocio,
+            })
+            .then((tipo_negocio) => res.status(201).send(tipo_negocio))
+            .catch((error) => res.status(400).send(error));
+    },
 };

@@ -22,5 +22,13 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return canal
+            .create({
+                nombre: req.body.nombre,
+            })
+            .then((canal) => res.status(201).send(canal))
+            .catch((error) => res.status(400).send(error));
+    },
 };

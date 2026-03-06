@@ -22,5 +22,14 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return subcanal
+            .create({
+                nombre: req.body.nombre,
+                id_canal: req.body.id_canal,
+            })
+            .then((subcanal) => res.status(201).send(subcanal))
+            .catch((error) => res.status(400).send(error));
+    },
 };

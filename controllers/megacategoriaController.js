@@ -22,5 +22,13 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return megacategoria
+            .create({
+                nombre: req.body.nombre,
+            })
+            .then((megacategoria) => res.status(201).send(megacategoria))
+            .catch((error) => res.status(400).send(error));
+    },
 };
