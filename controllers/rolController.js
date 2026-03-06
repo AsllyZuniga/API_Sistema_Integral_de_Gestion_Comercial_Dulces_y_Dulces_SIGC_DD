@@ -31,4 +31,22 @@ module.exports = {
             .then((rol) => res.status(201).send(rol))
             .catch((error) => res.status(400).send(error));
     },
+    update(req, res) {
+        return rol
+            .findByPk(req.params.id)
+            .then(rol => {
+                if (!rol) {
+                    return res.status(404).send({
+                        message: 'rol Not Found',
+                    });
+                }
+                return rol
+                    .update({
+                        nombre: req.body.nombre || rol.nombre
+                    })
+                    .then(() => res.status(200).send(rol))
+                    .catch((error) => res.status(400).send(error));
+            })
+            .catch((error) => res.status(400).send(error));
+    }
 };

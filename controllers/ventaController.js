@@ -36,4 +36,26 @@ module.exports = {
             .then((venta) => res.status(201).send(venta))
             .catch((error) => res.status(400).send(error));
     },
+    update(req, res) {
+        return venta
+            .findByPk(req.params.id)
+            .then(venta => {
+                if (!venta) {
+                    return res.status(404).send({
+                        message: 'venta Not Found',
+                    });
+                }
+                return venta
+                    .update({
+                        codigo: req.body.codigo || venta.codigo,
+                        nombre: req.body.nombre || venta.nombre,
+                        cuota: req.body.cuota || venta.cuota,
+                        fecha_inicio: req.body.fecha_inicio || venta.fecha_inicio,
+                        fecha_fin: req.body.fecha_fin || venta.fecha_fin
+                    })
+                    .then(() => res.status(200).send(venta))
+                    .catch((error) => res.status(400).send(error));
+            })
+            .catch((error) => res.status(400).send(error));
+    }
 };
