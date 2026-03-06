@@ -23,6 +23,14 @@ module.exports = {
             .catch((error) =>
                 res.status(400).send(error));
     },
-    
 
+    add(req, res) {
+        return barrio
+            .create({
+                nombre: req.body.nombre,
+                id_ciudad: req.body.id_ciudad,
+            })
+            .then((barrio) => res.status(201).send(barrio))
+            .catch((error) => res.status(400).send(error));
+    },
 };

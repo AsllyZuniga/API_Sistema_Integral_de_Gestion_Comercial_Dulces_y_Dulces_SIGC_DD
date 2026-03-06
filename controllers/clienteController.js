@@ -22,5 +22,21 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return cliente
+            .create({
+                nro_documento: req.body.nro_documento,
+                razon_social: req.body.razon_social,
+                sucursal: req.body.sucursal,
+                direccion: req.body.direccion,
+                nombre_establecimiento: req.body.nombre_establecimiento,
+                id_ciudad: req.body.id_ciudad,
+                id_barrio: req.body.id_barrio,
+                id_canal: req.body.id_canal,
+                id_tipo_negocio: req.body.id_tipo_negocio
+            })
+            .then((cliente) => res.status(201).send(cliente))
+            .catch((error) => res.status(400).send(error));
+    },
 };

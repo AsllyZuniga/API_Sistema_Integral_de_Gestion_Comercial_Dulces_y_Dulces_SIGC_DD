@@ -22,5 +22,14 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return subcategoria
+            .create({
+                nombre: req.body.nombre,
+                id_categoria: req.body.id_categoria,
+            })
+            .then((subcategoria) => res.status(201).send(subcategoria))
+            .catch((error) => res.status(400).send(error));
+    },
 };

@@ -22,5 +22,15 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return obsequio
+            .create({
+                descripcion: req.body.descripcion,
+                valor_obsequio: req.body.valor_obsequio,
+            })
+            .then((obsequio) => res.status(201).send(obsequio))
+            .catch((error) => res.status(400).send(error));
+    },
+
 };

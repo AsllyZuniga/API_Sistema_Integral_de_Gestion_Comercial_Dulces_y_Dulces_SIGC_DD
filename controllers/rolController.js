@@ -22,5 +22,13 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return rol
+            .create({
+                nombre: req.body.nombre,
+            })
+            .then((rol) => res.status(201).send(rol))
+            .catch((error) => res.status(400).send(error));
+    },
 };

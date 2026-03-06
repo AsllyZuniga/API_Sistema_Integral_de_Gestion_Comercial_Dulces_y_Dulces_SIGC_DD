@@ -42,6 +42,24 @@ module.exports = sequelize => {
       primaryKey: false,
       field: "cuota",
       autoIncrement: false
+    },
+    fecha_inicio: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "fecha_inicio",
+      autoIncrement: false
+    },
+    fecha_fin: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "fecha_fin",
+      autoIncrement: false
     }
   };
   const options = {

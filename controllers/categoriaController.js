@@ -22,5 +22,17 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return categoria
+            .create({
+                nombre: req.body.nombre,
+                id_megacategoria: req.body.id_megacategoria,
+                cuota: req.body.cuota,
+                fecha_inicio: req.body.fecha_inicio,
+                fecha_fin: req.body.fecha_fin,
+            })
+            .then((categoria) => res.status(201).send(categoria))
+            .catch((error) => res.status(400).send(error));
+    },
 };

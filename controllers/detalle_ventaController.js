@@ -22,5 +22,20 @@ module.exports = {
             })
             .catch((error) =>
                 res.status(400).send(error));
-    }
+    },
+    add(req, res) {
+        return detalle_venta
+            .create({
+                id_venta: req.body.id_venta,
+                id_item: req.body.id_item,
+                cantidad_emp: req.body.cantidad_emp,
+                cantidad: req.body.cantidad,
+                precio_unitario: req.body.precio_unitario,
+                descuento: req.body.descuento,
+                subtotal: req.body.subtotal,
+                costo_promedio_total: req.body.costo_promedio_total,
+            })
+            .then((detalle_venta) => res.status(201).send(detalle_venta))
+            .catch((error) => res.status(400).send(error));
+    },
 };
