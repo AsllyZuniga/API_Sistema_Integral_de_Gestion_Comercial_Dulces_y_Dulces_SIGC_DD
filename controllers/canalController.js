@@ -6,4 +6,21 @@ module.exports = {
             .then((canal) => res.status(200).send(canal))
             .catch((error) => { res.status(400).send(error); });
     },
+    getById(req, res) {
+
+        console.log(req.params.id);
+        return canal
+            .findByPk(req.params.id)
+            .then((canal) => {
+                console.log(canal);
+                if (!canal) {
+                    return res.status(404).send({
+                        message: 'canal Not Found',
+                    });
+                }
+                return res.status(200).send(canal);
+            })
+            .catch((error) =>
+                res.status(400).send(error));
+    }
 };
