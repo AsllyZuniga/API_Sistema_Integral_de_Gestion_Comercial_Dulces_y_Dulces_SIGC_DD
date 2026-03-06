@@ -1,4 +1,7 @@
-const usuario = require('../models').usuario_model;
+const { 
+    usuario_model, 
+    rol_model
+} = require('../models');
 module.exports = {
     list(req, res) {
         return usuario

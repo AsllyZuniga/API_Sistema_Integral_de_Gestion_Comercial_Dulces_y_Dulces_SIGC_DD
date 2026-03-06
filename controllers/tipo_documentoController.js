@@ -1,4 +1,4 @@
-const tipo_documento = require('../models').tipo_documento_model;
+const { tipo_documento_model } = require('../models');
 module.exports = {
     list(req, res) {
         return tipo_documento

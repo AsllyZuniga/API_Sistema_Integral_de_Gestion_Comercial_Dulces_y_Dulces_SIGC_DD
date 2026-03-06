@@ -1,4 +1,7 @@
-const megacategoria = require('../models').megacategoria_model;
+const { 
+    megacategoria_model, 
+    categoria_model
+} = require('../models');
 module.exports = {
     list(req, res) {
         return megacategoria

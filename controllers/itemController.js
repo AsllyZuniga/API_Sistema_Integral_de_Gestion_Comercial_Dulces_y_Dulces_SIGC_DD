@@ -1,16 +1,39 @@
-const item = require('../models').item_model;
+const { 
+    item_model, 
+    megacategoria_model, 
+    categoria_model, 
+    subcategoria_model, 
+    proveedor_model, 
+    obsequio_model
+} = require('../models');
 module.exports = {
     list(req, res) {
-        return item
-            .findAll({})
-            .then((item) => res.status(200).send(item))
+        return item_model
+            .findAll({
+                include: [
+                    { model: megacategoria_model, as: 'megacategoria' },
+                    { model: categoria_model, as: 'categoria' },
+                    { model: subcategoria_model, as: 'subcategoria' },
+                    { model: proveedor_model, as: 'proveedor' },
+                    { model: obsequio_model, as: 'obsequio' }
+                ]
+            })
+            .then((items) => res.status(200).send(items))
             .catch((error) => { res.status(400).send(error); });
     },
     getById(req, res) {
 
         console.log(req.params.id);
-        return item
-            .findByPk(req.params.id)
+        return item_model
+            .findByPk(req.params.id, {
+                include: [
+                    { model: megacategoria_model, as: 'megacategoria' },
+                    { model: categoria_model, as: 'categoria' },
+                    { model: subcategoria_model, as: 'subcategoria' },
+                    { model: proveedor_model, as: 'proveedor' },
+                    { model: obsequio_model, as: 'obsequio' }
+                ]
+            })
             .then((item) => {
                 console.log(item);
                 if (!item) {
@@ -24,16 +47,16 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return item
+        return item_model
             .create({
                 codigo_item: req.body.codigo_item,
                 descripcion: req.body.descripcion,
                 unidad_medida_empaque: req.body.unidad_medida_empaque,
-                unidad_medida_oden: req.body.unidad_medida_oden,
+                unidad_medida_orden: req.body.unidad_medida_orden,
                 cantidad_empaque: req.body.cantidad_empaque,
                 peso_kilo: req.body.peso_kilo,
                 factor_um_empaque: req.body.factor_um_empaque,
-                factor_um_oden: req.body.factor_um_oden,
+                factor_um_orden: req.body.factor_um_orden,
                 id_megacategoria: req.body.id_megacategoria,
                 id_categoria: req.body.id_categoria,
                 id_subcategoria: req.body.id_subcategoria,
@@ -44,7 +67,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return item
+        return item_model
             .findByPk(req.params.id)
             .then(item => {
                 if (!item) {
@@ -57,11 +80,11 @@ module.exports = {
                         codigo_item: req.body.codigo_item || item.codigo_item,
                         descripcion: req.body.descripcion || item.descripcion,
                         unidad_medida_empaque: req.body.unidad_medida_empaque || item.unidad_medida_empaque,
-                        unidad_medida_oden: req.body.unidad_medida_oden || item.unidad_medida_oden,
+                        unidad_medida_orden: req.body.unidad_medida_orden || item.unidad_medida_orden,
                         cantidad_empaque: req.body.cantidad_empaque || item.cantidad_empaque,
                         peso_kilo: req.body.peso_kilo || item.peso_kilo,
                         factor_um_empaque: req.body.factor_um_empaque || item.factor_um_empaque,
-                        factor_um_oden: req.body.factor_um_oden || item.factor_um_oden,
+                        factor_um_orden: req.body.factor_um_orden || item.factor_um_orden,
                         id_megacategoria: req.body.id_megacategoria || item.id_megacategoria,
                         id_categoria: req.body.id_categoria || item.id_categoria,
                         id_subcategoria: req.body.id_subcategoria || item.id_subcategoria,

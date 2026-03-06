@@ -1,4 +1,4 @@
-const obsequio = require('../models').obsequio_model;
+const { obsequio_model } = require('../models');
 module.exports = {
     list(req, res) {
         return obsequio

@@ -1,4 +1,4 @@
-const proveedor = require('../models').proveedor_model;
+const { proveedor_model } = require('../models');
 module.exports = {
     list(req, res) {
         return proveedor

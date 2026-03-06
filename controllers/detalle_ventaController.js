@@ -1,16 +1,55 @@
-const detalle_venta = require('../models').detalle_venta_model;
+const { 
+    detalle_venta_model, 
+    venta_model, 
+    item_model,
+    categoria_model,
+    subcategoria_model,
+    megacategoria_model,
+    proveedor_model,
+    obsequio_model
+} = require('../models');
 module.exports = {
     list(req, res) {
-        return detalle_venta
-            .findAll({})
+        return detalle_venta_model
+            .findAll({
+                include: [
+                    { model: venta_model, as: 'venta' },
+                    { 
+                        model: item_model, 
+                        as: 'item',
+                        include: [
+                            { model: megacategoria_model, as: 'megacategoria' },
+                            { model: categoria_model, as: 'categoria' },
+                            { model: subcategoria_model, as: 'subcategoria' },
+                            { model: proveedor_model, as: 'proveedor' },
+                            { model: obsequio_model, as: 'obsequio' }
+                        ]
+                    }
+                ]
+            })
             .then((detalle_venta) => res.status(200).send(detalle_venta))
             .catch((error) => { res.status(400).send(error); });
     },
     getById(req, res) {
 
         console.log(req.params.id);
-        return detalle_venta
-            .findByPk(req.params.id)
+        return detalle_venta_model
+            .findByPk(req.params.id, {
+                include: [
+                    { model: venta_model, as: 'venta' },
+                    { 
+                        model: item_model, 
+                        as: 'item',
+                        include: [
+                            { model: megacategoria_model, as: 'megacategoria' },
+                            { model: categoria_model, as: 'categoria' },
+                            { model: subcategoria_model, as: 'subcategoria' },
+                            { model: proveedor_model, as: 'proveedor' },
+                            { model: obsequio_model, as: 'obsequio' }
+                        ]
+                    }
+                ]
+            })
             .then((detalle_venta) => {
                 console.log(detalle_venta);
                 if (!detalle_venta) {
@@ -24,7 +63,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return detalle_venta
+        return detalle_venta_model
             .create({
                 id_venta: req.body.id_venta,
                 id_item: req.body.id_item,
@@ -39,7 +78,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return detalle_venta
+        return detalle_venta_model
             .findByPk(req.params.id)
             .then(detalle_venta => {
                 if (!detalle_venta) {

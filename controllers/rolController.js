@@ -1,4 +1,4 @@
-const rol = require('../models').rol_model;
+const { rol_model } = require('../models');
 module.exports = {
     list(req, res) {
         return rol

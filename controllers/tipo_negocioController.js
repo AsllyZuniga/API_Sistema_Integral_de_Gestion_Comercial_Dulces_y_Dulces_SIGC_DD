@@ -1,4 +1,4 @@
-const tipo_negocio = require('../models').tipo_negocio_model;
+const { tipo_negocio_model } = require('../models');
 module.exports = {
     list(req, res) {
         return tipo_negocio
