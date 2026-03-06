@@ -6,4 +6,21 @@ module.exports = {
             .then((vendedor) => res.status(200).send(vendedor))
             .catch((error) => { res.status(400).send(error); });
     },
+    getById(req, res) {
+
+        console.log(req.params.id);
+        return vendedor
+            .findByPk(req.params.id)
+            .then((vendedor) => {
+                console.log(vendedor);
+                if (!vendedor) {
+                    return res.status(404).send({
+                        message: 'vendedor Not Found',
+                    });
+                }
+                return res.status(200).send(vendedor);
+            })
+            .catch((error) =>
+                res.status(400).send(error));
+    }
 };
