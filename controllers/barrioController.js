@@ -33,4 +33,23 @@ module.exports = {
             .then((barrio) => res.status(201).send(barrio))
             .catch((error) => res.status(400).send(error));
     },
+    update(req, res) {
+        return barrio
+            .findByPk(req.params.id)
+            .then(barrio => {
+                if (!barrio) {
+                    return res.status(404).send({
+                        message: 'barrio Not Found',
+                    });
+                }
+                return barrio
+                    .update({
+                        nombre: req.body.nombre || barrio.nombre,
+                        id_ciudad: req.body.id_ciudad || barrio.id_ciudad,
+                    })
+                    .then(() => res.status(200).send(barrio))
+                    .catch((error) => res.status(400).send(error));
+            })
+            .catch((error) => res.status(400).send(error));
+    }
 };

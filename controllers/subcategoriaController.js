@@ -32,4 +32,23 @@ module.exports = {
             .then((subcategoria) => res.status(201).send(subcategoria))
             .catch((error) => res.status(400).send(error));
     },
+    update(req, res) {
+        return subcategoria
+            .findByPk(req.params.id)
+            .then(subcategoria => {
+                if (!subcategoria) {
+                    return res.status(404).send({
+                        message: 'subcategoria Not Found',
+                    });
+                }
+                return subcategoria
+                    .update({
+                        nombre: req.body.nombre || subcategoria.nombre,
+                        id_categoria: req.body.id_categoria || subcategoria.id_categoria,
+                    })
+                    .then(() => res.status(200).send(subcategoria))
+                    .catch((error) => res.status(400).send(error));
+            })
+            .catch((error) => res.status(400).send(error));
+    }
 };

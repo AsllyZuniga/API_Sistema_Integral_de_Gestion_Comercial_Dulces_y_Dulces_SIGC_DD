@@ -32,5 +32,24 @@ module.exports = {
             .then((obsequio) => res.status(201).send(obsequio))
             .catch((error) => res.status(400).send(error));
     },
+    update(req, res) {
+        return obsequio
+            .findByPk(req.params.id)
+            .then(obsequio => {
+                if (!obsequio) {
+                    return res.status(404).send({
+                        message: 'obsequio Not Found',
+                    });
+                }
+                return obsequio
+                    .update({
+                        descripcion: req.body.descripcion || obsequio.descripcion,
+                        valor_obsequio: req.body.valor_obsequio || obsequio.valor_obsequio
+                    })
+                    .then(() => res.status(200).send(obsequio))
+                    .catch((error) => res.status(400).send(error));
+            })
+            .catch((error) => res.status(400).send(error));
+    }
 
 };

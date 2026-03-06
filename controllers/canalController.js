@@ -31,4 +31,22 @@ module.exports = {
             .then((canal) => res.status(201).send(canal))
             .catch((error) => res.status(400).send(error));
     },
+    update(req, res) {
+        return canal
+            .findByPk(req.params.id)
+            .then(canal => {
+                if (!canal) {
+                    return res.status(404).send({
+                        message: 'canal Not Found',
+                    });
+                }
+                return canal
+                    .update({
+                        nombre: req.body.nombre || canal.nombre,
+                    })
+                    .then(() => res.status(200).send(canal))
+                    .catch((error) => res.status(400).send(error));
+            })
+            .catch((error) => res.status(400).send(error));
+    }
 };
