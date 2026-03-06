@@ -44,23 +44,23 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/", indexRouter);
-app.use("/barrios", barrioRouter);
-app.use("/canales", canalRouter);
-app.use("/categorias", categoriaRouter);
-app.use("/clientes", clienteRouter);
-app.use("/detalle_ventas", detalle_ventaRouter);
+app.use("/barrio", barrioRouter);
+app.use("/canale", canalRouter);
+app.use("/categoria", categoriaRouter);
+app.use("/cliente", clienteRouter);
+app.use("/detalle_venta", detalle_ventaRouter);
 app.use("/items", itemRouter);
-app.use("/megacategorias", megacategoriaRouter);
-app.use("/obsequios", obsequioRouter);
-app.use("/proveedores", proveedorRouter);
+app.use("/megacategoria", megacategoriaRouter);
+app.use("/obsequio", obsequioRouter);
+app.use("/proveedore", proveedorRouter);
 app.use("/roles", rolRouter);
-app.use("/subcanales", subcanalRouter);
-app.use("/subcategorias", subcategoriaRouter);
+app.use("/subcanale", subcanalRouter);
+app.use("/subcategoria", subcategoriaRouter);
 app.use("/tipos_documento", tipo_documentoRouter);
 app.use("/tipos_negocio", tipo_negocioRouter);
-app.use("/usuarios", usuarioRouter);
-app.use("/vendedores", vendedorRouter);
-app.use("/ventas", ventaRouter);
+app.use("/usuario", usuarioRouter);
+app.use("/vendedor", vendedorRouter);
+app.use("/venta", ventaRouter);
 
 
 
