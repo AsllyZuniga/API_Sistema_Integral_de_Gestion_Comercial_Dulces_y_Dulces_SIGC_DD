@@ -22,7 +22,7 @@ class ImportadorVentas {
         this.obsequio = models.obsequio_model;
         this.venta = models.venta_model;
         this.detalle_venta = models.detalle_venta_model;
-        
+
         this.batchSize = 100;
         this.verbose = false;
         this.estadisticas = {
@@ -37,7 +37,7 @@ class ImportadorVentas {
 
     normalizarValor(valor) {
         if (!valor) return null;
-        
+
         valor = valor.trim();
 
         if (valor === '$0,00' || valor === '0' || valor === '0,00') {
@@ -58,16 +58,16 @@ class ImportadorVentas {
 
     parsearFecha(valor) {
         if (!valor || valor.trim() === '') return null;
-        
+
         valor = valor.trim();
-        
+
         // Intentar parsear formato DD/MM/YYYY
         const partes = valor.split('/');
         if (partes.length === 3) {
             const dia = parseInt(partes[0], 10);
             const mes = parseInt(partes[1], 10);
             const anio = parseInt(partes[2], 10);
-            
+
             // Validar que sea una fecha válida
             const fecha = new Date(anio, mes - 1, dia);
             if (fecha.getDate() === dia && fecha.getMonth() === mes - 1 && fecha.getFullYear() === anio) {
@@ -76,12 +76,12 @@ class ImportadorVentas {
                 return isoFecha;
             }
         }
-        
+
         // Si falla, intentar parsear como ISO (YYYY-MM-DD)
         if (valor.match(/^\d{4}-\d{2}-\d{2}$/)) {
             return valor;
         }
-        
+
         return null;
     }
 
@@ -99,9 +99,9 @@ class ImportadorVentas {
     async obtenerOCrearRegistro(modelo, filtro, datos) {
         try {
             // Buscar registro existente
-            let registro = await modelo.findOne({ 
+            let registro = await modelo.findOne({
                 where: filtro,
-                raw: true 
+                raw: true
             });
 
             // Si existe, retornarlo
@@ -145,7 +145,7 @@ class ImportadorVentas {
          * Busca ignorando mayúsculas y minúsculas
          */
         if (!valor) return null;
-        
+
         return {
             [Op.iLike]: valor.trim()
         };
@@ -173,7 +173,7 @@ class ImportadorVentas {
             // JERARQUÍA DE CREACIÓN: Primero lo que no depende de nada
 
             // 1. NIVEL 1 - Entidades independientes (sin dependencias)
-            
+
             // Obtener o crear Proveedor (LINEA)
             const proveedor = await this.obtenerOCrearRegistro(
                 this.proveedor,
@@ -210,7 +210,7 @@ class ImportadorVentas {
             const tipoNegocio = await this.obtenerOCrearRegistro(
                 this.tipo_negocio,
                 { tipo_negocio: { [Op.iLike]: fila['TIPO DE NEGOCIO']?.trim() } },
-                { 
+                {
                     tipo_negocio: fila['TIPO DE NEGOCIO']?.trim(),
                     detalle_tipo_negocio: fila['DETALLE TIPO DE NEGOCIO']?.trim()
                 }
@@ -223,7 +223,7 @@ class ImportadorVentas {
             const categoria = await this.obtenerOCrearRegistro(
                 this.categoria,
                 { nombre: { [Op.iLike]: fila['CATEGORIA']?.trim() }, id_megacategoria: megacategoria.id_megacategoria },
-                { 
+                {
                     nombre: fila['CATEGORIA']?.trim(),
                     id_megacategoria: megacategoria.id_megacategoria
                 }
@@ -234,7 +234,7 @@ class ImportadorVentas {
             const subcanal = await this.obtenerOCrearRegistro(
                 this.subcanal,
                 { nombre: { [Op.iLike]: fila['SUBCANAL']?.trim() }, id_canal: canal.id_canal },
-                { 
+                {
                     nombre: fila['SUBCANAL']?.trim(),
                     id_canal: canal.id_canal
                 }
@@ -245,7 +245,7 @@ class ImportadorVentas {
             const barrio = await this.obtenerOCrearRegistro(
                 this.barrio,
                 { nombre: { [Op.iLike]: fila['Barrio']?.trim() }, id_ciudad: ciudad.id_ciudad },
-                { 
+                {
                     nombre: fila['Barrio']?.trim(),
                     id_ciudad: ciudad.id_ciudad
                 }
@@ -258,7 +258,7 @@ class ImportadorVentas {
             const subcategoria = await this.obtenerOCrearRegistro(
                 this.subcategoria,
                 { nombre: { [Op.iLike]: fila['SUBCATEGORIA']?.trim() }, id_categoria: categoria.id_categoria },
-                { 
+                {
                     nombre: fila['SUBCATEGORIA']?.trim(),
                     id_categoria: categoria.id_categoria
                 }
@@ -269,7 +269,7 @@ class ImportadorVentas {
             const cliente = await this.obtenerOCrearRegistro(
                 this.cliente,
                 { nro_documento: { [Op.iLike]: fila['Cliente factura']?.trim() } },
-                { 
+                {
                     nro_documento: fila['Cliente factura']?.trim(),
                     razon_social: fila['Razon social cliente factura']?.trim(),
                     sucursal: fila['Nombre establecimiento  facturar']?.trim(),
@@ -285,7 +285,7 @@ class ImportadorVentas {
             const vendedor = await this.obtenerOCrearRegistro(
                 this.vendedor,
                 { codigo_vendedor: { [Op.iLike]: fila['Codigo vendedor']?.trim() } },
-                { 
+                {
                     codigo_vendedor: fila['Codigo vendedor']?.trim(),
                     nombre: fila['Nombre vendedor']?.trim()
                 }
@@ -300,7 +300,7 @@ class ImportadorVentas {
                 obsequio = await this.obtenerOCrearRegistro(
                     this.obsequio,
                     { descripcion: { [Op.iLike]: fila['REPORTE PROV CON OBS']?.trim() } },
-                    { 
+                    {
                         descripcion: fila['REPORTE PROV CON OBS']?.trim(),
                         valor_obsequio: this.normalizarValor(fila['Valor subtotal'])
                     }
@@ -311,7 +311,7 @@ class ImportadorVentas {
             const item = await this.obtenerOCrearRegistro(
                 this.item,
                 { codigo_item: { [Op.iLike]: fila['Item']?.trim() } },
-                { 
+                {
                     codigo_item: fila['Item']?.trim(),
                     descripcion: fila['Desc. item']?.trim(),
                     unidad_medida_orden: fila['U.M. Orden']?.trim(),
@@ -362,7 +362,7 @@ class ImportadorVentas {
 
         } catch (error) {
             this.estadisticas.errores++;
-            
+
             if (this.verbose) {
                 console.error(`❌ Error en fila ${this.estadisticas.totalLineas}:`, error.message);
                 this.estadisticas.erroresDetallados.push({
@@ -371,7 +371,7 @@ class ImportadorVentas {
                     fila: fila
                 });
             }
-            
+
             return null;
         }
     }
@@ -379,10 +379,10 @@ class ImportadorVentas {
     async procesarBatch(filas, encabezados) {
         for (const linea of filas) {
             this.estadisticas.totalLineas++;
-            
+
             const fila = this.parsearLinea(linea, encabezados);
             const resultado = await this.procesarFila(fila);
-            
+
             if (resultado) {
                 this.estadisticas.exitosas++;
             }
@@ -391,7 +391,7 @@ class ImportadorVentas {
 
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
-        
+
         return new Promise(async (resolve, reject) => {
             try {
                 const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
@@ -416,10 +416,10 @@ class ImportadorVentas {
 
                     if (batch.length >= this.batchSize) {
                         rl.pause();
-                        
+
                         await this.procesarBatch(batch, encabezados);
                         console.log(`📊 Procesadas ${this.estadisticas.totalLineas} filas... (${this.estadisticas.exitosas} exitosas, ${this.estadisticas.errores} errores)`);
-                        
+
                         batch = [];
                         rl.resume();
                     }
@@ -433,7 +433,7 @@ class ImportadorVentas {
 
                     this.estadisticas.tiempoFin = Date.now();
                     this.mostrarResumen();
-                    
+
                     resolve(this.estadisticas);
                 });
 
