@@ -166,6 +166,15 @@ module.exports = sequelize => {
       primaryKey: false,
       field: "impuesto_afecta_margen",
       autoIncrement: false
+    },
+    condicion_pago: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "condicion_pago",
+      autoIncrement: false
     }
   };
   const options = {

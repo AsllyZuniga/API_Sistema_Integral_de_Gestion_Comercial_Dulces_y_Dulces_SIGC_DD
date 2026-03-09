@@ -36,7 +36,7 @@ module.exports = sequelize => {
     },
     cuota: {
       type: DataTypes.DOUBLE,
-      allowNull: false,
+      allowNull: true,
       defaultValue: null,
       comment: null,
       primaryKey: false,
@@ -45,7 +45,7 @@ module.exports = sequelize => {
     },
     fecha_inicio: {
       type: DataTypes.DATE,
-      allowNull: false,
+      allowNull: true,
       defaultValue: null,
       comment: null,
       primaryKey: false,
