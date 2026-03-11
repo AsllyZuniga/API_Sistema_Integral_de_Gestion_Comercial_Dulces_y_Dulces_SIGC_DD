@@ -3,31 +3,10 @@ const path = require('path');
 const readline = require('readline');
 const { Op } = require('sequelize');
 
-/**
- * IMPORTADOR OPTIMIZADO DE VENTAS - VERSIÓN PARA VOLÚMENES MASIVOS
- * ==================================================================
- * 
- * Estrategia de optimización para archivos de 500MB a Gigas:
- * 
- * 1. ✅ PRECARGA EN MEMORIA: Todos los maestros al inicio (1 query por tabla)
- * 2. ✅ O(1) LOOKUPS: Maps globales en lugar de queries por fila
- * 3. ✅ BULK INSERTS: 1000 registros en un solo INSERT
- * 4. ✅ TRANSACCIONES GRANDES: 5000 registros por transacción
- * 5. ✅ BATCH PROCESSING STREAMING: Lee línea por línea (no carga todo en RAM)
- * 6. ✅ CACHÉ DE CREADOS NUEVOS: Para maestros creados durante importación
- * 
- * Rendimiento esperado:
- * - 30 registros: < 3 segundos
- * - 180,000 registros: 2-3 minutos
- * - 1,000,000 registros: 10-15 minutos
- * - 5,000,000 registros: 50-75 minutos
- */
-
 class ImportadorVentasOptimizado {
     constructor(sequelize, models) {
         this.sequelize = sequelize;
         
-        // Modelos - accesibles desde models object
         this.proveedor = models.proveedor_model;
         this.megacategoria = models.megacategoria_model;
         this.categoria = models.categoria_model;
@@ -45,25 +24,23 @@ class ImportadorVentasOptimizado {
         this.venta = models.venta_model;
         this.detalle_venta = models.detalle_venta_model;
         
-        // 🚀 OPTIMIZACIÓN 1: MAPS EN MEMORIA CON BÚSQUEDAS RÁPIDAS O(1)
         this.maestros = {
-            proveedores: new Map(),           // código -> objeto
-            megacategorias: new Map(),        // nombre -> objeto
-            categorias: new Map(),            // "nombre_id_mega" -> objeto
-            subcategorias: new Map(),         // "nombre_id_cat" -> objeto
-            canales: new Map(),               // nombre -> objeto
-            subcanales: new Map(),            // "nombre_id_canal" -> objeto
-            vendedores: new Map(),            // código_vendedor -> objeto
-            ciudades: new Map(),              // nombre -> objeto
-            barrios: new Map(),               // "nombre_id_ciudad" -> objeto
-            tiposNegocio: new Map(),          // tipo_negocio -> objeto
-            tiposDocumento: new Map(),        // nombre -> objeto
-            clientes: new Map(),              // nro_documento -> objeto
-            items: new Map(),                 // código_item -> objeto
-            obsequios: new Map()              // descripción -> objeto
+            proveedores: new Map(),
+            megacategorias: new Map(),
+            categorias: new Map(),
+            subcategorias: new Map(),
+            canales: new Map(),
+            subcanales: new Map(),
+            vendedores: new Map(),
+            ciudades: new Map(),
+            barrios: new Map(),
+            tiposNegocio: new Map(),
+            tiposDocumento: new Map(),
+            clientes: new Map(),
+            items: new Map(),
+            obsequios: new Map()
         };
         
-        // CACHÉ DE NUEVOS CREADOS durante esta importación
         this.nuevosCreados = {
             proveedores: new Map(),
             megacategorias: new Map(),
@@ -81,10 +58,9 @@ class ImportadorVentasOptimizado {
             obsequios: new Map()
         };
         
-        // 🚀 CONFIGURACIÓN DE RENDIMIENTO
-        this.BATCH_INSERT_SIZE = 1000;    // Insertar 1000 registros por vez
-        this.TRANSACTION_SIZE = 5000;     // Transacción cada 5000 registros
-        this.BULK_DISPLAY_INTERVAL = 10000; // Log cada 10k registros
+        this.BATCH_INSERT_SIZE = 1000;
+        this.TRANSACTION_SIZE = 5000;
+        this.BULK_DISPLAY_INTERVAL = 10000;
         
         this.verbose = false;
         
@@ -101,10 +77,6 @@ class ImportadorVentasOptimizado {
             maestrosPreCargados: {}
         };
     }
-
-    /**
-     * FUNCIONES DE NORMALIZACIÓN Y PARSEO
-     */
 
     normalizarValor(valor) {
         if (!valor) return null;
@@ -146,10 +118,7 @@ class ImportadorVentasOptimizado {
         if (!valor) return { nombre: null, consecutivo: null };
         const partes = valor.split('-');
         if (partes.length === 2) {
-            return { 
-                nombre: partes[0].trim(), 
-                consecutivo: parseInt(partes[1], 10) 
-            };
+            return { nombre: partes[0].trim(), consecutivo: parseInt(partes[1], 10) };
         }
         return { nombre: null, consecutivo: null };
     }
@@ -163,15 +132,10 @@ class ImportadorVentasOptimizado {
         return registro;
     }
 
-    /**
-     * 🚀 PRECARGA DE MAESTROS EN MEMORIA
-     * Una sola query por tabla al inicio = máximo rendimiento
-     */
     async precargaDatos() {
         console.log('📦 Precargando datos maestros...');
         
         try {
-            // Cargar TODOS los registros de una sola vez
             const proveedores = await this.proveedor.findAll({ raw: true });
             const megacategorias = await this.megacategoria.findAll({ raw: true });
             const categorias = await this.categoria.findAll({ raw: true });
@@ -187,7 +151,6 @@ class ImportadorVentasOptimizado {
             const items = await this.item.findAll({ raw: true });
             const obsequios = await this.obsequio.findAll({ raw: true });
 
-            // Crear maps para lookup O(1) - Búsqueda en tiempo CONSTANTE
             proveedores.forEach(p => {
                 const clave = (p.codigo?.toLowerCase()) || (p.nombre?.toLowerCase()) || 'null';
                 this.maestros.proveedores.set(clave, p);
@@ -270,75 +233,53 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    /**
-     * 🚀 OBTENER O CREAR (OPTIMIZADO)
-     * 1. Busca en memoria (O(1))
-     * 2. Si no existe, crea en BD y cachea
-     */
     async obtenerOCrearOptimizado(modelo, cacheKey, clave, datosCompletos) {
         const claveNormalizada = clave?.toLowerCase();
         
-        // 1. Buscar en maestros precargados
         if (this.maestros[cacheKey]?.has(claveNormalizada)) {
             return this.maestros[cacheKey].get(claveNormalizada);
         }
 
-        // 2. Buscar en nuevos creados durante esta importación
         if (this.nuevosCreados[cacheKey]?.has(claveNormalizada)) {
             return this.nuevosCreados[cacheKey].get(claveNormalizada);
         }
 
-        // 3. Si no está, crear en BD
         const nuevoRegistro = await modelo.create(datosCompletos);
         const objeto = nuevoRegistro.get({ plain: true });
 
-        // 4. Guardar en caché de "nuevos creados"
         this.nuevosCreados[cacheKey].set(claveNormalizada, objeto);
         return objeto;
     }
 
-    /**
-     * PROCESADOR DE FILAS
-     */
     async procesarFila(fila, transaccion = null) {
         try {
             if (!fila || Object.keys(fila).length === 0) throw new Error('Fila vacía');
 
-            // EXTRACCIÓN CORRECTA DE CAMPOS COMPUESTOS
             const { codigo: codProveedor, nombre: nomProveedor } = this.separarCodigoNombre(fila['LINEA']);
             const { nombre: nomTipoDoc, consecutivo: nroDocumento } = this.separarTipoDocumento(fila['Nro documento']);
 
-            // BÚSQUEDAS SIN QUERIES (O(1))
             const proveedor = await this.obtenerOCrearOptimizado(
                 this.proveedor, 'proveedores',
                 nomProveedor,
                 { codigo: codProveedor, nombre: nomProveedor }
             );
-            if (proveedor && !proveedor.id_proveedor) this.estadisticas.nuevosProveedores++;
 
             const megacategoria = await this.obtenerOCrearOptimizado(
                 this.megacategoria, 'megacategorias',
                 fila['MEGACATEGORIA'],
                 { nombre: fila['MEGACATEGORIA']?.trim() }
             );
-            if (megacategoria && !megacategoria.id_megacategoria) this.estadisticas.nuevasMegacategorias++;
 
             const categoria = await this.obtenerOCrearOptimizado(
                 this.categoria, 'categorias',
                 `${fila['CATEGORIA']}_${megacategoria?.id_megacategoria}`,
-                { 
-                    nombre: fila['CATEGORIA']?.trim(),
-                    id_megacategoria: megacategoria?.id_megacategoria
-                }
+                { nombre: fila['CATEGORIA']?.trim(), id_megacategoria: megacategoria?.id_megacategoria }
             );
 
             const subcategoria = await this.obtenerOCrearOptimizado(
                 this.subcategoria, 'subcategorias',
                 `${fila['SUBCATEGORIA']}_${categoria?.id_categoria}`,
-                { 
-                    nombre: fila['SUBCATEGORIA']?.trim(),
-                    id_categoria: categoria?.id_categoria
-                }
+                { nombre: fila['SUBCATEGORIA']?.trim(), id_categoria: categoria?.id_categoria }
             );
 
             const canal = await this.obtenerOCrearOptimizado(
@@ -350,10 +291,7 @@ class ImportadorVentasOptimizado {
             const subcanal = await this.obtenerOCrearOptimizado(
                 this.subcanal, 'subcanales',
                 `${fila['SUBCANAL']}_${canal?.id_canal}`,
-                { 
-                    nombre: fila['SUBCANAL']?.trim(),
-                    id_canal: canal?.id_canal
-                }
+                { nombre: fila['SUBCANAL']?.trim(), id_canal: canal?.id_canal }
             );
 
             const ciudad = await this.obtenerOCrearOptimizado(
@@ -365,10 +303,7 @@ class ImportadorVentasOptimizado {
             const barrio = await this.obtenerOCrearOptimizado(
                 this.barrio, 'barrios',
                 `${fila['Barrio']}_${ciudad?.id_ciudad}`,
-                { 
-                    nombre: fila['Barrio']?.trim(),
-                    id_ciudad: ciudad?.id_ciudad
-                }
+                { nombre: fila['Barrio']?.trim(), id_ciudad: ciudad?.id_ciudad }
             );
 
             const tipoNegocio = await this.obtenerOCrearOptimizado(
@@ -392,7 +327,7 @@ class ImportadorVentasOptimizado {
                 fila['Codigo vendedor'],
                 {
                     codigo_vendedor: fila['Codigo vendedor']?.trim(),
-                    nombre: fila['Nombre vendedor']?.trim()  || 'SIN NOMBRE'
+                    nombre: fila['Nombre vendedor']?.trim() || 'SIN NOMBRE'
                 }
             );
 
@@ -409,24 +344,18 @@ class ImportadorVentasOptimizado {
 
             const item = await this.obtenerOCrearOptimizado(
                 this.item, 'items',
-                fila['Item']?.trim(),
+                fila['Item'],
                 {
                     codigo_item: fila['Item']?.trim(),
-                    descripcion: fila['Desc. item']?.trim(),
-                    unidad_medida_orden: fila['U.M. Orden']?.trim(),
-                    cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0,
-                    factor_um_empaque: this.normalizarValor(fila['Factor U.M. emp.']) || 1,
-                    factor_um_orden: this.normalizarValor(fila['Factor U.M. Orden']) || 1,
-                    peso_kilo: this.normalizarValor(fila['Peso en KILO']) || 0,
+                    descripcion: fila['Desc. item']?.trim() || '',
                     id_proveedor: proveedor?.id_proveedor,
                     id_megacategoria: megacategoria?.id_megacategoria,
                     id_categoria: categoria?.id_categoria,
                     id_subcategoria: subcategoria?.id_subcategoria,
-                    id_obsequio: obsequio?.id_obsequio || null
+                    cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0
                 }
             );
 
-            // CREAR VENTA (Transaccional)
             const venta = await this.venta.create({
                 numero_documento: fila['Nro documento']?.trim(),
                 fecha: this.parsearFecha(fila['Fecha']),
@@ -443,12 +372,10 @@ class ImportadorVentasOptimizado {
                 margen_promedio: this.normalizarValor(fila['Margen promedio']) || 0,
                 impuesto_afecta_margen: this.normalizarValor(fila['Impuesto afecta margen']),
                 condicion_pago: fila['Cond. pago fact']?.trim().substring(0, 20),
-                // Campos de porcentaje - SIEMPRE NULL (no son datos numéricos)
                 porcentaje_descuentos: null,
                 porcentaje_impuesto: null
             }, { transaction: transaccion });
 
-            // CREAR OBSEQUIO si existe descripción
             if (fila['REPORTE PROV CON OBS'] && fila['REPORTE PROV CON OBS'].trim()) {
                 await this.obsequio.create({
                     descripcion: fila['REPORTE PROV CON OBS']?.trim(),
@@ -456,7 +383,6 @@ class ImportadorVentasOptimizado {
                 }, { transaction: transaccion });
             }
 
-            // CREAR DETALLE VENTA
             const detalleVenta = await this.detalle_venta.create({
                 id_venta: venta?.id_venta,
                 id_item: item?.id_item,
@@ -480,9 +406,6 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    /**
-     * PROCESADOR DE BATCH (con transacciones cada TRANSACTION_SIZE)
-     */
     async procesarBatch(filas, encabezados) {
         let ventasEnTransaccion = 0;
         let transaccion = await this.sequelize.transaction();
@@ -499,7 +422,6 @@ class ImportadorVentasOptimizado {
                     this.estadisticas.exitosas++;
                     ventasEnTransaccion++;
 
-                    // Cada TRANSACTION_SIZE filas = commit de transacción
                     if (ventasEnTransaccion >= this.TRANSACTION_SIZE) {
                         await transaccion.commit();
                         console.log(`   ✅ Transacción confirmada: ${this.estadisticas.totalLineas} filas`);
@@ -508,14 +430,12 @@ class ImportadorVentasOptimizado {
                         ventasEnTransaccion = 0;
                     }
 
-                    // Display cada BULK_DISPLAY_INTERVAL
                     if (this.estadisticas.totalLineas % this.BULK_DISPLAY_INTERVAL === 0) {
                         console.log(`📊 ${this.estadisticas.totalLineas} filas procesadas...`);
                     }
                 }
             }
 
-            // Commit final
             if (ventasEnTransaccion > 0) {
                 await transaccion.commit();
                 console.log(`   ✅ Transacción final confirmada: ${ventasEnTransaccion} filas`);
@@ -527,16 +447,12 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    /**
-     * IMPORTAR - Función principal
-     */
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
         
         try {
             console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
             
-            // Paso 1: Precargardatos maestros
             await this.precargaDatos();
 
             const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
@@ -562,14 +478,12 @@ class ImportadorVentasOptimizado {
 
                 batch.push(linea);
 
-                // Procesar batch cuando alcanza BATCH_INSERT_SIZE
                 if (batch.length >= this.BATCH_INSERT_SIZE) {
                     await this.procesarBatch(batch, encabezados);
                     batch = [];
                 }
             }
 
-            // Procesar batch final
             if (batch.length > 0) {
                 await this.procesarBatch(batch, encabezados);
             }
@@ -584,9 +498,6 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    /**
-     * MOSTRAR RESUMEN FINAL
-     */
     mostrarResumen() {
         const tiempoTotal = (this.estadisticas.tiempoFin - this.estadisticas.tiempoInicio) / 1000;
         const velocidad = (this.estadisticas.exitosas / tiempoTotal).toFixed(2);
@@ -616,18 +527,6 @@ class ImportadorVentasOptimizado {
    • Clientes: ${this.estadisticas.maestrosPreCargados.clientes}
    • Items: ${this.estadisticas.maestrosPreCargados.items}
 
-🚀 OPTIMIZACIONES LOGRADAS:
-   • Búsquedas en O(1) en lugar de queries (50+ por fila)
-   • Reducción de ~${(50 * this.estadisticas.totalLineas)} queries a ~${Math.ceil(this.estadisticas.totalLineas / 100)} queries
-   • Precarga inicial: 1 query por tabla
-   • Batch processing: ${this.BATCH_INSERT_SIZE} registros por insert
-   • Transacciones: Cada ${this.TRANSACTION_SIZE} registros
-   
-   🎯 PROYECCIONES:
-   • 30 registros: < 3 segundos ✅
-   • 180,000 registros: 2-3 minutos
-   • 1,000,000 registros: 10-15 minutos
-   • Archivos de Gigas: Procesable en horas (en lugar de días)
         `);
     }
 }
