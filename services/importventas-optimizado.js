@@ -315,11 +315,11 @@ class ImportadorVentasOptimizado {
                 }
             );
 
-            const tipoDocumento = nomTipoDoc ? 
+            const tipoDocumento = fila["Nro documento"] ? 
                 await this.obtenerOCrearOptimizado(
                     this.tipo_documento, 'tiposDocumento',
-                    nomTipoDoc,
-                    { nombre: nomTipoDoc }
+                    fila["Nro documento"],
+                    { nombre: nomTipoDoc, consecutivo: nroDocumento }
                 ) : null;
 
             const vendedor = await this.obtenerOCrearOptimizado(
