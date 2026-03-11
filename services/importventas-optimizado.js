@@ -373,8 +373,11 @@ class ImportadorVentasOptimizado {
 
             const tipoNegocio = await this.obtenerOCrearOptimizado(
                 this.tipo_negocio, 'tiposNegocio',
-                fila['Tipo negocio'],
-                { tipo_negocio: fila['Tipo negocio']?.trim() }
+                fila['TIPO DE NEGOCIO'],
+                {
+                    tipo_negocio: fila['TIPO DE NEGOCIO']?.trim(),
+                    detalle_tipo_negocio: fila['DETALLE TIPO DE NEGOCIO']?.trim() || ''
+                }
             );
 
             const tipoDocumento = nomTipoDoc ? 
@@ -389,7 +392,7 @@ class ImportadorVentasOptimizado {
                 fila['Codigo vendedor'],
                 {
                     codigo_vendedor: fila['Codigo vendedor']?.trim(),
-                    nombre_vendedor: fila['Nombre vendedor']?.trim() || ''
+                    nombre: fila['Nombre vendedor']?.trim()  || 'SIN NOMBRE'
                 }
             );
 
@@ -406,15 +409,20 @@ class ImportadorVentasOptimizado {
 
             const item = await this.obtenerOCrearOptimizado(
                 this.item, 'items',
-                fila['Código'],
+                fila['Item']?.trim(),
                 {
-                    codigo_item: fila['Código']?.trim(),
-                    nombre: fila['Nombre']?.trim() || '',
+                    codigo_item: fila['Item']?.trim(),
+                    descripcion: fila['Desc. item']?.trim(),
+                    unidad_medida_orden: fila['U.M. Orden']?.trim(),
+                    cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0,
+                    factor_um_empaque: this.normalizarValor(fila['Factor U.M. emp.']) || 1,
+                    factor_um_orden: this.normalizarValor(fila['Factor U.M. Orden']) || 1,
+                    peso_kilo: this.normalizarValor(fila['Peso en KILO']) || 0,
                     id_proveedor: proveedor?.id_proveedor,
                     id_megacategoria: megacategoria?.id_megacategoria,
                     id_categoria: categoria?.id_categoria,
                     id_subcategoria: subcategoria?.id_subcategoria,
-                    cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0
+                    id_obsequio: obsequio?.id_obsequio || null
                 }
             );
 
