@@ -34,7 +34,11 @@ module.exports = sequelize => {
   const options = {
     tableName: "tipo_documento",
     comment: "",
-    indexes: []
+    indexes: [],
+    timestamps: false,
+    underscored: true,
+    freezeTableName: true,
+    schema: 'public'
   };
   const TipoDocumentoModel = sequelize.define("tipo_documento_model", attributes, options);
   return TipoDocumentoModel;

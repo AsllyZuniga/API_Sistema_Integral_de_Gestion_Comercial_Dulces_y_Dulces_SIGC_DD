@@ -86,6 +86,15 @@ module.exports = sequelize => {
         model: "subcanal_model"
       }
     },
+    numero_documento: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: null,
+      comment: "Número de referencia de la factura (ej: FE1-00391434)",
+      primaryKey: false,
+      field: "numero_documento",
+      autoIncrement: false
+    },
     precio_unitario_con_impuesto: {
       type: DataTypes.DOUBLE,
       allowNull: true,
@@ -113,13 +122,13 @@ module.exports = sequelize => {
       field: "porcentaje_impuesto",
       autoIncrement: false
     },
-    subtotal_total: {
+    subtotal: {
       type: DataTypes.DOUBLE,
       allowNull: true,
       defaultValue: null,
-      comment: null,
+      comment: "Subtotal antes de impuestos",
       primaryKey: false,
-      field: "subtotal_total",
+      field: "subtotal",
       autoIncrement: false
     },
     valor_descuentos: {
