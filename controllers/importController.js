@@ -11,58 +11,113 @@ async function importarVentasConArchivo(req, res) {
     let archivoProcesado = null;
 
     try {
+        // Configurar timeout para archivos de varios GB (3 horas)
+        req.setTimeout(3 * 60 * 60 * 1000);
+        res.setTimeout(3 * 60 * 60 * 1000);
+
+        // Enviar headers inmediatamente para mantener conexión activa
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache'
+        });
+
         if (!req.file) {
-            return res.status(400).json({
+            res.end(JSON.stringify({
                 error: 'Archivo requerido',
                 mensaje: 'Debes adjuntar un archivo TSV en el campo "archivo"'
-            });
+            }));
+            return;
         }
 
         const rutaArchivo = req.file.path;
         const nombreArchivo = req.file.originalname;
         const tamanoMB = (req.file.size / (1024 * 1024)).toFixed(2);
-        const batchSize = parseInt(req.body.batchSize) || 100;
+        const batchSize = parseInt(req.body.batchSize) || 20000;
 
         console.log(`\n🚀 Iniciando importación desde upload: ${nombreArchivo}`);
         console.log(`📊 Tamaño: ${tamanoMB} MB`);
         console.log(`⚙️  Batch size: ${batchSize}`);
+
+        // Enviar mensaje inicial
+        res.write(`{"status":"iniciando","mensaje":"Procesando archivo ${nombreArchivo} (${tamanoMB} MB)","timestamp":"${new Date().toISOString()}"}\n`);
 
         archivoProcesado = rutaArchivo;
 
         const importador = new ImportadorVentasOptimizado(models.sequelize, models);
         importador.verbose = true;
 
-        const estadisticas = await importador.importar(rutaArchivo);
+        // Configurar callback para updates de progreso (archivos gigantes)
+        let intervalId = setInterval(() => {
+            const memoriaUsada = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+            res.write(`{"status":"procesando","mensaje":"Importación en progreso... RAM: ${memoriaUsada}MB","timestamp":"${new Date().toISOString()}"}\n`);
+        }, 30000); // Cada 30 segundos para archivos GB
 
-        if (fs.existsSync(rutaArchivo)) {
-            fs.unlinkSync(rutaArchivo);
+        try {
+            const estadisticas = await importador.importar(rutaArchivo);
+            
+            // Limpiar interval
+            clearInterval(intervalId);
+
+            if (fs.existsSync(rutaArchivo)) {
+                fs.unlinkSync(rutaArchivo);
+            }
+
+            // Enviar resultado final
+            const resultado = {
+                status: "completado",
+                mensaje: 'Importación completada exitosamente',
+                archivo: nombreArchivo,
+                tamano_mb: parseFloat(tamanoMB),
+                estadisticas: {
+                    registrosExitosos: estadisticas.exitosas,
+                    registrosConError: estadisticas.errores,
+                    totalRegistros: estadisticas.totalLineas,
+                    tiempoSegundos: ((estadisticas.tiempoFin - estadisticas.tiempoInicio) / 1000).toFixed(2),
+                    registrosPorSegundo: (estadisticas.exitosas / ((estadisticas.tiempoFin - estadisticas.tiempoInicio) / 1000)).toFixed(2)
+                },
+                erroresDetallados: estadisticas.erroresDetallados.slice(0, 10),
+                timestamp: new Date().toISOString()
+            };
+
+            res.end(JSON.stringify(resultado));
+
+        } catch (importError) {
+            // Limpiar interval en caso de error
+            clearInterval(intervalId);
+            
+            console.error('Error durante importación:', importError);
+
+            if (archivoProcesado && fs.existsSync(archivoProcesado)) {
+                fs.unlinkSync(archivoProcesado);
+            }
+
+            const errorResult = {
+                status: "error",
+                error: 'Error en la importación',
+                mensaje: importError.message,
+                timestamp: new Date().toISOString()
+            };
+
+            res.end(JSON.stringify(errorResult));
         }
-
-        return res.status(200).json({
-            mensaje: 'Importación completada exitosamente',
-            archivo: nombreArchivo,
-            tamano_mb: parseFloat(tamanoMB),
-            estadisticas: {
-                registrosExitosos: estadisticas.exitosas,
-                registrosConError: estadisticas.errores,
-                totalRegistros: estadisticas.totalLineas,
-                tiempoSegundos: ((estadisticas.tiempoFin - estadisticas.tiempoInicio) / 1000).toFixed(2),
-                registrosPorSegundo: (estadisticas.exitosas / ((estadisticas.tiempoFin - estadisticas.tiempoInicio) / 1000)).toFixed(2)
-            },
-            erroresDetallados: estadisticas.erroresDetallados.slice(0, 10)
-        });
 
     } catch (error) {
-        console.error('Error en importarVentasConArchivo:', error);
+        // Manejo de errores generales (configuración, etc.)
+        console.error('Error general en importarVentasConArchivo:', error);
+        
+        const errorResult = {
+            status: "error",
+            error: 'Error en la configuración de importación',
+            mensaje: error.message,
+            timestamp: new Date().toISOString()
+        };
 
-        if (archivoProcesado && fs.existsSync(archivoProcesado)) {
-            fs.unlinkSync(archivoProcesado);
+        if (res.headersSent) {
+            res.end(JSON.stringify(errorResult));
+        } else {
+            res.status(500).json(errorResult);
         }
-
-        return res.status(500).json({
-            error: 'Error en la importación',
-            mensaje: error.message
-        });
     }
 }
 

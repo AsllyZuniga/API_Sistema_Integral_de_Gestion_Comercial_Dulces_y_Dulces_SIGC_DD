@@ -32,7 +32,7 @@ const upload = multer({
         cb(null, true);
     },
     limits: {
-        fileSize: 1000 * 1024 * 1024 // Máximo 1GB
+        fileSize: 5000 * 1024 * 1024 // Máximo 5GB para archivos gigantes
     }
 });
 
