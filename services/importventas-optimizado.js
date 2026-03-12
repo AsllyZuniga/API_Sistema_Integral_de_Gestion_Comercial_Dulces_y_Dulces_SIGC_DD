@@ -58,7 +58,7 @@ class ImportadorVentasOptimizado {
             obsequios: new Map()
         };
 
-        this.BATCH_INSERT_SIZE = 1000;
+        this.BATCH_INSERT_SIZE = 5000;
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 10000;
 
@@ -341,19 +341,18 @@ class ImportadorVentasOptimizado {
                 id_barrio: barrio?.id_barrio
             }, { transaction: transaccion });
 
-            const item = await this.obtenerOCrearOptimizado(
-                this.item, 'items',
-                fila['Item'],
-                {
-                    codigo_item: fila['Item']?.trim(),
-                    descripcion: fila['Desc. item']?.trim() || '',
-                    id_proveedor: proveedor?.id_proveedor,
-                    id_megacategoria: megacategoria?.id_megacategoria,
-                    id_categoria: categoria?.id_categoria,
-                    id_subcategoria: subcategoria?.id_subcategoria,
-                    cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0
-                }
-            );
+            const item = await this.item.create({
+                codigo_item: fila['Item']?.trim(),
+                descripcion: fila['Desc. item']?.trim() || '',
+                id_proveedor: proveedor?.id_proveedor,
+                id_megacategoria: megacategoria?.id_megacategoria,
+                id_categoria: categoria?.id_categoria,
+                id_subcategoria: subcategoria?.id_subcategoria,
+                cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0,
+                unidad_medida_empaque: this.normalizarValor(fila['Factor U.M. emp.']) || 0,
+                unidad_medida_orden: this.normalizarValor(fila['Factor U.M. Orden']) || 0,
+                peso_kilo: this.normalizarValor(fila['Peso en KILO']) || 0
+            }, { transaction: transaccion });
 
             const venta = await this.venta.create({
                 numero_documento: fila['Nro documento']?.trim(),

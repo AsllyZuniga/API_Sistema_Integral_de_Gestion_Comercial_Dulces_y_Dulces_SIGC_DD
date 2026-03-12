@@ -38,9 +38,18 @@ app.set("view engine", "ejs");
 
 app.use(cors());
 
+// Configuración para archivos gigantes y timeouts
+app.use(express.json({ limit: '6gb' }));
+app.use(express.urlencoded({ extended: false, limit: '6gb' }));
+
+// Timeout global para requests largos (4 horas para archivos gigantes)
+app.use((req, res, next) => {
+  req.setTimeout(4 * 60 * 60 * 1000); // 4 horas
+  res.setTimeout(4 * 60 * 60 * 1000); // 4 horas
+  next();
+});
+
 app.use(logger("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
