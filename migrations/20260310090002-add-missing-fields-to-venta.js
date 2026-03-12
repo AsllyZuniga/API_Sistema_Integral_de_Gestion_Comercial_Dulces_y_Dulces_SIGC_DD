@@ -12,11 +12,11 @@
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up (queryInterface, Sequelize) {
+  async up(queryInterface, Sequelize) {
     try {
       // Verificar si el campo numero_documento ya existe
       const table = await queryInterface.describeTable('venta');
-      
+
       if (!table.numero_documento) {
         console.log('✅ Agregando campo numero_documento a tabla venta...');
         await queryInterface.addColumn('venta', 'numero_documento', {
@@ -47,10 +47,10 @@ module.exports = {
     }
   },
 
-  async down (queryInterface, Sequelize) {
+  async down(queryInterface, Sequelize) {
     try {
       const table = await queryInterface.describeTable('venta');
-      
+
       if (table.numero_documento) {
         console.log('✅ Removiendo campo numero_documento...');
         await queryInterface.removeColumn('venta', 'numero_documento');

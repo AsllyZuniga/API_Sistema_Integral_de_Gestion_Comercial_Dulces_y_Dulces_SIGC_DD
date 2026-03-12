@@ -1,6 +1,6 @@
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║         GUÍA POSTMAN - IMPORTACIÓN OPTIMIZADA DE VENTAS                   ║
-║                    Endpoint: POST /import/ventas/upload                    ║
+║ GUÍA POSTMAN - IMPORTACIÓN OPTIMIZADA DE VENTAS ║
+║ Endpoint: POST /import/ventas/upload ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
 🚀 CONFIGURACIÓN DEL ENDPOINT EN POSTMAN
@@ -11,14 +11,14 @@
 ─────────────────────
 
 Reemplaza con tu URL local o servidor:
-  http://localhost:3000/api/import/ventas/upload
+http://localhost:3000/api/import/ventas/upload
 
 ─────────────────────────────────────────────────────────────────────────
 
 📋 PASO 2: MÉTODO HTTP
 ─────────────────────
 
-  ✅ POST (multipart/form-data)
+✅ POST (multipart/form-data)
 
 ─────────────────────────────────────────────────────────────────────────
 
@@ -27,11 +27,11 @@ Reemplaza con tu URL local o servidor:
 
 Agrega el siguiente campo en la pestaña "Body" > "form-data":
 
-  KEY:       archivo
-  TYPE:      File (cambiar de "Text" a "File")
-  VALUE:     [Selecciona tu archivo TSV]
+KEY: archivo
+TYPE: File (cambiar de "Text" a "File")
+VALUE: [Selecciona tu archivo TSV]
 
-  Ejemplo de archivo: ventastest.txt o tu_archivo_ventas.tsv
+Ejemplo de archivo: ventastest.txt o tu_archivo_ventas.tsv
 
 ─────────────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ Agrega el siguiente campo en la pestaña "Body" > "form-data":
 
 Si lo haces manualmente, Postman agregará automáticamente:
 
-  Content-Type: multipart/form-data
+Content-Type: multipart/form-data
 
 No necesitas editarlo manualmente.
 
@@ -49,11 +49,11 @@ No necesitas editarlo manualmente.
 💾 PASO 5: GUARDAR COLLECTOR (Recomendado)
 ─────────────────────────────────────────────
 
-  1. Click en "Save" (arriba a la derecha)
-  2. Collection Name: "SGIC_DD - Importación"
-  3. Folder: "Importación"
-  4. Request Name: "Upload Ventas"
-  5. Click "Save"
+1. Click en "Save" (arriba a la derecha)
+2. Collection Name: "SGIC_DD - Importación"
+3. Folder: "Importación"
+4. Request Name: "Upload Ventas"
+5. Click "Save"
 
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -92,16 +92,16 @@ No necesitas editarlo manualmente.
 ─────────────────────────────────────────────────────────────────────────
 
 ERROR: "Archivo requerido"
-  → Causa: No agregaste el archivo en form-data
-  → Solución: Asegúrate de que KEY = "archivo" y TYPE = "File"
+→ Causa: No agregaste el archivo en form-data
+→ Solución: Asegúrate de que KEY = "archivo" y TYPE = "File"
 
 ERROR: "Cannot read properties of undefined"
-  → Causa: El servidor no está corriendo
-  → Solución: npm run dev o npm start
+→ Causa: El servidor no está corriendo
+→ Solución: npm run dev o npm start
 
 ERROR: "multer error: Unexpected field"
-  → Causa: El nombre del campo no coincide
-  → Solución: Debe ser "archivo" (no "file", "tsv", etc)
+→ Causa: El nombre del campo no coincide
+→ Solución: Debe ser "archivo" (no "file", "tsv", etc)
 
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -110,16 +110,16 @@ ERROR: "multer error: Unexpected field"
 
 Archivos de prueba por tamaño:
 
-  Pequeño (< 1MB)        → 100-1000 registros
-  Mediano (1-50MB)       → 10,000-100,000 registros
-  Grande (50-500MB)      → 500,000-5,000,000 registros
-  Muy grande (> 500MB)   → 5M+ registros
+Pequeño (< 1MB) → 100-1000 registros
+Mediano (1-50MB) → 10,000-100,000 registros
+Grande (50-500MB) → 500,000-5,000,000 registros
+Muy grande (> 500MB) → 5M+ registros
 
 Tiempo estimado de importación:
-  • 30 registros:        ~24 segundos
-  • 10,000 registros:    ~3-5 minutos
-  • 100,000 registros:   ~30-40 minutos
-  • 1,000,000 registros: ~5-7 horas
+• 30 registros: ~24 segundos
+• 10,000 registros: ~3-5 minutos
+• 100,000 registros: ~30-40 minutos
+• 1,000,000 registros: ~5-7 horas
 
 ═══════════════════════════════════════════════════════════════════════════
 
@@ -130,12 +130,12 @@ Durante la importación verás en la consola:
 
 📦 Precargando datos maestros...
 ✅ Datos precargados:
-   • 9 megacategorías
-   • 18 categorías
-   • 2 canales
+• 9 megacategorías
+• 18 categorías
+• 2 canales
 ✅ Encabezados detectados: 38 columnas
-   ✅ Transacción confirmada: 5000 filas
-   ✅ Transacción confirmada: 10000 filas
+✅ Transacción confirmada: 5000 filas
+✅ Transacción confirmada: 10000 filas
 📊 Procesando...
 
 ═══════════════════════════════════════════════════════════════════════════
@@ -179,18 +179,18 @@ Durante la importación verás en la consola:
 Después de importar, verifica en BD:
 
 -- Contar registros importados
-SELECT COUNT(*) FROM venta;
+SELECT COUNT(\*) FROM venta;
 
 -- Ver últimos registros
-SELECT * FROM venta ORDER BY id_venta DESC LIMIT 5;
+SELECT \* FROM venta ORDER BY id_venta DESC LIMIT 5;
 
 -- Validar mapping de tipos de documento
-SELECT * FROM venta v 
+SELECT \* FROM venta v
 LEFT JOIN tipo_documento td ON v.id_tipo_documento = td.id_tipo_documento
 LIMIT 10;
 
 -- Validar mapping de clientes
-SELECT * FROM venta v 
+SELECT \* FROM venta v
 LEFT JOIN cliente c ON v.id_cliente = c.id_cliente
 LIMIT 10;
 

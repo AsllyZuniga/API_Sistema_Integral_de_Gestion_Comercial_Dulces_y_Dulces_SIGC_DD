@@ -16,7 +16,7 @@ const resumenCorrecciones = {
   problemas_criticos: 1,
   problemas_importantes: 5,
   problemas_menores: 2,
-  
+
   archivos_modificados: [
     'migrations/20260310090002-add-missing-fields-to-venta.js (NUEVO)',
     'models/venta.js',
@@ -145,22 +145,22 @@ resumenCorrecciones.correcciones_detalladas.forEach((corr) => {
   console.log(`${corr.numero}. ${corr.severidad} - ${corr.problema}`);
   console.log(`   Ubicación: ${corr.ubicacion}`);
   console.log(`   Solución: ${corr.solucion_aplicada}`);
-  
+
   if (corr.solucion_anterior) {
     console.log(`   Antes:  ${corr.solucion_anterior}`);
     console.log(`   Después: ${corr.solucion_aplicada.replace('✅ ', '')}`);
   }
-  
+
   if (corr.razon) {
     console.log(`   Razón: ${corr.razon}`);
   }
-  
+
   if (corr.detalles) {
     corr.detalles.forEach(detalle => {
       console.log(`   • ${detalle}`);
     });
   }
-  
+
   console.log();
 });
 

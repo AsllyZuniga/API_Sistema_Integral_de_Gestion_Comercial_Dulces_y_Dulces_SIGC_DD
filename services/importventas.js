@@ -6,7 +6,7 @@ const { Op } = require('sequelize');
 class ImportadorVentas {
     constructor(sequelize, models) {
         this.sequelize = sequelize;
-        
+
         // Acceder correctamente a los modelos
         this.proveedor = models.proveedor_model;
         this.megacategoria = models.megacategoria_model;
@@ -24,14 +24,14 @@ class ImportadorVentas {
         this.obsequio = models.obsequio_model;
         this.venta = models.venta_model;
         this.detalle_venta = models.detalle_venta_model;
-        
+
         // 🚀 OPTIMIZACIÓN 1: Inicializar el Caché en Memoria
         this.cache = new Map();
-        
+
         // Aumentamos el tamaño del batch porque ahora es mucho más rápido
-        this.batchSize = 500; 
+        this.batchSize = 500;
         this.verbose = false;
-        
+
         this.estadisticas = {
             totalLineas: 0,
             exitosas: 0,
@@ -116,9 +116,9 @@ class ImportadorVentas {
             }
 
             // 2. Si no está en RAM, ir a la Base de Datos
-            let registro = await modelo.findOne({ 
+            let registro = await modelo.findOne({
                 where: filtro,
-                raw: true 
+                raw: true
             });
 
             // 3. Si no existe en la BD, crearlo
@@ -135,7 +135,7 @@ class ImportadorVentas {
 
         } catch (error) {
             console.error(`❌ Error en Caché - Modelo: ${modelo.name || 'Desconocido'}, Error:`, error.message);
-            throw error; 
+            throw error;
         }
     }
 
@@ -149,7 +149,7 @@ class ImportadorVentas {
                 { codigo: proveedorData.codigo },
                 { codigo: proveedorData.codigo, nombre: proveedorData.nombre }
             );
-            
+
             const megacategoria = await this.obtenerOCrearConCache(this.megacategoria, 'MEGA',
                 { nombre: { [Op.iLike]: fila['MEGACATEGORIA']?.trim() } },
                 { nombre: fila['MEGACATEGORIA']?.trim() }
@@ -167,7 +167,7 @@ class ImportadorVentas {
 
             const tipoNegocio = await this.obtenerOCrearConCache(this.tipo_negocio, 'TNEG',
                 { tipo_negocio: { [Op.iLike]: fila['TIPO DE NEGOCIO']?.trim() } },
-                { 
+                {
                     tipo_negocio: fila['TIPO DE NEGOCIO']?.trim(),
                     detalle_tipo_negocio: fila['DETALLE TIPO DE NEGOCIO']?.trim()
                 }
@@ -197,7 +197,7 @@ class ImportadorVentas {
 
             const cliente = await this.obtenerOCrearConCache(this.cliente, 'CLI',
                 { nro_documento: { [Op.iLike]: fila['Cliente factura']?.trim() } },
-                { 
+                {
                     nro_documento: fila['Cliente factura']?.trim(),
                     razon_social: fila['Razon social cliente factura']?.trim(),
                     sucursal: fila['Sucursal factura']?.trim(),
@@ -221,9 +221,9 @@ class ImportadorVentas {
             if (fila['REPORTE PROV CON OBS']?.trim()) {
                 obsequio = await this.obtenerOCrearConCache(this.obsequio, 'OBS',
                     { descripcion: { [Op.iLike]: fila['REPORTE PROV CON OBS']?.trim() } },
-                    { 
-                        descripcion: fila['REPORTE PROV CON OBS']?.trim(), 
-                        valor_obsequio: this.normalizarValor(fila['Valor subtotal']) 
+                    {
+                        descripcion: fila['REPORTE PROV CON OBS']?.trim(),
+                        valor_obsequio: this.normalizarValor(fila['Valor subtotal'])
                     }
                 );
             }
@@ -231,7 +231,7 @@ class ImportadorVentas {
             // 🔧 CORREGIDO: Item con cantidad_empaque
             const item = await this.obtenerOCrearConCache(this.item, 'ITEM',
                 { codigo_item: { [Op.iLike]: fila['Item']?.trim() } },
-                { 
+                {
                     codigo_item: fila['Item']?.trim(),
                     descripcion: fila['Desc. item']?.trim(),
                     unidad_medida_orden: fila['U.M. Orden']?.trim(),
@@ -315,10 +315,10 @@ class ImportadorVentas {
 
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
-        
+
         try {
             const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
-            
+
             // 🚀 OPTIMIZACIÓN 3: Uso de for await...of para lectura de archivos (Natividad Moderna)
             const rl = readline.createInterface({
                 input: fileStream,
