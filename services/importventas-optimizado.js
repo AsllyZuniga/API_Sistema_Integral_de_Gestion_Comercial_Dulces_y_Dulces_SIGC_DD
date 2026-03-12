@@ -318,7 +318,7 @@ class ImportadorVentasOptimizado {
             const tipoDocumento = fila["Nro documento"] ? 
                 await this.obtenerOCrearOptimizado(
                     this.tipo_documento, 'tiposDocumento',
-                    fila["Nro documento"],
+                    `${fila["Nro documento"]}_${this.estadisticas.totalLineas}`,
                     { nombre: nomTipoDoc, consecutivo: nroDocumento }
                 ) : null;
 
