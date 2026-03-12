@@ -3,10 +3,11 @@
 ## Fase 1: Verificación de Cambios (5 min)
 
 - [ ] Consultar BD y verificar que los registros importados tengan:
+
   ```sql
-  SELECT 
-    c.sucursal, 
-    c.nombre_establecimiento, 
+  SELECT
+    c.sucursal,
+    c.nombre_establecimiento,
     c.id_canal,
     c.razon_social
   FROM cliente c
@@ -40,6 +41,7 @@
 ## Fase 3: Análisis de Rendimiento (5 min)
 
 El endpoint o script mostrará:
+
 ```
 RESULTADOS:
    Registros exitosos: 30
@@ -56,11 +58,13 @@ RESULTADOS:
 ## Fase 4: Decisión sobre Optimización
 
 **Si el test toma ~60 seg (como antes):**
+
 - Aceptable para testing
 - PERO necesita optimización para producción
 - → Ir a "Optimización Pragmática" abajo
 
 **Si el test toma <10 seg:**
+
 - ✅ El código ya está optimizado
 - Puedes proceder a cargar datos reales
 
@@ -71,30 +75,32 @@ RESULTADOS:
 Si decides optimizar ahora (Solución 2):
 
 ### Paso 1: Crear v2 del servicio
+
 ```javascript
 // services/importventas-v2.js
 
 // Al inicio del método importar():
 async importar(rutaArchivo) {
     console.log('⏳ Precargando datos maestros...');
-    
+
     const maestros = {
         proveedores: await this.proveedor.findAll(),
         megacategorias: await this.megacategoria.findAll(),
         categorias: await this.categoria.findAll(),
         // ... etc
     };
-    
+
     // Convertir a Maps para O(1) lookup
     const mapMegacat = new Map(
         maestros.megacategorias.map(m => [m.nombre?.trim(), m])
     );
-    
+
     // Luego en procesarFila, usar: mapMegacat.get(nombre)
 }
 ```
 
 ### Paso 2: Testear
+
 ```bash
 time node scripts/testImportacion.js
 ```
@@ -102,6 +108,7 @@ time node scripts/testImportacion.js
 Debería reducir de 61s → ~5-10s
 
 ### Paso 3: Deploy
+
 ```bash
 cp services/importventas.js services/importventas.js.backup
 cp services/importventas-v2.js services/importventas.js
@@ -140,6 +147,7 @@ time node scripts/testImportacion.js
 ---
 
 **¿Qué quieres hacer primero?**
+
 1. Verificar que los mapeos funcionan (Fase 1)
 2. Probar importación (Fase 2)
 3. Optimizar si es necesario (Fase 4)

@@ -6,7 +6,7 @@ const { Op } = require('sequelize');
 class ImportadorVentasOptimizado {
     constructor(sequelize, models) {
         this.sequelize = sequelize;
-        
+
         this.proveedor = models.proveedor_model;
         this.megacategoria = models.megacategoria_model;
         this.categoria = models.categoria_model;
@@ -23,7 +23,7 @@ class ImportadorVentasOptimizado {
         this.obsequio = models.obsequio_model;
         this.venta = models.venta_model;
         this.detalle_venta = models.detalle_venta_model;
-        
+
         this.maestros = {
             proveedores: new Map(),
             megacategorias: new Map(),
@@ -40,7 +40,7 @@ class ImportadorVentasOptimizado {
             items: new Map(),
             obsequios: new Map()
         };
-        
+
         this.nuevosCreados = {
             proveedores: new Map(),
             megacategorias: new Map(),
@@ -57,13 +57,13 @@ class ImportadorVentasOptimizado {
             items: new Map(),
             obsequios: new Map()
         };
-        
+
         this.BATCH_INSERT_SIZE = 1000;
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 10000;
-        
+
         this.verbose = false;
-        
+
         this.estadisticas = {
             totalLineas: 0,
             exitosas: 0,
@@ -134,7 +134,7 @@ class ImportadorVentasOptimizado {
 
     async precargaDatos() {
         console.log('📦 Precargando datos maestros...');
-        
+
         try {
             const proveedores = await this.proveedor.findAll({ raw: true });
             const megacategorias = await this.megacategoria.findAll({ raw: true });
@@ -235,7 +235,7 @@ class ImportadorVentasOptimizado {
 
     async obtenerOCrearOptimizado(modelo, cacheKey, clave, datosCompletos) {
         const claveNormalizada = clave?.toLowerCase();
-        
+
         if (this.maestros[cacheKey]?.has(claveNormalizada)) {
             return this.maestros[cacheKey].get(claveNormalizada);
         }
@@ -315,7 +315,7 @@ class ImportadorVentasOptimizado {
                 }
             );
 
-            const tipoDocumento = fila["Nro documento"] ? 
+            const tipoDocumento = fila["Nro documento"] ?
                 await this.obtenerOCrearOptimizado(
                     this.tipo_documento, 'tiposDocumento',
                     `${fila["Nro documento"]}_${this.estadisticas.totalLineas}`,
@@ -331,16 +331,15 @@ class ImportadorVentasOptimizado {
                 }
             );
 
-            const cliente = await this.obtenerOCrearOptimizado(
-                this.cliente, 'clientes',
-                fila['Nro documento cliente'],
-                {
-                    nro_documento: fila['Nro documento cliente']?.trim(),
-                    nombre: fila['Nombre cliente']?.trim() || '',
-                    id_ciudad: ciudad?.id_ciudad,
-                    id_barrio: barrio?.id_barrio
-                }
-            );
+            const cliente = await this.cliente.create({
+                nro_documento: fila['Cliente factura']?.trim(),
+                razon_social: fila['Razon social cliente factura']?.trim() || '',
+                sucursal: fila['Sucursal factura']?.trim() || '',
+                direccion: fila['Direccion 1']?.trim() || '',
+                nombre_establecimiento: fila['Razon social cliente factura']?.trim() || '',
+                id_ciudad: ciudad?.id_ciudad,
+                id_barrio: barrio?.id_barrio
+            }, { transaction: transaccion });
 
             const item = await this.obtenerOCrearOptimizado(
                 this.item, 'items',
@@ -416,7 +415,7 @@ class ImportadorVentasOptimizado {
 
                 this.estadisticas.totalLineas++;
                 const fila = this.parsearLinea(linea, encabezados);
-                
+
                 const exito = await this.procesarFila(fila, transaccion);
                 if (exito) {
                     this.estadisticas.exitosas++;
@@ -425,7 +424,7 @@ class ImportadorVentasOptimizado {
                     if (ventasEnTransaccion >= this.TRANSACTION_SIZE) {
                         await transaccion.commit();
                         console.log(`   ✅ Transacción confirmada: ${this.estadisticas.totalLineas} filas`);
-                        
+
                         transaccion = await this.sequelize.transaction();
                         ventasEnTransaccion = 0;
                     }
@@ -449,14 +448,14 @@ class ImportadorVentasOptimizado {
 
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
-        
+
         try {
             console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
-            
+
             await this.precargaDatos();
 
             const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
-            
+
             const rl = readline.createInterface({
                 input: fileStream,
                 crlfDelay: Infinity

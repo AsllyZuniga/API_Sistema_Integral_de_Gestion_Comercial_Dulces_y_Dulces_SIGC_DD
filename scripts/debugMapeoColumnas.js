@@ -34,7 +34,7 @@ if (!fs.existsSync(rutaAbsoluta)) {
 
 async function debugearMapeo() {
     const fileStream = fs.createReadStream(rutaAbsoluta, { encoding: 'utf8' });
-    
+
     const rl = readline.createInterface({
         input: fileStream,
         crlfDelay: Infinity
@@ -51,13 +51,13 @@ async function debugearMapeo() {
         if (numeroFila === 0) {
             // Procesar encabezados
             encabezados = linea.split('\t').map(h => h.trim());
-            console.log('=' .repeat(100));
+            console.log('='.repeat(100));
             console.log('ENCABEZADOS DETECTADOS:');
-            console.log('=' .repeat(100));
+            console.log('='.repeat(100));
             encabezados.forEach((enc, idx) => {
                 console.log(`${(idx + 1).toString().padStart(2)}: "${enc}"`);
             });
-            console.log('=' .repeat(100) + '\n');
+            console.log('='.repeat(100) + '\n');
             numeroFila++;
             continue;
         }
@@ -78,13 +78,13 @@ async function debugearMapeo() {
     // Procesar la fila encontrada
     const valores = filaEncontrada.split('\t');
     const registro = {};
-    
+
     encabezados.forEach((encabezado, index) => {
         registro[encabezado] = valores[index] ? valores[index].trim() : '';
     });
 
     console.log(`\n📌 FILA #${numeroFilaDeseada} - MAPEO DETALLADO\n`);
-    console.log('=' .repeat(100));
+    console.log('='.repeat(100));
 
     // Mostrar cada columna con su valor
     encabezados.forEach((encabezado, idx) => {
@@ -94,11 +94,11 @@ async function debugearMapeo() {
         console.log(`     Valor: ${esVacio ? '❌ VACÍO' : `"${valor}"`}`);
     });
 
-    console.log('\n' + '=' .repeat(100));
+    console.log('\n' + '='.repeat(100));
 
     // Sección de campos críticos para la importación
     console.log('\n\n🔑 CAMPOS CRÍTICOS PARA LA IMPORTACIÓN:\n');
-    
+
     const camposCriticos = [
         { nombre: 'LINEA (Proveedor)', campo: 'LINEA' },
         { nombre: 'MEGACATEGORIA', campo: 'MEGACATEGORIA' },
@@ -132,16 +132,16 @@ async function debugearMapeo() {
         const existe = encabezados.includes(campo);
         const valor = registro[campo];
         const esVacio = !valor || valor === '';
-        
+
         const estado = existe ? (esVacio ? '⚠️  EXISTE pero VACÍO' : '✅ OK') : '❌ NO EXISTE';
-        
+
         console.log(`${estado} | ${nombre}`);
         if (existe && valor) {
             console.log(`         └─ Valor: "${valor}"`);
         }
     });
 
-    console.log('\n' + '=' .repeat(100));
+    console.log('\n' + '='.repeat(100));
     console.log('\n⚠️  NOTA: Se detectó que "Nombre establecimiento  facturar" tiene 2 espacios antes de "facturar"');
     console.log('   Asegúrate que el código está buscando exactamente: "Nombre establecimiento  facturar"\n');
 }

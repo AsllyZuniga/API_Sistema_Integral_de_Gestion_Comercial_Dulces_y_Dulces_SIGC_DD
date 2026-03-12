@@ -13,7 +13,7 @@ async function debugTest() {
 
         const procesador = new ProcesadorVentas(models.sequelize, models);
         procesador.verbose = true;
-        
+
         // Leer primera fila
         const rutaArchivo = path.join(__dirname, '../ventastest.txt');
         const rl = readline.createInterface({
@@ -52,19 +52,19 @@ async function debugTest() {
         console.log(`• Nro documento: "${fila['Nro documento']}"`);
         console.log(`• REPORTE PROV CON OBS: "${fila['REPORTE PROV CON OBS']}"`);
         console.log(`• Valor subtotal: "${fila['Valor subtotal']}"`);
-        
+
         console.log('\n🚀 Intentando procesar fila...');
-        
+
         try {
             // Agregar logs
             console.log('\n📝 Separando TIPO_DOCUMENTO...');
             const tipoDocData = procesador.separarTipoDocumento(fila['Nro documento']?.trim());
             console.log('  Resultado:', tipoDocData);
-            
+
             console.log('\n📝 Separando PROVEEDOR...');
             const provData = procesador.separarCodigoNombre(fila['LINEA']?.trim());
             console.log('  Resultado:', provData);
-            
+
             console.log('\n📝 Intentando crear TIPO_DOCUMENTO...');
             try {
                 const tipoDoc = await models.tipo_documento_model.create({
@@ -75,7 +75,7 @@ async function debugTest() {
             } catch (e) {
                 console.log('❌ Error creando tipo_documento:', e.message);
             }
-            
+
             console.log('\n📝 Intentando con obtenerOCrearConCache...');
             const tipoDocResult = await procesador.obtenerOCrearConCache(
                 models.tipo_documento_model,
@@ -86,10 +86,10 @@ async function debugTest() {
             console.log('📦 Resultado:', tipoDocResult);
             console.log('  Tiene id_tipo_documento?', tipoDocResult.id_tipo_documento);
             console.log('  Tiene dataValues?', tipoDocResult.dataValues);
-            
+
             const resultado = await procesador.procesarFila(fila);
             console.log('✅ ÉXITO:', resultado);
-            
+
             // Verificar datos guardados
             const ventas = await models.venta_model.findAll({ limit: 1, order: [['id_venta', 'DESC']] });
             if (ventas.length > 0) {

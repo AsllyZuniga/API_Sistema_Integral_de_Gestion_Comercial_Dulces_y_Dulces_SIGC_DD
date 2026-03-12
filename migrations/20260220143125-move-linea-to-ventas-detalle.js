@@ -2,11 +2,11 @@
 
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up (queryInterface, Sequelize) {
+  async up(queryInterface, Sequelize) {
     try {
       // Verificar si la columna linea ya existe en detalle_venta
       const table = await queryInterface.describeTable('detalle_venta');
-      
+
       if (!table.linea) {
         console.log('✅ Agregando columna linea a detalle_venta...');
         await queryInterface.addColumn('detalle_venta', 'linea', {
@@ -33,7 +33,7 @@ module.exports = {
     }
   },
 
-  async down (queryInterface, Sequelize) {
+  async down(queryInterface, Sequelize) {
     try {
       const ventaTable = await queryInterface.describeTable('venta');
       if (!ventaTable.linea) {
