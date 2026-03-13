@@ -13,7 +13,7 @@ module.exports = sequelize => {
       autoIncrement: true
     },
     codigo_vendedor: {
-      type: DataTypes.CHAR(50),
+      type: DataTypes.STRING(50),
       allowNull: true,
       defaultValue: null,
       comment: null,
@@ -23,7 +23,7 @@ module.exports = sequelize => {
       unique: "vendedor_codigo_vendedor_key"
     },
     nombre: {
-      type: DataTypes.CHAR(150),
+      type: DataTypes.STRING(150),
       allowNull: false,
       defaultValue: null,
       comment: null,
@@ -42,35 +42,47 @@ module.exports = sequelize => {
       unique: "vendedor_id_usuario_key",
       references: {
         key: "id_usuario",
-        model: "usuario_model"
+        model: "usuario"
       }
     },
-    cuota: {
-      type: DataTypes.DOUBLE,
+    id_cuotaMes: {
+      type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "cuota",
-      autoIncrement: false
+      field: "id_cuotaMes",
+      autoIncrement: false,
+      references: {
+        key: "id_cuotaMes",
+        model: "cuotaMes"
+      }
     },
-    fecha_inicio: {
-      type: DataTypes.DATEONLY,
+    id_cuotaSemana: {
+      type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "fecha_inicio",
-      autoIncrement: false
+      field: "id_cuotaSemana",
+      autoIncrement: false,
+      references: {
+        key: "id_cuotaSemana",
+        model: "cuotaSemana"
+      }
     },
-    fecha_fin: {
-      type: DataTypes.DATEONLY,
+    id_cuotaDia: {
+      type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: null,
       comment: null,
       primaryKey: false,
-      field: "fecha_fin",
-      autoIncrement: false
+      field: "id_cuotaDia",
+      autoIncrement: false,
+      references: {
+        key: "id_cuotaDia",
+        model: "cuotaDia"
+      }
     }
   };
   const options = {

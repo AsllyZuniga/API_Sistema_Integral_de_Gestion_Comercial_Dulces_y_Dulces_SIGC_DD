@@ -1,8 +1,21 @@
-const { vendedor_model } = require('../models');
+const {
+    vendedor_model,
+    usuario_model,
+    cuotaMes_model,
+    cuotaSemana_model,
+    cuotaDia_model
+} = require('../models');
 
-const getAll = async () => vendedor_model.findAll();
+const includeRelations = [
+    { model: usuario_model, as: 'usuario' },
+    { model: cuotaMes_model, as: 'cuotaMes' },
+    { model: cuotaSemana_model, as: 'cuotaSemana' },
+    { model: cuotaDia_model, as: 'cuotaDia' }
+];
 
-const getById = async (id) => vendedor_model.findByPk(id);
+const getAll = async () => vendedor_model.findAll({ include: includeRelations });
+
+const getById = async (id) => vendedor_model.findByPk(id, { include: includeRelations });
 
 const create = async (data) => vendedor_model.create(data);
 
