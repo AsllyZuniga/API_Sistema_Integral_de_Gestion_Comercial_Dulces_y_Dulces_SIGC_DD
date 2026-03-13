@@ -3,6 +3,8 @@ var router = express.Router();
 const cumplimientoMesController = require('../controllers').cumplimientoMesController;
 
 router.get('/', cumplimientoMesController.list);
+router.get('/vendedor/:codigoVendedor', cumplimientoMesController.getByVendedor);
+router.get('/vendedor/:codigoVendedor/linea/:codigoLinea', cumplimientoMesController.getLineaEspecificaPorVendedor);
 router.get('/vendedor/:codigoVendedor/lineas', cumplimientoMesController.getLineasPorVendedor);
 router.get('/vendedor/:codigoVendedor/ciudades', cumplimientoMesController.getCiudadesPorVendedor);
 router.get('/vendedor/:codigoVendedor/productos', cumplimientoMesController.getProductosPorVendedor);
