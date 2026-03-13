@@ -1,5 +1,5 @@
-const { 
-    vendedor_model, 
+const {
+    vendedor_model,
     usuario_model
 } = require('../models');
 module.exports = {

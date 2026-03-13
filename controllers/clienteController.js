@@ -1,8 +1,8 @@
-const { 
-    cliente_model, 
-    ciudad_model, 
-    barrio_model, 
-    canal_model, 
+const {
+    cliente_model,
+    ciudad_model,
+    barrio_model,
+    canal_model,
     tipo_negocio_model
 } = require('../models');
 module.exports = {

@@ -1,5 +1,5 @@
-const { 
-    canal_model, 
+const {
+    canal_model,
     subcanal_model
 } = require('../models');
 module.exports = {

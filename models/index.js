@@ -32,6 +32,9 @@ const tipo_negocio_model = require('./tipo_negocio')(sequelize);
 const usuario_model = require('./usuario')(sequelize);
 const vendedor_model = require('./vendedor')(sequelize);
 const venta_model = require('./venta')(sequelize);
+const cuotaDia_model = require('./cuotaDia')(sequelize);
+const cuotaSemana_model = require('./cuotaSemana')(sequelize);
+const cuotaMes_model = require('./cuotaMes')(sequelize);
 
 // Define associations/relationships
 // Jerarquía de categorías
@@ -131,3 +134,38 @@ module.exports = {
   vendedor_model,
   venta_model
 };
+// Cuotas relaciones
+cuotaDia_model.belongsTo(usuario_model, {
+  foreignKey: 'id_usuario',
+  targetKey: 'id_usuario',
+  as: 'usuario'
+});
+usuario_model.hasMany(cuotaDia_model, {
+  foreignKey: 'id_usuario',
+  as: 'cuotasDia'
+});
+
+cuotaSemana_model.belongsTo(usuario_model, {
+  foreignKey: 'id_usuario',
+  targetKey: 'id_usuario',
+  as: 'usuario'
+});
+usuario_model.hasMany(cuotaSemana_model, {
+  foreignKey: 'id_usuario',
+  as: 'cuotasSemana'
+});
+
+cuotaMes_model.belongsTo(usuario_model, {
+  foreignKey: 'id_usuario',
+  as: 'usuario',
+  onUpdate: 'NO ACTION',
+  onDelete: 'NO ACTION'
+});
+usuario_model.hasMany(cuotaMes_model, {
+  foreignKey: 'id_usuario',
+  as: 'cuotasMes'
+});
+
+module.exports.cuotaDia_model = cuotaDia_model;
+module.exports.cuotaSemana_model = cuotaSemana_model;
+module.exports.cuotaMes_model = cuotaMes_model;
