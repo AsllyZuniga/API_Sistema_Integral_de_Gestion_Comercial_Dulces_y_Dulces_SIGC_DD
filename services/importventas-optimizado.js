@@ -58,7 +58,7 @@ class ImportadorVentasOptimizado {
             obsequios: new Map()
         };
 
-        this.BATCH_INSERT_SIZE = 5000;
+        this.BATCH_INSERT_SIZE = 15000;
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 10000;
 
