@@ -3,6 +3,7 @@ var express = require("express");
 var path = require("path");
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
+var authRouter = require("./routes/authRouter");
 var indexRouter = require("./routes/index");
 
 var barrioRouter = require("./routes/barrioRouter");
@@ -59,6 +60,7 @@ app.use(logger("dev"));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
+app.use("/api/auth", authRouter);
 app.use("/", indexRouter);
 app.use("/barrio", barrioRouter);
 app.use("/canale", canalRouter);

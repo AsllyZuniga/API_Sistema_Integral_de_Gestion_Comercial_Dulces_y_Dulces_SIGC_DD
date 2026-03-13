@@ -1,4 +1,5 @@
 const barrioController = require('./barrioController');
+const authController = require('./authController');
 const canalController = require('./canalController');
 const categoriaController = require('./categoriaController');
 const ciudadController = require('./ciudadController');
@@ -24,6 +25,7 @@ const cumplimientoMesController = require('./cumplimientoMesController');
 
 module.exports = {
     barrioController,
+    authController,
     canalController,
     categoriaController,
     ciudadController,

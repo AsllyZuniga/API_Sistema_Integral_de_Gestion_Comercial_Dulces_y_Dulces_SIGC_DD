@@ -9,7 +9,7 @@ module.exports = sequelize => {
       defaultValue: null,
       comment: null,
       primaryKey: true,
-      field: "id_rol",
+      field: "rol_id",
       autoIncrement: true
     },
     nombre: {
