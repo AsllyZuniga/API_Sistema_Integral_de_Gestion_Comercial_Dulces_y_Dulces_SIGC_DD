@@ -96,6 +96,37 @@ const getRangoDias = async (filters = {}) => {
     };
 };
 
+const getCuotaMesGlobal = async (filters = {}) => {
+    const replacements = {};
+    const conditions = [];
+
+    if (filters.fechaInicio) {
+        conditions.push('cm.fecha_fin >= :cuotaFechaInicio');
+        replacements.cuotaFechaInicio = filters.fechaInicio;
+    }
+
+    if (filters.fechaFin) {
+        conditions.push('cm.fecha_inicio <= :cuotaFechaFin');
+        replacements.cuotaFechaFin = filters.fechaFin;
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const row = await sequelize.query(`
+        SELECT COALESCE(cm.cuota_mes, 0) AS cuota_mes
+        FROM "cuotaMes" cm
+        ${where}
+        ORDER BY cm.fecha_fin DESC NULLS LAST, cm."id_cuotaMes" DESC
+        LIMIT 1
+    `, {
+        replacements,
+        type: QueryTypes.SELECT,
+        plain: true
+    });
+
+    return toNumber(row?.cuota_mes);
+};
+
 const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
     return rows.map((row) => {
         const cuotaMes = toNumber(row.cuota_mes);
@@ -146,6 +177,19 @@ const getCumplimientoMes = async (filters = {}) => {
     const ventasWhere = buildVentasFilters(filters, replacements);
     const vendedorFilter = buildVendedorFilter(filters, replacements);
 
+    const cuotaConditions = [];
+    if (filters.fechaInicio) {
+        cuotaConditions.push('cm.fecha_fin >= :cuotaFechaInicio');
+        replacements.cuotaFechaInicio = filters.fechaInicio;
+    }
+    if (filters.fechaFin) {
+        cuotaConditions.push('cm.fecha_inicio <= :cuotaFechaFin');
+        replacements.cuotaFechaFin = filters.fechaFin;
+    }
+    const cuotaWhere = cuotaConditions.length > 0
+        ? `WHERE ${cuotaConditions.join(' AND ')}`
+        : '';
+
     const query = `
         WITH ventas_filtradas AS (
             SELECT
@@ -159,12 +203,18 @@ const getCumplimientoMes = async (filters = {}) => {
         SELECT
             vd.codigo_vendedor AS cod,
             vd.nombre AS vendedor,
-            COALESCE(cm.cuota_mes, 0) AS cuota_mes,
+            COALESCE(cg.cuota_mes, 0) AS cuota_mes,
             COALESCE(vf.venta_acum, 0) AS venta_acum
         FROM vendedor vd
-        LEFT JOIN "cuotaMes" cm ON cm."id_cuotaMes" = vd."id_cuotaMes"
+        LEFT JOIN LATERAL (
+            SELECT cm.cuota_mes
+            FROM "cuotaMes" cm
+            ${cuotaWhere}
+            ORDER BY cm.fecha_fin DESC NULLS LAST, cm."id_cuotaMes" DESC
+            LIMIT 1
+        ) cg ON true
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cm.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        WHERE (COALESCE(cg.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
@@ -234,16 +284,46 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     });
 
     const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+    const cuotaMesGlobal = await getCuotaMesGlobal(filters);
 
     return {
         codigoVendedor,
-        detallePorLinea: detallePorLinea.map((row) => ({
-            linea: row.linea,
-            ventaAcum: round(toNumber(row.venta), 2),
-            porcCump: 0,
-            proyeccionVenta: diasCorridos > 0 ? round((toNumber(row.venta) / diasCorridos) * diasHabiles, 2) : 0,
-            porcCumProy: 0
-        }))
+        detallePorLinea: detallePorLinea.map((row) => {
+            const ventaAcum = toNumber(row.venta);
+            const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
+            const porcCump = cuotaMesGlobal > 0 ? (ventaAcum / cuotaMesGlobal) * 100 : 0;
+            const porcCumProy = cuotaMesGlobal > 0 ? (proyeccionVenta / cuotaMesGlobal) * 100 : 0;
+
+            return {
+                linea: row.linea,
+                ventaAcum: round(ventaAcum, 2),
+                porcCump: round(porcCump, 4),
+                proyeccionVenta: round(proyeccionVenta, 2),
+                porcCumProy: round(porcCumProy, 4)
+            };
+        })
+    };
+};
+
+const getLineaEspecificaPorVendedor = async (codigoVendedor, codigoLinea, filters = {}) => {
+    const data = await getLineasPorVendedor(codigoVendedor, filters);
+    const codigoLineaNormalizado = String(codigoLinea || '').trim();
+
+    const detalle = data.detallePorLinea.filter((row) => {
+        const lineaTexto = String(row.linea || '');
+        const codigoTexto = lineaTexto.split('-')[0]?.trim() || '';
+
+        return (
+            lineaTexto.toLowerCase() === codigoLineaNormalizado.toLowerCase()
+            || codigoTexto === codigoLineaNormalizado
+            || codigoTexto.startsWith(codigoLineaNormalizado)
+        );
+    });
+
+    return {
+        codigoVendedor,
+        codigoLinea: codigoLineaNormalizado,
+        detallePorLinea: detalle
     };
 };
 
@@ -306,16 +386,24 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
     });
 
     const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+    const cuotaMesGlobal = await getCuotaMesGlobal(filters);
 
     return {
         codigoVendedor,
-        detallePorCiudad: detallePorCiudad.map((row) => ({
-            ciudad: row.ciudad,
-            ventaAcum: round(toNumber(row.venta), 2),
-            porcCump: 0,
-            proyeccionVenta: diasCorridos > 0 ? round((toNumber(row.venta) / diasCorridos) * diasHabiles, 2) : 0,
-            porcCumProy: 0
-        }))
+        detallePorCiudad: detallePorCiudad.map((row) => {
+            const ventaAcum = toNumber(row.venta);
+            const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
+            const porcCump = cuotaMesGlobal > 0 ? (ventaAcum / cuotaMesGlobal) * 100 : 0;
+            const porcCumProy = cuotaMesGlobal > 0 ? (proyeccionVenta / cuotaMesGlobal) * 100 : 0;
+
+            return {
+                ciudad: row.ciudad,
+                ventaAcum: round(ventaAcum, 2),
+                porcCump: round(porcCump, 4),
+                proyeccionVenta: round(proyeccionVenta, 2),
+                porcCumProy: round(porcCumProy, 4)
+            };
+        })
     };
 };
 
@@ -391,6 +479,7 @@ module.exports = {
     getCumplimientoMes,
     getCumplimientoPorCodigo,
     getLineasPorVendedor,
+    getLineaEspecificaPorVendedor,
     getCiudadesPorVendedor,
     getProductosPorVendedor
 };

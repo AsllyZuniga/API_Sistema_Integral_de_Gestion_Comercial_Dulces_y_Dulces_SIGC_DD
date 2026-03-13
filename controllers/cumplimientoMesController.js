@@ -33,9 +33,36 @@ module.exports = {
         }
     },
 
+    async getByVendedor(req, res) {
+        try {
+            const data = await cumplimientoMesService.getCumplimientoPorCodigo(req.params.codigoVendedor, getFilters(req.query));
+            if (!data) {
+                return res.status(404).send({
+                    message: 'Cumplimiento no encontrado para el vendedor'
+                });
+            }
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
     async getLineasPorVendedor(req, res) {
         try {
             const data = await cumplimientoMesService.getLineasPorVendedor(req.params.codigoVendedor, getFilters(req.query));
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async getLineaEspecificaPorVendedor(req, res) {
+        try {
+            const data = await cumplimientoMesService.getLineaEspecificaPorVendedor(
+                req.params.codigoVendedor,
+                req.params.codigoLinea,
+                getFilters(req.query)
+            );
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);
