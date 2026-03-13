@@ -26,6 +26,7 @@ var usuarioRouter = require("./routes/usuarioRouter");
 var vendedorRouter = require("./routes/vendedorRouter");
 var ventaRouter = require("./routes/ventaRouter");
 const importRouter = require('./routes/importRouter');
+const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 
 
 
@@ -78,6 +79,7 @@ app.use("/usuario", usuarioRouter);
 app.use("/vendedor", vendedorRouter);
 app.use("/venta", ventaRouter);
 app.use('/import', importRouter);
+app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 
 
 

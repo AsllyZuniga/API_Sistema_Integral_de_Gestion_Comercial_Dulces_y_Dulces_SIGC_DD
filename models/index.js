@@ -35,6 +35,8 @@ const venta_model = require('./venta')(sequelize);
 const cuotaDia_model = require('./cuotaDia')(sequelize);
 const cuotaSemana_model = require('./cuotaSemana')(sequelize);
 const cuotaMes_model = require('./cuotaMes')(sequelize);
+const cuotaProveedor_model = require('./cuotaProveedor')(sequelize);
+const vendedorCuotaProveedor_model = require('./vendedorCuotaProveedor')(sequelize);
 
 // Define associations/relationships
 // Jerarquía de categorías
@@ -175,3 +177,47 @@ usuario_model.hasMany(cuotaMes_model, {
 module.exports.cuotaDia_model = cuotaDia_model;
 module.exports.cuotaSemana_model = cuotaSemana_model;
 module.exports.cuotaMes_model = cuotaMes_model;
+module.exports.cuotaProveedor_model = cuotaProveedor_model;
+module.exports.vendedorCuotaProveedor_model = vendedorCuotaProveedor_model;
+
+// ── VendedorCuotaProveedor (tabla intermedia) ──────────────────────────
+vendedor_model.hasMany(vendedorCuotaProveedor_model, {
+    foreignKey: 'id_vendedor',
+    as: 'cuotasProveedor'
+});
+vendedorCuotaProveedor_model.belongsTo(vendedor_model, {
+    foreignKey: 'id_vendedor',
+    as: 'vendedor'
+});
+
+proveedor_model.hasMany(vendedorCuotaProveedor_model, {
+    foreignKey: 'id_proveedor',
+    as: 'cuotasVendedor'
+});
+vendedorCuotaProveedor_model.belongsTo(proveedor_model, {
+    foreignKey: 'id_proveedor',
+    as: 'proveedor'
+});
+
+cuotaProveedor_model.hasMany(vendedorCuotaProveedor_model, {
+    foreignKey: 'id_cuotaProveedor',
+    as: 'asignaciones'
+});
+vendedorCuotaProveedor_model.belongsTo(cuotaProveedor_model, {
+    foreignKey: 'id_cuotaProveedor',
+    as: 'cuotaProveedor'
+});
+
+// Muchos a muchos entre vendedor y proveedor a través de la tabla intermedia
+vendedor_model.belongsToMany(proveedor_model, {
+    through: vendedorCuotaProveedor_model,
+    foreignKey: 'id_vendedor',
+    otherKey: 'id_proveedor',
+    as: 'proveedoresConCuota'
+});
+proveedor_model.belongsToMany(vendedor_model, {
+    through: vendedorCuotaProveedor_model,
+    foreignKey: 'id_proveedor',
+    otherKey: 'id_vendedor',
+    as: 'vendedoresConCuota'
+});
