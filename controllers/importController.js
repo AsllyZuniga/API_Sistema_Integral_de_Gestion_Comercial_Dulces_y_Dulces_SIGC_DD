@@ -55,7 +55,7 @@ async function importarVentasConArchivo(req, res) {
 
         try {
             const estadisticas = await importador.importar(rutaArchivo);
-            
+
             // Limpiar interval
             clearInterval(intervalId);
 
@@ -85,7 +85,7 @@ async function importarVentasConArchivo(req, res) {
         } catch (importError) {
             // Limpiar interval en caso de error
             clearInterval(intervalId);
-            
+
             console.error('Error durante importación:', importError);
 
             if (archivoProcesado && fs.existsSync(archivoProcesado)) {
@@ -105,7 +105,7 @@ async function importarVentasConArchivo(req, res) {
     } catch (error) {
         // Manejo de errores generales (configuración, etc.)
         console.error('Error general en importarVentasConArchivo:', error);
-        
+
         const errorResult = {
             status: "error",
             error: 'Error en la configuración de importación',

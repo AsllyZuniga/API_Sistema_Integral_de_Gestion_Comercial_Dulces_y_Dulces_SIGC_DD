@@ -1,5 +1,5 @@
-const { 
-    barrio_model, 
+const {
+    barrio_model,
     ciudad_model
 } = require('../models');
 module.exports = {

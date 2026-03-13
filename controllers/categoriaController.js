@@ -1,6 +1,6 @@
-const { 
-    categoria_model, 
-    megacategoria_model, 
+const {
+    categoria_model,
+    megacategoria_model,
     subcategoria_model
 } = require('../models');
 module.exports = {

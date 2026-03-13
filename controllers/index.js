@@ -3,6 +3,9 @@ const canalController = require('./canalController');
 const categoriaController = require('./categoriaController');
 const ciudadController = require('./ciudadController');
 const clienteController = require('./clienteController');
+const cuotaDiaController = require('./cuotaDiaController');
+const cuotaMesController = require('./cuotaMesController');
+const cuotaSemanaController = require('./cuotaSemanaController');
 const detalle_ventaController = require('./detalle_ventaController');
 const itemController = require('./itemController');
 const megacategoriaController = require('./megacategoriaController');
@@ -23,6 +26,9 @@ module.exports = {
     categoriaController,
     ciudadController,
     clienteController,
+    cuotaDiaController,
+    cuotaMesController,
+    cuotaSemanaController,
     detalle_ventaController,
     itemController,
     megacategoriaController,
