@@ -25,6 +25,8 @@ var tipo_negocioRouter = require("./routes/tipo_negocioRouter");
 var usuarioRouter = require("./routes/usuarioRouter");
 var vendedorRouter = require("./routes/vendedorRouter");
 var ventaRouter = require("./routes/ventaRouter");
+var rango_diasRouter = require("./routes/rango_diasRouter");
+var cumplimientoMesRouter = require("./routes/cumplimientoMesRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 
@@ -78,6 +80,8 @@ app.use("/tipos_negocio", tipo_negocioRouter);
 app.use("/usuario", usuarioRouter);
 app.use("/vendedor", vendedorRouter);
 app.use("/venta", ventaRouter);
+app.use("/rango-dias", rango_diasRouter);
+app.use('/mes/cumplimiento', cumplimientoMesRouter);
 app.use('/import', importRouter);
 app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 

@@ -1,0 +1,11 @@
+var express = require('express');
+var router = express.Router();
+const cumplimientoMesController = require('../controllers').cumplimientoMesController;
+
+router.get('/', cumplimientoMesController.list);
+router.get('/vendedor/:codigoVendedor/lineas', cumplimientoMesController.getLineasPorVendedor);
+router.get('/vendedor/:codigoVendedor/ciudades', cumplimientoMesController.getCiudadesPorVendedor);
+router.get('/vendedor/:codigoVendedor/productos', cumplimientoMesController.getProductosPorVendedor);
+router.get('/:codigo', cumplimientoMesController.getByCodigo);
+
+module.exports = router;

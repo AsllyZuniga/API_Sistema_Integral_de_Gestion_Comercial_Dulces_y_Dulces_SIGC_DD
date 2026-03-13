@@ -37,6 +37,7 @@ const cuotaSemana_model = require('./cuotaSemana')(sequelize);
 const cuotaMes_model = require('./cuotaMes')(sequelize);
 const cuotaProveedor_model = require('./cuotaProveedor')(sequelize);
 const vendedorCuotaProveedor_model = require('./vendedorCuotaProveedor')(sequelize);
+const rango_dias_model = require('./rango_dias')(sequelize);
 
 // Define associations/relationships
 // Jerarquía de categorías
@@ -140,7 +141,8 @@ module.exports = {
   tipo_negocio_model,
   usuario_model,
   vendedor_model,
-  venta_model
+  venta_model,
+  rango_dias_model
 };
 // Cuotas relaciones
 cuotaDia_model.belongsTo(usuario_model, {

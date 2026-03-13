@@ -1,0 +1,396 @@
+const { QueryTypes, Op } = require('sequelize');
+const { sequelize, rango_dias_model } = require('../models');
+
+const round = (value, decimals = 2) => {
+    const factor = 10 ** decimals;
+    return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+};
+
+const toNumber = (value) => Number(value || 0);
+
+const buildVentasFilters = (filters = {}, replacements = {}) => {
+    const conditions = [];
+
+    if (filters.fechaInicio) {
+        conditions.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = filters.fechaInicio;
+    }
+
+    if (filters.fechaFin) {
+        conditions.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = filters.fechaFin;
+    }
+
+    if (filters.ciudad) {
+        conditions.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(filters.ciudad);
+    }
+
+    const itemConditions = [];
+    if (filters.proveedor) {
+        itemConditions.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
+        replacements.proveedor = String(filters.proveedor);
+    }
+
+    if (filters.categoria) {
+        itemConditions.push('CAST(it.id_categoria AS TEXT) = :categoria');
+        replacements.categoria = String(filters.categoria);
+    }
+
+    if (itemConditions.length > 0) {
+        conditions.push(`
+            EXISTS (
+                SELECT 1
+                FROM detalle_venta dv
+                JOIN item it ON it.id_item = dv.id_item
+                WHERE dv.id_venta = v.id_venta
+                  AND ${itemConditions.join(' AND ')}
+            )
+        `);
+    }
+
+    return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+};
+
+const buildVendedorFilter = (filters = {}, replacements = {}) => {
+    if (!filters.vendedor) return '';
+
+    replacements.vendedor = String(filters.vendedor);
+    replacements.vendedorLike = `%${String(filters.vendedor).toLowerCase()}%`;
+
+    return `
+        AND (
+            CAST(vd.id_vendedor AS TEXT) = :vendedor
+            OR vd.codigo_vendedor = :vendedor
+            OR LOWER(vd.nombre) LIKE :vendedorLike
+        )
+    `;
+};
+
+const getRangoDias = async (filters = {}) => {
+    const where = {};
+
+    if (filters.fechaInicio && filters.fechaFin) {
+        where.fecha_inicio = { [Op.lte]: filters.fechaFin };
+        where.fecha_fin = { [Op.gte]: filters.fechaInicio };
+    } else {
+        const today = new Date().toISOString().slice(0, 10);
+        where.fecha_inicio = { [Op.lte]: today };
+        where.fecha_fin = { [Op.gte]: today };
+    }
+
+    let rango = await rango_dias_model.findOne({
+        where,
+        order: [['fecha_fin', 'DESC']]
+    });
+
+    if (!rango) {
+        rango = await rango_dias_model.findOne({
+            order: [['fecha_fin', 'DESC']]
+        });
+    }
+
+    return {
+        diasCorridos: toNumber(rango?.dias_corridos),
+        diasHabiles: toNumber(rango?.dias_habiles)
+    };
+};
+
+const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
+    return rows.map((row) => {
+        const cuotaMes = toNumber(row.cuota_mes);
+        const ventaAcum = toNumber(row.venta_acum);
+        const porcentajeCumplimiento = cuotaMes > 0 ? (ventaAcum / cuotaMes) * 100 : 0;
+        const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
+        const porcentajeCumplimientoProyectado = cuotaMes > 0 ? (proyeccionVenta / cuotaMes) * 100 : 0;
+
+        return {
+            codVendedor: row.cod,
+            nombre: row.vendedor,
+            cuotaMes: round(cuotaMes, 2),
+            ventaAcum: round(ventaAcum, 2),
+            porcCump: round(porcentajeCumplimiento, 2),
+            proyeccionVenta: round(proyeccionVenta, 2),
+            porcCumProy: round(porcentajeCumplimientoProyectado, 2),
+            dias_corridos: diasCorridos,
+            dias_habiles: diasHabiles
+        };
+    });
+};
+
+const addTotalsRow = (rows, diasCorridos, diasHabiles) => {
+    const totalCuota = rows.reduce((acc, row) => acc + toNumber(row.cuotaMes), 0);
+    const totalVenta = rows.reduce((acc, row) => acc + toNumber(row.ventaAcum), 0);
+    const totalCumplimiento = totalCuota > 0 ? (totalVenta / totalCuota) * 100 : 0;
+    const totalProyeccion = diasCorridos > 0 ? (totalVenta / diasCorridos) * diasHabiles : 0;
+    const totalCumplimientoProyectado = totalCuota > 0 ? (totalProyeccion / totalCuota) * 100 : 0;
+
+    return [
+        ...rows,
+        {
+            codVendedor: 'TOTALES',
+            nombre: 'TOTALES',
+            cuotaMes: round(totalCuota, 2),
+            ventaAcum: round(totalVenta, 2),
+            porcCump: round(totalCumplimiento, 2),
+            proyeccionVenta: round(totalProyeccion, 2),
+            porcCumProy: round(totalCumplimientoProyectado, 2),
+            dias_corridos: diasCorridos,
+            dias_habiles: diasHabiles
+        }
+    ];
+};
+
+const getCumplimientoMes = async (filters = {}) => {
+    const replacements = {};
+    const ventasWhere = buildVentasFilters(filters, replacements);
+    const vendedorFilter = buildVendedorFilter(filters, replacements);
+
+    const query = `
+        WITH ventas_filtradas AS (
+            SELECT
+                v.id_vendedor,
+                SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta_acum
+            FROM venta v
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            ${ventasWhere}
+            GROUP BY v.id_vendedor
+        )
+        SELECT
+            vd.codigo_vendedor AS cod,
+            vd.nombre AS vendedor,
+            COALESCE(cm.cuota_mes, 0) AS cuota_mes,
+            COALESCE(vf.venta_acum, 0) AS venta_acum
+        FROM vendedor vd
+        LEFT JOIN "cuotaMes" cm ON cm."id_cuotaMes" = vd."id_cuotaMes"
+        LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
+        WHERE (COALESCE(cm.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        ${vendedorFilter}
+        ORDER BY vd.nombre ASC
+    `;
+
+    const rows = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+    const enriched = enrichCumplimiento(rows, diasCorridos, diasHabiles);
+    return addTotalsRow(enriched, diasCorridos, diasHabiles);
+};
+
+const getCumplimientoPorCodigo = async (codigo, filters = {}) => {
+    const data = await getCumplimientoMes({ ...filters, vendedor: codigo });
+    return data.find((row) => row.codVendedor === codigo) || null;
+};
+
+const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
+    const replacements = { codigoVendedor };
+    const where = ['vd.codigo_vendedor = :codigoVendedor'];
+
+    if (filters.fechaInicio) {
+        where.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = filters.fechaInicio;
+    }
+
+    if (filters.fechaFin) {
+        where.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = filters.fechaFin;
+    }
+
+    if (filters.ciudad) {
+        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(filters.ciudad);
+    }
+
+    if (filters.proveedor) {
+        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
+        replacements.proveedor = String(filters.proveedor);
+    }
+
+    if (filters.categoria) {
+        where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+        replacements.categoria = String(filters.categoria);
+    }
+
+    const query = `
+        SELECT
+            COALESCE(TRIM(cat.nombre), 'SIN CATEGORIA') AS linea,
+            SUM(COALESCE(dv.subtotal, 0)) AS venta
+        FROM venta v
+        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        JOIN item it ON it.id_item = dv.id_item
+        LEFT JOIN categoria cat ON cat.id_categoria = it.id_categoria
+        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+        WHERE ${where.join(' AND ')}
+        GROUP BY COALESCE(TRIM(cat.nombre), 'SIN CATEGORIA')
+        ORDER BY venta DESC
+    `;
+
+    const detallePorLinea = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+
+    return {
+        codigoVendedor,
+        detallePorLinea: detallePorLinea.map((row) => ({
+            linea: row.linea,
+            ventaAcum: round(toNumber(row.venta), 2),
+            porcCump: 0,
+            proyeccionVenta: diasCorridos > 0 ? round((toNumber(row.venta) / diasCorridos) * diasHabiles, 2) : 0,
+            porcCumProy: 0
+        }))
+    };
+};
+
+const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
+    const replacements = { codigoVendedor };
+    const where = ['vd.codigo_vendedor = :codigoVendedor'];
+
+    if (filters.fechaInicio) {
+        where.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = filters.fechaInicio;
+    }
+
+    if (filters.fechaFin) {
+        where.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = filters.fechaFin;
+    }
+
+    if (filters.ciudad) {
+        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(filters.ciudad);
+    }
+
+    if (filters.proveedor || filters.categoria) {
+        const sub = [];
+        if (filters.proveedor) {
+            sub.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
+            replacements.proveedor = String(filters.proveedor);
+        }
+        if (filters.categoria) {
+            sub.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(filters.categoria);
+        }
+        where.push(`
+            EXISTS (
+                SELECT 1
+                FROM detalle_venta dv
+                JOIN item it ON it.id_item = dv.id_item
+                WHERE dv.id_venta = v.id_venta
+                  AND ${sub.join(' AND ')}
+            )
+        `);
+    }
+
+    const query = `
+        SELECT
+            COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+            SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
+        FROM venta v
+        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+        LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
+        WHERE ${where.join(' AND ')}
+        GROUP BY COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+        ORDER BY venta DESC
+    `;
+
+    const detallePorCiudad = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+
+    return {
+        codigoVendedor,
+        detallePorCiudad: detallePorCiudad.map((row) => ({
+            ciudad: row.ciudad,
+            ventaAcum: round(toNumber(row.venta), 2),
+            porcCump: 0,
+            proyeccionVenta: diasCorridos > 0 ? round((toNumber(row.venta) / diasCorridos) * diasHabiles, 2) : 0,
+            porcCumProy: 0
+        }))
+    };
+};
+
+const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
+    const replacements = { codigoVendedor };
+    const where = ['vd.codigo_vendedor = :codigoVendedor'];
+
+    if (filters.fechaInicio) {
+        where.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = filters.fechaInicio;
+    }
+
+    if (filters.fechaFin) {
+        where.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = filters.fechaFin;
+    }
+
+    if (filters.ciudad) {
+        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(filters.ciudad);
+    }
+
+    if (filters.proveedor) {
+        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
+        replacements.proveedor = String(filters.proveedor);
+    }
+
+    if (filters.categoria) {
+        where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+        replacements.categoria = String(filters.categoria);
+    }
+
+    const query = `
+        SELECT
+            MIN(v.fecha) AS "Fecha",
+            COALESCE(TRIM(pr.nombre), 'SIN PROVEEDOR') AS "Proveedor",
+            it.codigo_item AS "Cod_Item",
+            TRIM(it.descripcion) AS "Descripcion",
+            SUM(COALESCE(dv.cantidad_emp, 0)) AS "Venta_Unid_Cajas",
+            SUM(COALESCE(dv.cantidad, 0)) AS "Cantidad",
+            SUM(COALESCE(dv.subtotal, 0)) AS "Subtotal"
+        FROM venta v
+        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        JOIN item it ON it.id_item = dv.id_item
+        LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
+        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+        WHERE ${where.join(' AND ')}
+        GROUP BY COALESCE(TRIM(pr.nombre), 'SIN PROVEEDOR'), it.codigo_item, TRIM(it.descripcion)
+        ORDER BY "Subtotal" DESC
+    `;
+
+    const detallePorProducto = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    return {
+        codigoVendedor,
+        detallePorProducto: detallePorProducto.map((row) => ({
+            Fecha: row.Fecha,
+            Proveedor: row.Proveedor,
+            Cod_Item: row.Cod_Item,
+            Descripcion: row.Descripcion,
+            Venta_Unid_Cajas: round(toNumber(row.Venta_Unid_Cajas), 2),
+            Cantidad: round(toNumber(row.Cantidad), 2),
+            Subtotal: round(toNumber(row.Subtotal), 2)
+        }))
+    };
+};
+
+module.exports = {
+    getCumplimientoMes,
+    getCumplimientoPorCodigo,
+    getLineasPorVendedor,
+    getCiudadesPorVendedor,
+    getProductosPorVendedor
+};
