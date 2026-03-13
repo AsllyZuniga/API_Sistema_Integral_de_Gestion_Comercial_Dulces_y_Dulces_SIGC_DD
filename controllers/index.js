@@ -19,6 +19,8 @@ const tipo_negocioController = require('./tipo_negocioController');
 const usuarioController = require('./usuarioController');
 const vendedorController = require('./vendedorController');
 const ventaController = require('./ventaController');
+const rango_diasController = require('./rango_diasController');
+const cumplimientoMesController = require('./cumplimientoMesController');
 
 module.exports = {
     barrioController,
@@ -41,5 +43,7 @@ module.exports = {
     tipo_negocioController,
     usuarioController,
     vendedorController,
-    ventaController
+    ventaController,
+    rango_diasController,
+    cumplimientoMesController
 }
