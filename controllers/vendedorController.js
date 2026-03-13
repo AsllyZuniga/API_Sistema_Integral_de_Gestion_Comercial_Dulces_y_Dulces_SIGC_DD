@@ -1,75 +1,66 @@
-const {
-    vendedor_model,
-    usuario_model
-} = require('../models');
-module.exports = {
-    list(req, res) {
-        return vendedor_model
-            .findAll({
-                include: [
-                    { model: usuario_model, as: 'usuario' }
-                ]
-            })
-            .then((vendedores) => res.status(200).send(vendedores))
-            .catch((error) => { res.status(400).send(error); });
-    },
-    getById(req, res) {
+const vendedorService = require('../services/vendedorService');
 
-        console.log(req.params.id);
-        return vendedor_model
-            .findByPk(req.params.id, {
-                include: [
-                    { model: usuario_model, as: 'usuario' }
-                ]
-            })
-            .then((vendedor) => {
-                console.log(vendedor);
-                if (!vendedor) {
-                    return res.status(404).send({
-                        message: 'vendedor Not Found',
-                    });
-                }
-                return res.status(200).send(vendedor);
-            })
-            .catch((error) =>
-                res.status(400).send(error));
+module.exports = {
+    async list(req, res) {
+        try {
+            const data = await vendedorService.getAll();
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     },
-    add(req, res) {
-        return vendedor_model
-            .create({
+
+    async getById(req, res) {
+        try {
+            const data = await vendedorService.getById(req.params.id);
+            if (!data) {
+                return res.status(404).send({
+                    message: 'vendedor Not Found'
+                });
+            }
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async add(req, res) {
+        try {
+            const created = await vendedorService.create({
                 codigo_vendedor: req.body.codigo_vendedor,
                 nombre: req.body.nombre,
                 id_usuario: req.body.id_usuario,
-                cuota: req.body.cuota,
-                fecha_inicio: req.body.fecha_inicio,
-                fecha_fin: req.body.fecha_fin,
-
-
-            })
-            .then((vendedor) => res.status(201).send(vendedor))
-            .catch((error) => res.status(400).send(error));
+                id_cuotaMes: req.body.id_cuotaMes,
+                id_cuotaSemana: req.body.id_cuotaSemana,
+                id_cuotaDia: req.body.id_cuotaDia
+            });
+            return res.status(201).send(created);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     },
-    update(req, res) {
-        return vendedor_model
-            .findByPk(req.params.id)
-            .then(vendedor => {
-                if (!vendedor) {
-                    return res.status(404).send({
-                        message: 'vendedor Not Found',
-                    });
-                }
-                return vendedor
-                    .update({
-                        codigo_vendedor: req.body.codigo_vendedor || vendedor.codigo_vendedor,
-                        nombre: req.body.nombre || vendedor.nombre,
-                        id_usuario: req.body.id_usuario || vendedor.id_usuario,
-                        cuota: req.body.cuota || vendedor.cuota,
-                        fecha_inicio: req.body.fecha_inicio || vendedor.fecha_inicio,
-                        fecha_fin: req.body.fecha_fin || vendedor.fecha_fin
-                    })
-                    .then(() => res.status(200).send(vendedor))
-                    .catch((error) => res.status(400).send(error));
-            })
-            .catch((error) => res.status(400).send(error));
+
+    async update(req, res) {
+        try {
+            const existing = await vendedorService.getById(req.params.id);
+            if (!existing) {
+                return res.status(404).send({
+                    message: 'vendedor Not Found'
+                });
+            }
+
+            const updated = await vendedorService.updateById(req.params.id, {
+                codigo_vendedor: req.body.codigo_vendedor ?? existing.codigo_vendedor,
+                nombre: req.body.nombre ?? existing.nombre,
+                id_usuario: req.body.id_usuario ?? existing.id_usuario,
+                id_cuotaMes: req.body.id_cuotaMes ?? existing.id_cuotaMes,
+                id_cuotaSemana: req.body.id_cuotaSemana ?? existing.id_cuotaSemana,
+                id_cuotaDia: req.body.id_cuotaDia ?? existing.id_cuotaDia
+            });
+
+            return res.status(200).send(updated);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };

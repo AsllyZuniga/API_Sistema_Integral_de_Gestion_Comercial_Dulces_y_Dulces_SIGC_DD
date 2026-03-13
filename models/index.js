@@ -58,6 +58,12 @@ usuario_model.belongsTo(rol_model, { foreignKey: 'id_rol', as: 'rol' });
 
 usuario_model.hasOne(vendedor_model, { foreignKey: 'id_usuario', as: 'vendedor' });
 vendedor_model.belongsTo(usuario_model, { foreignKey: 'id_usuario', as: 'usuario' });
+vendedor_model.belongsTo(cuotaMes_model, { foreignKey: 'id_cuotaMes', as: 'cuotaMes' });
+vendedor_model.belongsTo(cuotaSemana_model, { foreignKey: 'id_cuotaSemana', as: 'cuotaSemana' });
+vendedor_model.belongsTo(cuotaDia_model, { foreignKey: 'id_cuotaDia', as: 'cuotaDia' });
+cuotaMes_model.hasMany(vendedor_model, { foreignKey: 'id_cuotaMes', as: 'vendedores' });
+cuotaSemana_model.hasMany(vendedor_model, { foreignKey: 'id_cuotaSemana', as: 'vendedores' });
+cuotaDia_model.hasMany(vendedor_model, { foreignKey: 'id_cuotaDia', as: 'vendedores' });
 
 // Cliente relaciones
 cliente_model.belongsTo(ciudad_model, { foreignKey: 'id_ciudad', as: 'ciudad' });
