@@ -265,16 +265,17 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
 
     const query = `
         SELECT
-            COALESCE(TRIM(cat.nombre), 'SIN CATEGORIA') AS linea,
+            COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo_linea,
+            COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_linea,
             SUM(COALESCE(dv.subtotal, 0)) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         JOIN item it ON it.id_item = dv.id_item
-        LEFT JOIN categoria cat ON cat.id_categoria = it.id_categoria
+        LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
         LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
         WHERE ${where.join(' AND ')}
-        GROUP BY COALESCE(TRIM(cat.nombre), 'SIN CATEGORIA')
+        GROUP BY COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA')
         ORDER BY venta DESC
     `;
 
@@ -295,7 +296,8 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             const porcCumProy = cuotaMesGlobal > 0 ? (proyeccionVenta / cuotaMesGlobal) * 100 : 0;
 
             return {
-                linea: row.linea,
+                codigoLinea: row.codigo_linea,
+                linea: `${row.codigo_linea} - ${row.nombre_linea}`,
                 ventaAcum: round(ventaAcum, 2),
                 porcCump: round(porcCump, 4),
                 proyeccionVenta: round(proyeccionVenta, 2),
@@ -310,13 +312,13 @@ const getLineaEspecificaPorVendedor = async (codigoVendedor, codigoLinea, filter
     const codigoLineaNormalizado = String(codigoLinea || '').trim();
 
     const detalle = data.detallePorLinea.filter((row) => {
+        const codigoTexto = String(row.codigoLinea || '').trim();
         const lineaTexto = String(row.linea || '');
-        const codigoTexto = lineaTexto.split('-')[0]?.trim() || '';
 
         return (
-            lineaTexto.toLowerCase() === codigoLineaNormalizado.toLowerCase()
-            || codigoTexto === codigoLineaNormalizado
+            codigoTexto === codigoLineaNormalizado
             || codigoTexto.startsWith(codigoLineaNormalizado)
+            || lineaTexto.toLowerCase().includes(codigoLineaNormalizado.toLowerCase())
         );
     });
 
