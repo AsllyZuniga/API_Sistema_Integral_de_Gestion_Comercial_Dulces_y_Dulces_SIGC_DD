@@ -1,8 +1,8 @@
-const service       = require('../services/vendedorCuotaProveedorService');
+const service = require('../services/vendedorCuotaProveedorService');
 const importService = require('../services/importCuotaProveedorService');
-const multer        = require('multer');
+const multer = require('multer');
 
-const upload          = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 const uploadMiddleware = upload.single('file');
 
 async function getAll(req, res) {

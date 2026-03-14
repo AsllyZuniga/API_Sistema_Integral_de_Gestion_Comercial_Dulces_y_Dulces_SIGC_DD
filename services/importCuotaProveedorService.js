@@ -42,6 +42,32 @@ function parseCsv(content) {
     return { headers, rows };
 }
 
+function findHeaderByAliases(headers, aliases) {
+    const lowerMap = new Map(headers.map(h => [h.trim().toLowerCase(), h]));
+    for (const alias of aliases) {
+        const header = lowerMap.get(alias.toLowerCase());
+        if (header) return header;
+    }
+    return null;
+}
+
+function parseCuota(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return NaN;
+    const normalized = raw
+        .replace(/\s+/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
+    return Number(normalized);
+}
+
+function normalizeHeader(value) {
+    return String(value ?? '')
+        .replace(/^\uFEFF/, '')
+        .trim()
+        .toLowerCase();
+}
+
 function isSinCuota(value) {
     return !value || value === '-' || value.toLowerCase() === 'null' || value === '0';
 }
@@ -63,9 +89,28 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
     const content = Buffer.isBuffer(fileContent) ? fileContent.toString('utf8') : fileContent;
     const { headers, rows } = parseCsv(content);
 
-    // Columnas de proveedores = todo después de codigo_vendedor y nombre_vendedor
-    const FIXED_COLS    = ['codigo_vendedor', 'nombre_vendedor'];
-    const proveedorCols = headers.filter(h => !FIXED_COLS.includes(h.toLowerCase()));
+    const codigoHeader = findHeaderByAliases(headers, ['codigo_vendedor', 'codigo']);
+    const nombreHeader = findHeaderByAliases(headers, ['nombre_vendedor', 'vendedor', 'nombre']);
+
+    if (!codigoHeader || !nombreHeader) {
+        throw new Error('Encabezados inválidos. Debe incluir codigo_vendedor/codigo y nombre_vendedor/vendedor.');
+    }
+
+    const reservedHeaders = new Set([
+        'codigo',
+        'codigo_vendedor',
+        'vendedor',
+        'nombre',
+        'nombre_vendedor'
+    ]);
+
+    const fixedCols = new Set([codigoHeader, nombreHeader]);
+    const proveedorCols = headers.filter(h => {
+        const normalized = normalizeHeader(h);
+        if (!normalized) return false;
+        if (fixedCols.has(h)) return false;
+        return !reservedHeaders.has(normalized);
+    });
 
     if (proveedorCols.length === 0) {
         throw new Error('No se encontraron columnas de proveedores en el archivo.');
@@ -97,13 +142,19 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
     }
 
     // Precargar todos los vendedores involucrados
-    const codigosVendedor = [...new Set(rows.map(r => r['codigo_vendedor'] || r['CODIGO_VENDEDOR']).filter(Boolean))];
+    const codigosVendedor = [
+        ...new Set(
+            rows
+                .map(r => String(r[codigoHeader] || '').trim())
+                .filter(Boolean)
+        )
+    ];
     const vendedoresDB    = await models.vendedor_model.findAll({
         where: { codigo_vendedor: { [Op.in]: codigosVendedor } },
         attributes: ['id_vendedor', 'codigo_vendedor', 'nombre']
     });
     const vendedorMap = {};
-    vendedoresDB.forEach(v => { vendedorMap[v.codigo_vendedor] = v; });
+    vendedoresDB.forEach(v => { vendedorMap[String(v.codigo_vendedor).trim()] = v; });
 
     // Contadores
     const resumen = {
@@ -115,21 +166,31 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
         errores:            [],
         proveedores_no_encontrados: [],
         proveedores_procesados:     proveedorCols,
-        proveedores_creados:        proveedoresCreados
+        proveedores_creados:        proveedoresCreados,
+        vendedores_creados:         []
     };
 
     // Procesar fila por fila
     for (const row of rows) {
-        const codigoVendedor = row['codigo_vendedor'] || row['CODIGO_VENDEDOR'] || '';
+        const codigoVendedor = String(row[codigoHeader] || '').trim();
         if (!codigoVendedor) continue;
 
-        const vendedor = vendedorMap[codigoVendedor];
+        let vendedor = vendedorMap[codigoVendedor];
         if (!vendedor) {
-            resumen.errores.push({
-                codigo_vendedor: codigoVendedor,
-                motivo: 'Vendedor no encontrado en la base de datos'
-            });
-            continue;
+            try {
+                vendedor = await models.vendedor_model.create({
+                    codigo_vendedor: codigoVendedor,
+                    nombre: String(row[nombreHeader] || '').trim() || `VENDEDOR ${codigoVendedor}`
+                });
+                vendedorMap[codigoVendedor] = vendedor;
+                resumen.vendedores_creados.push(codigoVendedor);
+            } catch (err) {
+                resumen.errores.push({
+                    codigo_vendedor: codigoVendedor,
+                    motivo: `No se pudo crear vendedor: ${err.message}`
+                });
+                continue;
+            }
         }
 
         resumen.filas_procesadas++;
@@ -141,7 +202,7 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 continue;
             }
 
-            const cuotaNum = parseFloat(valorCrudo.replace(',', '.'));
+            const cuotaNum = parseCuota(valorCrudo);
             if (isNaN(cuotaNum)) {
                 resumen.errores.push({
                     codigo_vendedor: codigoVendedor,
