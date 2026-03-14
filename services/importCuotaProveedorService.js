@@ -71,21 +71,30 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
         throw new Error('No se encontraron columnas de proveedores en el archivo.');
     }
 
-    // Precargar todos los proveedores del CSV (búsqueda por nombre, case-insensitive)
-    const proveedoresDB = await models.proveedor_model.findAll({
-        where: {
-            nombre: { [Op.iLike]: { [Op.any]: proveedorCols.map(c => c.trim()) } }
-        },
-        attributes: ['id_proveedor', 'nombre']
-    });
+    // Resolver proveedores por encabezado y crearlos si no existen
+    const proveedorMap = {};
+    const proveedoresCreados = [];
+    for (const proveedorCol of proveedorCols) {
+        const nombreProveedor = proveedorCol.trim();
+        const key = nombreProveedor.toUpperCase();
 
-    // Mapa nombre_upper → proveedor
-    const proveedorMap  = {};
-    proveedoresDB.forEach(p => { proveedorMap[p.nombre.toUpperCase()] = p; });
+        let proveedor = await models.proveedor_model.findOne({
+            where: {
+                nombre: { [Op.iLike]: nombreProveedor }
+            },
+            attributes: ['id_proveedor', 'nombre']
+        });
 
-    // Advertir si algún proveedor del CSV no existe en la BD
-    const proveedoresNoEncontrados = proveedorCols.filter(c => !proveedorMap[c.toUpperCase()]);
-    const proveedoresEncontrados   = proveedorCols.filter(c =>  proveedorMap[c.toUpperCase()]);
+        if (!proveedor) {
+            proveedor = await models.proveedor_model.create({
+                nombre: nombreProveedor,
+                codigo: nombreProveedor
+            });
+            proveedoresCreados.push(nombreProveedor);
+        }
+
+        proveedorMap[key] = proveedor;
+    }
 
     // Precargar todos los vendedores involucrados
     const codigosVendedor = [...new Set(rows.map(r => r['codigo_vendedor'] || r['CODIGO_VENDEDOR']).filter(Boolean))];
@@ -104,8 +113,9 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
         cuotas_creadas:     0,
         cuotas_omitidas:    0,
         errores:            [],
-        proveedores_no_encontrados: proveedoresNoEncontrados,
-        proveedores_procesados:     proveedoresEncontrados
+        proveedores_no_encontrados: [],
+        proveedores_procesados:     proveedorCols,
+        proveedores_creados:        proveedoresCreados
     };
 
     // Procesar fila por fila
@@ -124,7 +134,7 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
 
         resumen.filas_procesadas++;
 
-        for (const colProveedor of proveedoresEncontrados) {
+        for (const colProveedor of proveedorCols) {
             const valorCrudo = row[colProveedor] ?? '';
             if (isSinCuota(valorCrudo)) {
                 resumen.cuotas_omitidas++;
@@ -143,6 +153,14 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
             }
 
             const proveedor = proveedorMap[colProveedor.toUpperCase()];
+            if (!proveedor) {
+                resumen.errores.push({
+                    codigo_vendedor: codigoVendedor,
+                    proveedor: colProveedor,
+                    motivo: 'Proveedor no disponible para procesar la cuota'
+                });
+                continue;
+            }
 
             try {
                 // Crear cuotaProveedor para este vendedor+proveedor+periodo
