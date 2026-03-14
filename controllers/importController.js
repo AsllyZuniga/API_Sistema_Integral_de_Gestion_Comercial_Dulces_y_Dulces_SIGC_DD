@@ -33,7 +33,10 @@ async function importarVentasConArchivo(req, res) {
         const rutaArchivo = req.file.path;
         const nombreArchivo = req.file.originalname;
         const tamanoMB = (req.file.size / (1024 * 1024)).toFixed(2);
-        const batchSize = parseInt(req.body.batchSize) || 20000;
+        const batchSizeInput = parseInt(req.body.batchSize, 10);
+        const batchSize = Number.isFinite(batchSizeInput)
+            ? Math.max(1000, Math.min(batchSizeInput, 20000))
+            : 10000;
 
         console.log(`\n🚀 Iniciando importación desde upload: ${nombreArchivo}`);
         console.log(`📊 Tamaño: ${tamanoMB} MB`);
@@ -45,6 +48,7 @@ async function importarVentasConArchivo(req, res) {
         archivoProcesado = rutaArchivo;
 
         const importador = new ImportadorVentasOptimizado(models.sequelize, models);
+        importador.BATCH_INSERT_SIZE = batchSize;
         importador.verbose = true;
 
         // Configurar callback para updates de progreso (archivos gigantes)
@@ -127,7 +131,11 @@ async function importarVentasConArchivo(req, res) {
  */
 async function importarVentas(req, res) {
     try {
-        const { rutaArchivo, batchSize = 100 } = req.body;
+        const { rutaArchivo } = req.body;
+        const batchSizeInput = parseInt(req.body.batchSize, 10);
+        const batchSize = Number.isFinite(batchSizeInput)
+            ? Math.max(1000, Math.min(batchSizeInput, 20000))
+            : 10000;
 
         if (!rutaArchivo) {
             return res.status(400).json({
@@ -151,6 +159,7 @@ async function importarVentas(req, res) {
         console.log(`⚙️  Batch size: ${batchSize}`);
 
         const importador = new ImportadorVentasOptimizado(models.sequelize, models);
+        importador.BATCH_INSERT_SIZE = batchSize;
         importador.verbose = true;
 
         const estadisticas = await importador.importar(rutaArchivo);

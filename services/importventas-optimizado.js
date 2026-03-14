@@ -58,7 +58,7 @@ class ImportadorVentasOptimizado {
             obsequios: new Map()
         };
 
-        this.BATCH_INSERT_SIZE = 5000;
+        this.BATCH_INSERT_SIZE = 10000;
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 5000;
 
@@ -248,11 +248,27 @@ class ImportadorVentasOptimizado {
             return this.nuevosCreados[cacheKey].get(claveNormalizada);
         }
 
-        const nuevoRegistro = await modelo.create(datosCompletos, transaccion ? { transaction: transaccion } : undefined);
-        const objeto = nuevoRegistro.get({ plain: true });
+        try {
+            const nuevoRegistro = await modelo.create(datosCompletos, transaccion ? { transaction: transaccion } : undefined);
+            const objeto = nuevoRegistro.get({ plain: true });
+            this.nuevosCreados[cacheKey].set(claveNormalizada, objeto);
+            return objeto;
+        } catch (error) {
+            if (error?.name === 'SequelizeUniqueConstraintError') {
+                const existente = await modelo.findOne({
+                    where: datosCompletos,
+                    raw: true,
+                    ...(transaccion ? { transaction: transaccion } : {})
+                });
 
-        this.nuevosCreados[cacheKey].set(claveNormalizada, objeto);
-        return objeto;
+                if (existente) {
+                    this.nuevosCreados[cacheKey].set(claveNormalizada, existente);
+                    return existente;
+                }
+            }
+
+            throw error;
+        }
     }
 
     // Resuelve todos los maestros y retorna los datos listos para insertar
@@ -444,7 +460,6 @@ class ImportadorVentasOptimizado {
     }
 
     async procesarBatch(filas, encabezados) {
-        const transaccion = await this.sequelize.transaction();
         const ventasData = [];
         const detallesData = [];
 
@@ -456,7 +471,7 @@ class ImportadorVentasOptimizado {
                 const fila = this.parsearLinea(linea, encabezados);
 
                 try {
-                    const resultado = await this.prepararDatosFila(fila, transaccion);
+                    const resultado = await this.prepararDatosFila(fila, null);
                     ventasData.push(resultado.ventaData);
                     detallesData.push(resultado.detalleData);
                 } catch (err) {
@@ -464,41 +479,56 @@ class ImportadorVentasOptimizado {
                     if (this.verbose) {
                         console.error(`❌ Error preparando fila ${this.estadisticas.totalLineas}:`, err.message);
                     }
-                    throw err;
+                    this.estadisticas.erroresDetallados.push({
+                        fila: this.estadisticas.totalLineas,
+                        error: err.message
+                    });
+                    continue;
                 }
 
                 if (this.estadisticas.totalLineas % this.BULK_DISPLAY_INTERVAL === 0) {
-                    console.log(`📊 ${this.estadisticas.totalLineas} filas procesadas | ✅ ${this.estadisticas.exitosas} exitosas | ❌ ${this.estadisticas.errores} errores`);
+                    console.log(`📊 ${this.estadisticas.totalLineas} filas procesadas | 🧩 ${ventasData.length} preparadas | ✅ ${this.estadisticas.exitosas} exitosas | ❌ ${this.estadisticas.errores} errores`);
                 }
             }
 
-            // Insert masivo de ventas — Postgres devuelve los IDs generados
-            const ventasCreadas = await this.venta.bulkCreate(ventasData, {
-                transaction: transaccion,
-                returning: true
-            });
+            if (ventasData.length === 0) {
+                console.log('⚠️ Lote sin filas válidas para insertar');
+                return;
+            }
 
-            // Asignar id_venta a cada detalle según su posición
-            const detallesConId = detallesData.map((d, i) => ({
-                ...d,
-                id_venta: ventasCreadas[i]?.id_venta
-            }));
+            const transaccion = await this.sequelize.transaction();
 
-            // Insert masivo de detalles
-            await this.detalle_venta.bulkCreate(detallesConId, {
-                transaction: transaccion,
-                returning: false
-            });
+            try {
+                // Insert masivo de ventas — Postgres devuelve los IDs generados
+                const ventasCreadas = await this.venta.bulkCreate(ventasData, {
+                    transaction: transaccion,
+                    returning: true
+                });
 
-            await transaccion.commit();
+                // Asignar id_venta a cada detalle según su posición
+                const detallesConId = detallesData.map((d, i) => ({
+                    ...d,
+                    id_venta: ventasCreadas[i]?.id_venta
+                }));
 
-            this.estadisticas.exitosas += ventasCreadas.length;
-            this.estadisticas.nuevasVentas += ventasCreadas.length;
+                // Insert masivo de detalles
+                await this.detalle_venta.bulkCreate(detallesConId, {
+                    transaction: transaccion,
+                    returning: false
+                });
 
-            console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} ventas | Total acumulado: ${this.estadisticas.totalLineas}`);
+                await transaccion.commit();
+
+                this.estadisticas.exitosas += ventasCreadas.length;
+                this.estadisticas.nuevasVentas += ventasCreadas.length;
+
+                console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} ventas | Total acumulado: ${this.estadisticas.totalLineas}`);
+            } catch (error) {
+                await transaccion.rollback();
+                throw error;
+            }
 
         } catch (error) {
-            await transaccion.rollback();
             throw error;
         }
     }
