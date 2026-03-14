@@ -150,8 +150,7 @@ async function importarVentas(req, res) {
         console.log(`📊 Tamaño: ${tamanoMB} MB`);
         console.log(`⚙️  Batch size: ${batchSize}`);
 
-        const importador = new ImportadorVentas(models.sequelize, models);
-        importador.batchSize = batchSize;
+        const importador = new ImportadorVentasOptimizado(models.sequelize, models);
         importador.verbose = true;
 
         const estadisticas = await importador.importar(rutaArchivo);

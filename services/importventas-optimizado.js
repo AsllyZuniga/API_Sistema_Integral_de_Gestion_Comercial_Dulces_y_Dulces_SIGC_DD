@@ -58,9 +58,9 @@ class ImportadorVentasOptimizado {
             obsequios: new Map()
         };
 
-        this.BATCH_INSERT_SIZE = 15000;
+        this.BATCH_INSERT_SIZE = 5000;
         this.TRANSACTION_SIZE = 5000;
-        this.BULK_DISPLAY_INTERVAL = 10000;
+        this.BULK_DISPLAY_INTERVAL = 5000;
 
         this.verbose = false;
 
@@ -233,8 +233,12 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    async obtenerOCrearOptimizado(modelo, cacheKey, clave, datosCompletos) {
-        const claveNormalizada = clave?.toLowerCase();
+    async obtenerOCrearOptimizado(modelo, cacheKey, clave, datosCompletos, transaccion = null) {
+        const claveNormalizada = String(clave || '').toLowerCase();
+
+        if (!claveNormalizada) {
+            return await modelo.create(datosCompletos, transaccion ? { transaction: transaccion } : undefined);
+        }
 
         if (this.maestros[cacheKey]?.has(claveNormalizada)) {
             return this.maestros[cacheKey].get(claveNormalizada);
@@ -244,169 +248,205 @@ class ImportadorVentasOptimizado {
             return this.nuevosCreados[cacheKey].get(claveNormalizada);
         }
 
-        const nuevoRegistro = await modelo.create(datosCompletos);
+        const nuevoRegistro = await modelo.create(datosCompletos, transaccion ? { transaction: transaccion } : undefined);
         const objeto = nuevoRegistro.get({ plain: true });
 
         this.nuevosCreados[cacheKey].set(claveNormalizada, objeto);
         return objeto;
     }
 
-    async procesarFila(fila, transaccion = null) {
-        try {
-            if (!fila || Object.keys(fila).length === 0) throw new Error('Fila vacía');
+    // Resuelve todos los maestros y retorna los datos listos para insertar
+    // NO crea venta ni detalle_venta aquí — eso se hace en bulkCreate
+    async prepararDatosFila(fila, transaccion) {
+        if (!fila || Object.keys(fila).length === 0) throw new Error('Fila vacía');
 
-            const { codigo: codProveedor, nombre: nomProveedor } = this.separarCodigoNombre(fila['LINEA']);
-            const { nombre: nomTipoDoc, consecutivo: nroDocumento } = this.separarTipoDocumento(fila['Nro documento']);
+        const { codigo: codProveedor, nombre: nomProveedor } = this.separarCodigoNombre(fila['LINEA']);
+        const { nombre: nomTipoDoc, consecutivo: nroDocumento } = this.separarTipoDocumento(fila['Nro documento']);
 
-            const proveedor = await this.obtenerOCrearOptimizado(
-                this.proveedor, 'proveedores',
-                nomProveedor,
-                { codigo: codProveedor, nombre: nomProveedor }
-            );
+        const proveedor = await this.obtenerOCrearOptimizado(
+            this.proveedor, 'proveedores',
+            nomProveedor,
+            { codigo: codProveedor, nombre: nomProveedor },
+            transaccion
+        );
 
-            const megacategoria = await this.obtenerOCrearOptimizado(
-                this.megacategoria, 'megacategorias',
-                fila['MEGACATEGORIA'],
-                { nombre: fila['MEGACATEGORIA']?.trim() }
-            );
+        const megacategoria = await this.obtenerOCrearOptimizado(
+            this.megacategoria, 'megacategorias',
+            fila['MEGACATEGORIA'],
+            { nombre: fila['MEGACATEGORIA']?.trim() },
+            transaccion
+        );
 
-            const categoria = await this.obtenerOCrearOptimizado(
-                this.categoria, 'categorias',
-                `${fila['CATEGORIA']}_${megacategoria?.id_megacategoria}`,
-                { nombre: fila['CATEGORIA']?.trim(), id_megacategoria: megacategoria?.id_megacategoria }
-            );
+        const categoria = await this.obtenerOCrearOptimizado(
+            this.categoria, 'categorias',
+            `${fila['CATEGORIA']}_${megacategoria?.id_megacategoria}`,
+            { nombre: fila['CATEGORIA']?.trim(), id_megacategoria: megacategoria?.id_megacategoria },
+            transaccion
+        );
 
-            const subcategoria = await this.obtenerOCrearOptimizado(
-                this.subcategoria, 'subcategorias',
-                `${fila['SUBCATEGORIA']}_${categoria?.id_categoria}`,
-                { nombre: fila['SUBCATEGORIA']?.trim(), id_categoria: categoria?.id_categoria }
-            );
+        const subcategoria = await this.obtenerOCrearOptimizado(
+            this.subcategoria, 'subcategorias',
+            `${fila['SUBCATEGORIA']}_${categoria?.id_categoria}`,
+            { nombre: fila['SUBCATEGORIA']?.trim(), id_categoria: categoria?.id_categoria },
+            transaccion
+        );
 
-            const canal = await this.obtenerOCrearOptimizado(
-                this.canal, 'canales',
-                fila['CANAL'],
-                { nombre: fila['CANAL']?.trim() }
-            );
+        const canal = await this.obtenerOCrearOptimizado(
+            this.canal, 'canales',
+            fila['CANAL'],
+            { nombre: fila['CANAL']?.trim() },
+            transaccion
+        );
 
-            const subcanal = await this.obtenerOCrearOptimizado(
-                this.subcanal, 'subcanales',
-                `${fila['SUBCANAL']}_${canal?.id_canal}`,
-                { nombre: fila['SUBCANAL']?.trim(), id_canal: canal?.id_canal }
-            );
+        const subcanal = await this.obtenerOCrearOptimizado(
+            this.subcanal, 'subcanales',
+            `${fila['SUBCANAL']}_${canal?.id_canal}`,
+            { nombre: fila['SUBCANAL']?.trim(), id_canal: canal?.id_canal },
+            transaccion
+        );
 
-            const ciudad = await this.obtenerOCrearOptimizado(
-                this.ciudad, 'ciudades',
-                fila['Desc. ciudad'],
-                { nombre: fila['Desc. ciudad']?.trim() }
-            );
+        const ciudad = await this.obtenerOCrearOptimizado(
+            this.ciudad, 'ciudades',
+            fila['Desc. ciudad'],
+            { nombre: fila['Desc. ciudad']?.trim() },
+            transaccion
+        );
 
-            const barrio = await this.obtenerOCrearOptimizado(
-                this.barrio, 'barrios',
-                `${fila['Barrio']}_${ciudad?.id_ciudad}`,
-                { nombre: fila['Barrio']?.trim(), id_ciudad: ciudad?.id_ciudad }
-            );
+        const barrio = await this.obtenerOCrearOptimizado(
+            this.barrio, 'barrios',
+            `${fila['Barrio']}_${ciudad?.id_ciudad}`,
+            { nombre: fila['Barrio']?.trim(), id_ciudad: ciudad?.id_ciudad },
+            transaccion
+        );
 
-            const tipoNegocio = await this.obtenerOCrearOptimizado(
-                this.tipo_negocio, 'tiposNegocio',
-                fila['TIPO DE NEGOCIO'],
-                {
-                    tipo_negocio: fila['TIPO DE NEGOCIO']?.trim(),
-                    detalle_tipo_negocio: fila['DETALLE TIPO DE NEGOCIO']?.trim() || ''
-                }
-            );
+        const tipoNegocio = await this.obtenerOCrearOptimizado(
+            this.tipo_negocio, 'tiposNegocio',
+            fila['TIPO DE NEGOCIO'],
+            {
+                tipo_negocio: fila['TIPO DE NEGOCIO']?.trim(),
+                detalle_tipo_negocio: fila['DETALLE TIPO DE NEGOCIO']?.trim() || ''
+            },
+            transaccion
+        );
 
-            const tipoDocumento = fila["Nro documento"] ?
-                await this.obtenerOCrearOptimizado(
-                    this.tipo_documento, 'tiposDocumento',
-                    `${fila["Nro documento"]}_${this.estadisticas.totalLineas}`,
-                    { nombre: nomTipoDoc, consecutivo: nroDocumento }
-                ) : null;
+        const tipoDocumentoKey = nomTipoDoc && Number.isFinite(nroDocumento)
+            ? `${nomTipoDoc}_${nroDocumento}`
+            : fila['Nro documento']?.trim();
 
-            const vendedor = await this.obtenerOCrearOptimizado(
-                this.vendedor, 'vendedores',
-                fila['Codigo vendedor'],
-                {
-                    codigo_vendedor: fila['Codigo vendedor']?.trim(),
-                    nombre: fila['Nombre vendedor']?.trim() || 'SIN NOMBRE'
-                }
-            );
+        const tipoDocumento = fila['Nro documento'] ?
+            await this.obtenerOCrearOptimizado(
+                this.tipo_documento, 'tiposDocumento',
+                tipoDocumentoKey,
+                { nombre: nomTipoDoc, consecutivo: nroDocumento },
+                transaccion
+            ) : null;
 
-            const cliente = await this.cliente.create({
-                nro_documento: fila['Cliente factura']?.trim(),
-                razon_social: fila['Razon social cliente factura']?.trim() || '',
-                sucursal: fila['Sucursal factura']?.trim() || '',
-                direccion: fila['Direccion 1']?.trim() || '',
-                nombre_establecimiento: fila['Razon social cliente factura']?.trim() || '',
+        const vendedor = await this.obtenerOCrearOptimizado(
+            this.vendedor, 'vendedores',
+            fila['Codigo vendedor'],
+            {
+                codigo_vendedor: fila['Codigo vendedor']?.trim(),
+                nombre: fila['Nombre vendedor']?.trim() || 'SIN NOMBRE'
+            },
+            transaccion
+        );
+
+        const clienteDocumento = fila['Cliente factura']?.trim();
+        const clienteRazonSocial = fila['Razon social cliente factura']?.trim() || '';
+        const clienteSucursal = fila['Sucursal factura']?.trim() || '';
+        const clienteDireccion = fila['Direccion 1']?.trim() || '';
+        const clienteClave = clienteDocumento || `${clienteRazonSocial}_${clienteSucursal}_${clienteDireccion}`;
+
+        const cliente = await this.obtenerOCrearOptimizado(
+            this.cliente, 'clientes',
+            clienteClave,
+            {
+                nro_documento: clienteDocumento,
+                razon_social: clienteRazonSocial,
+                sucursal: clienteSucursal,
+                direccion: clienteDireccion,
+                nombre_establecimiento: clienteRazonSocial,
                 id_ciudad: ciudad?.id_ciudad,
-                id_barrio: barrio?.id_barrio
-            }, { transaction: transaccion });
+                id_barrio: barrio?.id_barrio,
+                id_canal: canal?.id_canal,
+                id_tipo_negocio: tipoNegocio?.id_tipo_negocio
+            },
+            transaccion
+        );
 
-            const item = await this.item.create({
-                codigo_item: fila['Item']?.trim(),
-                descripcion: fila['Desc. item']?.trim() || '',
+        const itemCodigo = fila['Item']?.trim();
+        const itemDescripcion = fila['Desc. item']?.trim() || '';
+        const itemClave = itemCodigo || itemDescripcion;
+
+        const item = await this.obtenerOCrearOptimizado(
+            this.item, 'items',
+            itemClave,
+            {
+                codigo_item: itemCodigo,
+                descripcion: itemDescripcion,
                 id_proveedor: proveedor?.id_proveedor,
                 id_megacategoria: megacategoria?.id_megacategoria,
                 id_categoria: categoria?.id_categoria,
                 id_subcategoria: subcategoria?.id_subcategoria,
                 cantidad_empaque: this.normalizarValor(fila['Cantidad emp.']) || 0,
-                unidad_medida_empaque: this.normalizarValor(fila['Factor U.M. emp.']) || 0,
-                unidad_medida_orden: this.normalizarValor(fila['Factor U.M. Orden']) || 0,
+                factor_um_empaque: this.normalizarValor(fila['Factor U.M. emp.']) || 0,
+                factor_um_orden: this.normalizarValor(fila['Factor U.M. Orden']) || 0,
                 peso_kilo: this.normalizarValor(fila['Peso en KILO']) || 0
-            }, { transaction: transaccion });
+            },
+            transaccion
+        );
 
-            const venta = await this.venta.create({
-                numero_documento: fila['Nro documento']?.trim(),
-                fecha: this.parsearFecha(fila['Fecha']),
-                id_cliente: cliente?.id_cliente,
-                id_vendedor: vendedor?.id_vendedor,
-                id_canal: canal?.id_canal,
-                id_subcanal: subcanal?.id_subcanal,
-                id_tipo_documento: tipoDocumento?.id_tipo_documento,
-                precio_unitario_con_impuesto: this.normalizarValor(fila['Valor bruto']),
-                valor_descuentos: this.normalizarValor(fila['Valor descuentos']),
-                valor_impuestos: this.normalizarValor(fila['Valor impuestos']),
-                valor_neto: this.normalizarValor(fila['Valor neto']),
-                subtotal: this.normalizarValor(fila['Valor subtotal']),
-                margen_promedio: this.normalizarValor(fila['Margen promedio']) || 0,
-                impuesto_afecta_margen: this.normalizarValor(fila['Impuesto afecta margen']),
-                condicion_pago: fila['Cond. pago fact']?.trim().substring(0, 20),
-                porcentaje_descuentos: null,
-                porcentaje_impuesto: null
-            }, { transaction: transaccion });
-
-            if (fila['REPORTE PROV CON OBS'] && fila['REPORTE PROV CON OBS'].trim()) {
-                await this.obsequio.create({
-                    descripcion: fila['REPORTE PROV CON OBS']?.trim(),
+        // obsequio: sigue caché, se crea aquí si es nuevo
+        if (fila['REPORTE PROV CON OBS'] && fila['REPORTE PROV CON OBS'].trim()) {
+            await this.obtenerOCrearOptimizado(
+                this.obsequio, 'obsequios',
+                fila['REPORTE PROV CON OBS'].trim(),
+                {
+                    descripcion: fila['REPORTE PROV CON OBS'].trim(),
                     valor_obsequio: this.normalizarValor(fila['Valor subtotal']) || 0
-                }, { transaction: transaccion });
-            }
-
-            const detalleVenta = await this.detalle_venta.create({
-                id_venta: venta?.id_venta,
-                id_item: item?.id_item,
-                cantidad_emp: this.normalizarValor(fila['Cantidad emp.']) || 0,
-                cantidad: this.normalizarValor(fila['Cantidad']) || 0,
-                precio_unitario: this.normalizarValor(fila['Costo promedio total']),
-                costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
-                descuento: this.normalizarValor(fila['Valor descuentos']),
-                subtotal: this.normalizarValor(fila['Valor subtotal'])
-            }, { transaction: transaccion });
-
-            this.estadisticas.nuevasVentas++;
-            return true;
-
-        } catch (error) {
-            this.estadisticas.errores++;
-            if (this.verbose) {
-                console.error(`❌ Error en fila ${this.estadisticas.totalLineas}:`, error.message);
-            }
-            return false;
+                },
+                transaccion
+            );
         }
+
+        const ventaData = {
+            numero_documento: fila['Nro documento']?.trim(),
+            fecha: this.parsearFecha(fila['Fecha']),
+            id_cliente: cliente?.id_cliente,
+            id_vendedor: vendedor?.id_vendedor,
+            id_canal: canal?.id_canal,
+            id_subcanal: subcanal?.id_subcanal,
+            id_tipo_documento: tipoDocumento?.id_tipo_documento,
+            precio_unitario_con_impuesto: this.normalizarValor(fila['Valor bruto']),
+            valor_descuentos: this.normalizarValor(fila['Valor descuentos']),
+            valor_impuestos: this.normalizarValor(fila['Valor impuestos']),
+            valor_neto: this.normalizarValor(fila['Valor neto']),
+            subtotal: this.normalizarValor(fila['Valor subtotal']),
+            margen_promedio: this.normalizarValor(fila['Margen promedio']) || 0,
+            impuesto_afecta_margen: this.normalizarValor(fila['Impuesto afecta margen']),
+            condicion_pago: fila['Cond. pago fact']?.trim().substring(0, 20),
+            porcentaje_descuento: null,
+            porcentaje_impuesto: null
+        };
+
+        // id_venta lo asignará procesarBatch tras el bulkCreate con returning
+        const detalleData = {
+            id_item: item?.id_item,
+            cantidad_emp: this.normalizarValor(fila['Cantidad emp.']) || 0,
+            cantidad: this.normalizarValor(fila['Cantidad']) || 0,
+            precio_unitario: this.normalizarValor(fila['Costo promedio total']),
+            costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
+            descuento: this.normalizarValor(fila['Valor descuentos']),
+            subtotal: this.normalizarValor(fila['Valor subtotal'])
+        };
+
+        return { ventaData, detalleData };
     }
 
     async procesarBatch(filas, encabezados) {
-        let ventasEnTransaccion = 0;
-        let transaccion = await this.sequelize.transaction();
+        const transaccion = await this.sequelize.transaction();
+        const ventasData = [];
+        const detallesData = [];
 
         try {
             for (const linea of filas) {
@@ -415,29 +455,47 @@ class ImportadorVentasOptimizado {
                 this.estadisticas.totalLineas++;
                 const fila = this.parsearLinea(linea, encabezados);
 
-                const exito = await this.procesarFila(fila, transaccion);
-                if (exito) {
-                    this.estadisticas.exitosas++;
-                    ventasEnTransaccion++;
-
-                    if (ventasEnTransaccion >= this.TRANSACTION_SIZE) {
-                        await transaccion.commit();
-                        console.log(`   ✅ Transacción confirmada: ${this.estadisticas.totalLineas} filas`);
-
-                        transaccion = await this.sequelize.transaction();
-                        ventasEnTransaccion = 0;
+                try {
+                    const resultado = await this.prepararDatosFila(fila, transaccion);
+                    ventasData.push(resultado.ventaData);
+                    detallesData.push(resultado.detalleData);
+                } catch (err) {
+                    this.estadisticas.errores++;
+                    if (this.verbose) {
+                        console.error(`❌ Error preparando fila ${this.estadisticas.totalLineas}:`, err.message);
                     }
+                    throw err;
+                }
 
-                    if (this.estadisticas.totalLineas % this.BULK_DISPLAY_INTERVAL === 0) {
-                        console.log(`📊 ${this.estadisticas.totalLineas} filas procesadas...`);
-                    }
+                if (this.estadisticas.totalLineas % this.BULK_DISPLAY_INTERVAL === 0) {
+                    console.log(`📊 ${this.estadisticas.totalLineas} filas procesadas | ✅ ${this.estadisticas.exitosas} exitosas | ❌ ${this.estadisticas.errores} errores`);
                 }
             }
 
-            if (ventasEnTransaccion > 0) {
-                await transaccion.commit();
-                console.log(`   ✅ Transacción final confirmada: ${ventasEnTransaccion} filas`);
-            }
+            // Insert masivo de ventas — Postgres devuelve los IDs generados
+            const ventasCreadas = await this.venta.bulkCreate(ventasData, {
+                transaction: transaccion,
+                returning: true
+            });
+
+            // Asignar id_venta a cada detalle según su posición
+            const detallesConId = detallesData.map((d, i) => ({
+                ...d,
+                id_venta: ventasCreadas[i]?.id_venta
+            }));
+
+            // Insert masivo de detalles
+            await this.detalle_venta.bulkCreate(detallesConId, {
+                transaction: transaccion,
+                returning: false
+            });
+
+            await transaccion.commit();
+
+            this.estadisticas.exitosas += ventasCreadas.length;
+            this.estadisticas.nuevasVentas += ventasCreadas.length;
+
+            console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} ventas | Total acumulado: ${this.estadisticas.totalLineas}`);
 
         } catch (error) {
             await transaccion.rollback();
