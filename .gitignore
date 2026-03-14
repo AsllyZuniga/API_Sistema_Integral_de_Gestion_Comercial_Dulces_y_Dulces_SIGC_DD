@@ -137,3 +137,7 @@ dist
 
 # SvelteKit build / generate output
 .svelte-kit
+models/init-models.js
+services/importventas-optimizado.js.bak
+uploads/1773329139240-omfqjk-VENTAS.txt
+config/config.json

@@ -3,44 +3,93 @@ var express = require("express");
 var path = require("path");
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
-
+var authRouter = require("./routes/authRouter");
 var indexRouter = require("./routes/index");
-var usersRouter = require("./routes/users");
-var categoriasRouter = require("./routes/categorias");
-var clientesRouter = require("./routes/clientes");
-var cuotas_vendedoresRouter = require("./routes/cuotas_vendedores");
-var productosRouter = require("./routes/productos");
-var staging_ventasRouter = require("./routes/staging_ventas");
-var tipos_documentoRouter = require("./routes/tipos_documento");
-var unidades_medidaRouter = require("./routes/unidades_medida");
-var vendedoresRouter = require("./routes/vendedores");
-var ventasRouter = require("./routes/ventas");
-var ventas_detalleRouter = require("./routes/ventas_detalle");
 
+var barrioRouter = require("./routes/barrioRouter");
+var canalRouter = require("./routes/canalRouter");
+var categoriaRouter = require("./routes/categoriaRouter");
+var clienteRouter = require("./routes/clienteRouter");
+var cuotaDiaRouter = require("./routes/cuotaDiaRouter");
+var cuotaMesRouter = require("./routes/cuotaMesRouter");
+var cuotaSemanaRouter = require("./routes/cuotaSemanaRouter");
+var detalle_ventaRouter = require("./routes/detalle_ventaRouter");
+var itemRouter = require("./routes/itemRouter");
+var megacategoriaRouter = require("./routes/megacategoriaRouter");
+var obsequioRouter = require("./routes/obsequioRouter");
+var proveedorRouter = require("./routes/proveedorRouter");
+var rolRouter = require("./routes/rolRouter");
+var subcanalRouter = require("./routes/subcanalRouter");
+var subcategoriaRouter = require("./routes/subcategoriaRouter");
+var tipo_documentoRouter = require("./routes/tipo_documentoRouter");
+var tipo_negocioRouter = require("./routes/tipo_negocioRouter");
+var usuarioRouter = require("./routes/usuarioRouter");
+var vendedorRouter = require("./routes/vendedorRouter");
+var ventaRouter = require("./routes/ventaRouter");
+var rango_diasRouter = require("./routes/rango_diasRouter");
+var cumplimientoMesRouter = require("./routes/cumplimientoMesRouter");
+const importRouter = require('./routes/importRouter');
+const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
+
+
+
+
+
+
+var cors = require('cors');
 var app = express();
 
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
+app.use(cors());
+
+// Configuración para archivos gigantes y timeouts
+app.use(express.json({ limit: '6gb' }));
+app.use(express.urlencoded({ extended: false, limit: '6gb' }));
+
+// Timeout global para requests largos (4 horas para archivos gigantes)
+app.use((req, res, next) => {
+  req.setTimeout(4 * 60 * 60 * 1000); // 4 horas
+  res.setTimeout(4 * 60 * 60 * 1000); // 4 horas
+  next();
+});
+
 app.use(logger("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
+app.use("/api/auth", authRouter);
 app.use("/", indexRouter);
-app.use("/users", usersRouter);
-app.use("/categorias", categoriasRouter);
-app.use("/clientes", clientesRouter);
-app.use("/cuotas_vendedores", cuotas_vendedoresRouter);
-app.use("/productos", productosRouter);
-app.use("/staging_ventas", staging_ventasRouter);
-app.use("/tipos_documento", tipos_documentoRouter);
-app.use("/unidades_medida", unidades_medidaRouter);
-app.use("/vendedores", vendedoresRouter);
-app.use("/ventas", ventasRouter);
-app.use("/ventas_detalle", ventas_detalleRouter);
+app.use("/barrio", barrioRouter);
+app.use("/canale", canalRouter);
+app.use("/categoria", categoriaRouter);
+app.use("/cliente", clienteRouter);
+app.use("/cuota-dia", cuotaDiaRouter);
+app.use("/cuota-mes", cuotaMesRouter);
+app.use("/cuota-semana", cuotaSemanaRouter);
+app.use("/detalle_venta", detalle_ventaRouter);
+app.use("/items", itemRouter);
+app.use("/megacategoria", megacategoriaRouter);
+app.use("/obsequio", obsequioRouter);
+app.use("/proveedore", proveedorRouter);
+app.use("/roles", rolRouter);
+app.use("/subcanale", subcanalRouter);
+app.use("/subcategoria", subcategoriaRouter);
+app.use("/tipos_documento", tipo_documentoRouter);
+app.use("/tipos_negocio", tipo_negocioRouter);
+app.use("/usuario", usuarioRouter);
+app.use("/vendedor", vendedorRouter);
+app.use("/venta", ventaRouter);
+app.use("/rango-dias", rango_diasRouter);
+app.use('/mes/cumplimiento', cumplimientoMesRouter);
+app.use('/import', importRouter);
+app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
+
+
+
+
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
   next(createError(404));
