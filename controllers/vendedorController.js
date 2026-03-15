@@ -62,5 +62,30 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async assignSupervisor(req, res) {
+        try {
+            const resultado = await vendedorService.assignSupervisor(
+                req.params.id,
+                req.body.id_supervisor
+            );
+
+            if (resultado?.error === 'VENDEDOR_NOT_FOUND') {
+                return res.status(404).send({ message: 'vendedor Not Found' });
+            }
+
+            if (resultado?.error === 'SUPERVISOR_NOT_FOUND') {
+                return res.status(404).send({ message: 'supervisor Not Found' });
+            }
+
+            if (resultado?.error === 'USUARIO_NOT_SUPERVISOR') {
+                return res.status(400).send({ message: 'El usuario indicado no tiene rol de supervisor' });
+            }
+
+            return res.status(200).send(resultado.data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };
