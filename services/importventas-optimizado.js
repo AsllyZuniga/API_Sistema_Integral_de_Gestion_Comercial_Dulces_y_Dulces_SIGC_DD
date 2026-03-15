@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 
 class ImportadorVentasOptimizado {
@@ -57,6 +58,9 @@ class ImportadorVentasOptimizado {
             items: new Map(),
             obsequios: new Map()
         };
+
+        this.archivosEnProceso = new Set();
+        this.archivosImportados = new Set();
 
         this.BATCH_INSERT_SIZE = 10000;
         this.TRANSACTION_SIZE = 5000;
@@ -183,6 +187,36 @@ class ImportadorVentasOptimizado {
                 `Columnas esperadas: ${this.COLUMNAS_REQUERIDAS.join(', ')}`
             );
         }
+    }
+
+    validarArchivoTxt(rutaArchivo) {
+        const extension = path.extname(String(rutaArchivo || '')).toLowerCase();
+
+        if (extension !== '.txt') {
+            throw new Error('El archivo seleccionado no es válido. Solo se permiten archivos con extensión .txt');
+        }
+    }
+
+    async obtenerHashArchivo(rutaArchivo) {
+        return await new Promise((resolve, reject) => {
+            const hash = crypto.createHash('sha256');
+            const stream = fs.createReadStream(rutaArchivo);
+
+            stream.on('data', (chunk) => hash.update(chunk));
+            stream.on('end', () => resolve(hash.digest('hex')));
+            stream.on('error', (error) => reject(error));
+        });
+    }
+
+    async validarArchivoNoDuplicado(rutaArchivo) {
+        const hashArchivo = await this.obtenerHashArchivo(rutaArchivo);
+
+        if (this.archivosEnProceso.has(hashArchivo) || this.archivosImportados.has(hashArchivo)) {
+            throw new Error('El archivo seleccionado ya fue cargado previamente en esta importación. No se permite importar el mismo archivo dos veces para evitar duplicados.');
+        }
+
+        this.archivosEnProceso.add(hashArchivo);
+        return hashArchivo;
     }
 
     async precargaDatos() {
@@ -588,9 +622,13 @@ class ImportadorVentasOptimizado {
 
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
+        let hashArchivo = null;
 
         try {
             console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
+
+            this.validarArchivoTxt(rutaArchivo);
+            hashArchivo = await this.validarArchivoNoDuplicado(rutaArchivo);
 
             await this.precargaDatos();
 
@@ -629,10 +667,15 @@ class ImportadorVentasOptimizado {
             }
 
             this.estadisticas.tiempoFin = Date.now();
+            this.archivosEnProceso.delete(hashArchivo);
+            this.archivosImportados.add(hashArchivo);
             this.mostrarResumen();
             return this.estadisticas;
 
         } catch (error) {
+            if (hashArchivo) {
+                this.archivosEnProceso.delete(hashArchivo);
+            }
             console.error("\n❌ Error crítico en importación:", error);
             throw error;
         }
