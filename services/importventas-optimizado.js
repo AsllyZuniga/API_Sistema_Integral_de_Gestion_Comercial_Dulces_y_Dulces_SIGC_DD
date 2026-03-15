@@ -62,6 +62,44 @@ class ImportadorVentasOptimizado {
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 5000;
 
+        this.COLUMNAS_REQUERIDAS = [
+            'LINEA',
+            'MEGACATEGORIA',
+            'CATEGORIA',
+            'SUBCATEGORIA',
+            'CANAL',
+            'SUBCANAL',
+            'Desc. ciudad',
+            'Barrio',
+            'TIPO DE NEGOCIO',
+            'DETALLE TIPO DE NEGOCIO',
+            'Nro documento',
+            'Codigo vendedor',
+            'Nombre vendedor',
+            'Cliente factura',
+            'Razon social cliente factura',
+            'Sucursal factura',
+            'Direccion 1',
+            'Item',
+            'Desc. item',
+            'Cantidad emp.',
+            'Factor U.M. emp.',
+            'Factor U.M. Orden',
+            'Peso en KILO',
+            'REPORTE PROV CON OBS',
+            'Valor bruto',
+            'Valor descuentos',
+            'Valor impuestos',
+            'Valor neto',
+            'Valor subtotal',
+            'Margen promedio',
+            'Impuesto afecta margen',
+            'Cond. pago fact',
+            'Fecha',
+            'Cantidad',
+            'Costo promedio total'
+        ];
+
         this.verbose = false;
 
         this.estadisticas = {
@@ -130,6 +168,21 @@ class ImportadorVentasOptimizado {
             registro[encabezado.trim()] = valores[index] ? valores[index].trim() : '';
         });
         return registro;
+    }
+
+    validarEncabezados(encabezados) {
+        const normalizar = (texto) => String(texto || '').trim().toLowerCase();
+        const encabezadosNormalizados = new Set(encabezados.map(normalizar));
+
+        const faltantes = this.COLUMNAS_REQUERIDAS
+            .filter((columna) => !encabezadosNormalizados.has(normalizar(columna)));
+
+        if (faltantes.length > 0) {
+            throw new Error(
+                `Faltan columnas requeridas en el archivo: ${faltantes.join(', ')}. ` +
+                `Columnas esperadas: ${this.COLUMNAS_REQUERIDAS.join(', ')}`
+            );
+        }
     }
 
     async precargaDatos() {
@@ -557,6 +610,7 @@ class ImportadorVentasOptimizado {
 
                 if (esEncabezado) {
                     encabezados = linea.split('\t').map(h => h.trim());
+                    this.validarEncabezados(encabezados);
                     esEncabezado = false;
                     console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
                     continue;
