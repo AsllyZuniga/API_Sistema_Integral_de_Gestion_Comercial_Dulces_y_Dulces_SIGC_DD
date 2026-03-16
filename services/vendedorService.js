@@ -30,14 +30,22 @@ const updateById = async (id, data) => {
 };
 
 const assignSupervisor = async (idVendedor, idSupervisor) => {
-    const vendedor = await vendedor_model.findByPk(idVendedor);
+    const identificador = String(idVendedor || '').trim();
+
+    let vendedor = await vendedor_model.findByPk(identificador);
+    if (!vendedor && identificador) {
+        vendedor = await vendedor_model.findOne({
+            where: { codigo_vendedor: identificador }
+        });
+    }
+
     if (!vendedor) {
         return { error: 'VENDEDOR_NOT_FOUND' };
     }
 
     if (idSupervisor === null || idSupervisor === undefined || idSupervisor === '') {
         await vendedor.update({ id_supervisor: null });
-        return { data: await getById(idVendedor) };
+        return { data: await getById(vendedor.id_vendedor) };
     }
 
     const supervisor = await usuario_model.findByPk(idSupervisor);
@@ -51,7 +59,7 @@ const assignSupervisor = async (idVendedor, idSupervisor) => {
     }
 
     await vendedor.update({ id_supervisor: idSupervisor });
-    return { data: await getById(idVendedor) };
+    return { data: await getById(vendedor.id_vendedor) };
 };
 
 module.exports = {
