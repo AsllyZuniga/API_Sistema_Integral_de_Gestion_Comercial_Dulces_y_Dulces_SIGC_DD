@@ -6,7 +6,8 @@ module.exports = (sequelize) => {
             type: DataTypes.BIGINT,
             primaryKey: true,
             autoIncrement: true,
-            allowNull: false
+            allowNull: false,
+            field: 'id_cuotaSemana'
         },
         cuota_semana: {
             type: DataTypes.BIGINT,
