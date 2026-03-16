@@ -26,6 +26,22 @@ const buildVendedorPayload = (vendedor) => ({
         : null
 });
 
+const buildUsuarioPayload = (usuario) => ({
+    idVendedor: null,
+    idUsuario: usuario.id_usuario,
+    codVendedor: null,
+    codigo: null,
+    nombre: normalizeText(usuario.username),
+    username: normalizeText(usuario.username),
+    estado: usuario.estado,
+    rol: usuario.rol
+        ? {
+            idRol: usuario.rol.id_rol,
+            nombre: normalizeText(usuario.rol.nombre)
+        }
+        : null
+});
+
 const login = async ({ codigo, username, password }) => {
     const codigoNormalizado = normalizeText(codigo);
     const usernameNormalizado = normalizeText(username);
@@ -39,6 +55,7 @@ const login = async ({ codigo, username, password }) => {
         };
     }
 
+    // Intento 1: buscar por vendedor vinculado a usuario (flujo normal para vendedores)
     const vendedor = await vendedor_model.findOne({
         where: codigoNormalizado
             ? { codigo_vendedor: codigoNormalizado }
@@ -58,43 +75,71 @@ const login = async ({ codigo, username, password }) => {
         ]
     });
 
-    if (!vendedor || !vendedor.usuario) {
+    if (vendedor?.usuario) {
+        if (vendedor.usuario.estado === false) {
+            return { success: false, status: 403, message: 'Usuario inactivo' };
+        }
+
+        const passwordGuardado = sanitizePassword(vendedor.usuario.password);
+        let isValidPassword = false;
+
+        if (isBcryptHash(passwordGuardado)) {
+            isValidPassword = await bcrypt.compare(passwordNormalizado, passwordGuardado);
+        } else {
+            isValidPassword = passwordGuardado === passwordNormalizado;
+            if (isValidPassword) {
+                const passwordHasheado = await bcrypt.hash(passwordNormalizado, SALT_ROUNDS);
+                await vendedor.usuario.update({ password: passwordHasheado });
+            }
+        }
+
+        if (!isValidPassword) {
+            return { success: false, status: 401, message: 'Código o contraseña no válidos' };
+        }
+
         return {
-            success: false,
-            status: 401,
-            message: 'Código o contraseña no válidos'
+            success: true,
+            status: 200,
+            data: {
+                message: 'Autenticación exitosa',
+                vendedor: buildVendedorPayload(vendedor)
+            }
         };
     }
 
-    if (vendedor.usuario.estado === false) {
-        return {
-            success: false,
-            status: 403,
-            message: 'Usuario inactivo'
-        };
+    // Intento 2: fallback para usuarios sin vendedor (admin, supervisor, etc.)
+    if (!usernameNormalizado) {
+        return { success: false, status: 401, message: 'Código o contraseña no válidos' };
     }
 
-    const passwordGuardado = sanitizePassword(vendedor.usuario.password);
+    const usuarioDirecto = await usuario_model.findOne({
+        where: { username: usernameNormalizado },
+        include: [{ model: rol_model, as: 'rol' }]
+    });
 
-    let isValidPassword = false;
+    if (!usuarioDirecto) {
+        return { success: false, status: 401, message: 'Código o contraseña no válidos' };
+    }
 
-    if (isBcryptHash(passwordGuardado)) {
-        isValidPassword = await bcrypt.compare(passwordNormalizado, passwordGuardado);
+    if (usuarioDirecto.estado === false) {
+        return { success: false, status: 403, message: 'Usuario inactivo' };
+    }
+
+    const passwordGuardadoDirecto = sanitizePassword(usuarioDirecto.password);
+    let isValidPasswordDirecto = false;
+
+    if (isBcryptHash(passwordGuardadoDirecto)) {
+        isValidPasswordDirecto = await bcrypt.compare(passwordNormalizado, passwordGuardadoDirecto);
     } else {
-        isValidPassword = passwordGuardado === passwordNormalizado;
-
-        if (isValidPassword) {
+        isValidPasswordDirecto = passwordGuardadoDirecto === passwordNormalizado;
+        if (isValidPasswordDirecto) {
             const passwordHasheado = await bcrypt.hash(passwordNormalizado, SALT_ROUNDS);
-            await vendedor.usuario.update({ password: passwordHasheado });
+            await usuarioDirecto.update({ password: passwordHasheado });
         }
     }
 
-    if (!isValidPassword) {
-        return {
-            success: false,
-            status: 401,
-            message: 'Código o contraseña no válidos'
-        };
+    if (!isValidPasswordDirecto) {
+        return { success: false, status: 401, message: 'Código o contraseña no válidos' };
     }
 
     return {
@@ -102,7 +147,7 @@ const login = async ({ codigo, username, password }) => {
         status: 200,
         data: {
             message: 'Autenticación exitosa',
-            vendedor: buildVendedorPayload(vendedor)
+            vendedor: buildUsuarioPayload(usuarioDirecto)
         }
     };
 };
