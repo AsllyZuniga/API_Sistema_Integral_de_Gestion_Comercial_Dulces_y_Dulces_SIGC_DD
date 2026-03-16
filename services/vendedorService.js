@@ -62,10 +62,56 @@ const assignSupervisor = async (idVendedor, idSupervisor) => {
     return { data: await getById(vendedor.id_vendedor) };
 };
 
+const assignSupervisorBulk = async ({ id_supervisor, vendedores }) => {
+    const listaVendedores = Array.isArray(vendedores) ? vendedores : [];
+
+    if (!listaVendedores.length) {
+        return {
+            error: 'EMPTY_VENDEDORES_LIST',
+            message: 'Debe enviar al menos un vendedor para asignar supervisor'
+        };
+    }
+
+    const resultados = [];
+
+    for (const vendedorRef of listaVendedores) {
+        const resultado = await assignSupervisor(vendedorRef, id_supervisor);
+
+        if (resultado?.error) {
+            resultados.push({
+                vendedor: String(vendedorRef || '').trim(),
+                estado: 'error',
+                error: resultado.error
+            });
+            continue;
+        }
+
+        resultados.push({
+            vendedor: String(vendedorRef || '').trim(),
+            estado: 'ok',
+            id_vendedor: resultado.data?.id_vendedor || null,
+            id_supervisor: resultado.data?.id_supervisor ?? id_supervisor
+        });
+    }
+
+    const exitosos = resultados.filter((item) => item.estado === 'ok').length;
+    const fallidos = resultados.length - exitosos;
+
+    return {
+        data: {
+            total: resultados.length,
+            exitosos,
+            fallidos,
+            resultados
+        }
+    };
+};
+
 module.exports = {
     getAll,
     getById,
     create,
     updateById,
-    assignSupervisor
+    assignSupervisor,
+    assignSupervisorBulk
 };

@@ -87,5 +87,22 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async assignSupervisorBulk(req, res) {
+        try {
+            const resultado = await vendedorService.assignSupervisorBulk({
+                id_supervisor: req.body.id_supervisor,
+                vendedores: req.body.vendedores
+            });
+
+            if (resultado?.error === 'EMPTY_VENDEDORES_LIST') {
+                return res.status(400).send({ message: resultado.message });
+            }
+
+            return res.status(200).send(resultado.data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };
