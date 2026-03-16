@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const crypto = require('crypto');
 const { Op } = require('sequelize');
 
 class ImportadorVentasOptimizado {
@@ -58,9 +59,50 @@ class ImportadorVentasOptimizado {
             obsequios: new Map()
         };
 
+        this.archivosEnProceso = new Set();
+        this.archivosImportados = new Set();
+
         this.BATCH_INSERT_SIZE = 10000;
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 5000;
+
+        this.COLUMNAS_REQUERIDAS = [
+            'LINEA',
+            'MEGACATEGORIA',
+            'CATEGORIA',
+            'SUBCATEGORIA',
+            'CANAL',
+            'SUBCANAL',
+            'Desc. ciudad',
+            'Barrio',
+            'TIPO DE NEGOCIO',
+            'DETALLE TIPO DE NEGOCIO',
+            'Nro documento',
+            'Codigo vendedor',
+            'Nombre vendedor',
+            'Cliente factura',
+            'Razon social cliente factura',
+            'Sucursal factura',
+            'Direccion 1',
+            'Item',
+            'Desc. item',
+            'Cantidad emp.',
+            'Factor U.M. emp.',
+            'Factor U.M. Orden',
+            'Peso en KILO',
+            'REPORTE PROV CON OBS',
+            'Valor bruto',
+            'Valor descuentos',
+            'Valor impuestos',
+            'Valor neto',
+            'Valor subtotal',
+            'Margen promedio',
+            'Impuesto afecta margen',
+            'Cond. pago fact',
+            'Fecha',
+            'Cantidad',
+            'Costo promedio total'
+        ];
 
         this.verbose = false;
 
@@ -130,6 +172,51 @@ class ImportadorVentasOptimizado {
             registro[encabezado.trim()] = valores[index] ? valores[index].trim() : '';
         });
         return registro;
+    }
+
+    validarEncabezados(encabezados) {
+        const normalizar = (texto) => String(texto || '').trim().toLowerCase();
+        const encabezadosNormalizados = new Set(encabezados.map(normalizar));
+
+        const faltantes = this.COLUMNAS_REQUERIDAS
+            .filter((columna) => !encabezadosNormalizados.has(normalizar(columna)));
+
+        if (faltantes.length > 0) {
+            throw new Error(
+                `Faltan columnas requeridas en el archivo: ${faltantes.join(', ')}. ` +
+                `Columnas esperadas: ${this.COLUMNAS_REQUERIDAS.join(', ')}`
+            );
+        }
+    }
+
+    validarArchivoTxt(rutaArchivo) {
+        const extension = path.extname(String(rutaArchivo || '')).toLowerCase();
+
+        if (extension !== '.txt') {
+            throw new Error('El archivo seleccionado no es válido. Solo se permiten archivos con extensión .txt');
+        }
+    }
+
+    async obtenerHashArchivo(rutaArchivo) {
+        return await new Promise((resolve, reject) => {
+            const hash = crypto.createHash('sha256');
+            const stream = fs.createReadStream(rutaArchivo);
+
+            stream.on('data', (chunk) => hash.update(chunk));
+            stream.on('end', () => resolve(hash.digest('hex')));
+            stream.on('error', (error) => reject(error));
+        });
+    }
+
+    async validarArchivoNoDuplicado(rutaArchivo) {
+        const hashArchivo = await this.obtenerHashArchivo(rutaArchivo);
+
+        if (this.archivosEnProceso.has(hashArchivo) || this.archivosImportados.has(hashArchivo)) {
+            throw new Error('El archivo seleccionado ya fue cargado previamente en esta importación. No se permite importar el mismo archivo dos veces para evitar duplicados.');
+        }
+
+        this.archivosEnProceso.add(hashArchivo);
+        return hashArchivo;
     }
 
     async precargaDatos() {
@@ -535,9 +622,13 @@ class ImportadorVentasOptimizado {
 
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
+        let hashArchivo = null;
 
         try {
             console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
+
+            this.validarArchivoTxt(rutaArchivo);
+            hashArchivo = await this.validarArchivoNoDuplicado(rutaArchivo);
 
             await this.precargaDatos();
 
@@ -557,6 +648,7 @@ class ImportadorVentasOptimizado {
 
                 if (esEncabezado) {
                     encabezados = linea.split('\t').map(h => h.trim());
+                    this.validarEncabezados(encabezados);
                     esEncabezado = false;
                     console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
                     continue;
@@ -575,10 +667,15 @@ class ImportadorVentasOptimizado {
             }
 
             this.estadisticas.tiempoFin = Date.now();
+            this.archivosEnProceso.delete(hashArchivo);
+            this.archivosImportados.add(hashArchivo);
             this.mostrarResumen();
             return this.estadisticas;
 
         } catch (error) {
+            if (hashArchivo) {
+                this.archivosEnProceso.delete(hashArchivo);
+            }
             console.error("\n❌ Error crítico en importación:", error);
             throw error;
         }
