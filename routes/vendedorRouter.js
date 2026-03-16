@@ -6,5 +6,6 @@ router.get('/:id', vendedorController.getById);
 router.post('/', vendedorController.add);
 router.put('/:id', vendedorController.update);
 router.put('/:id/asignar-supervisor', vendedorController.assignSupervisor);
+router.put('/:id/quitar-supervisor', vendedorController.removeSupervisor);
 router.put('/asignar-supervisor-masivo', vendedorController.assignSupervisorBulk);
 module.exports = router;

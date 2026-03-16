@@ -58,9 +58,21 @@ const assignSupervisor = async (idVendedor, idSupervisor) => {
         return { error: 'USUARIO_NOT_SUPERVISOR' };
     }
 
+    if (
+        vendedor.id_supervisor &&
+        Number(vendedor.id_supervisor) !== Number(idSupervisor)
+    ) {
+        return {
+            error: 'VENDEDOR_ALREADY_ASSIGNED_TO_OTHER_SUPERVISOR',
+            currentSupervisorId: vendedor.id_supervisor
+        };
+    }
+
     await vendedor.update({ id_supervisor: idSupervisor });
     return { data: await getById(vendedor.id_vendedor) };
 };
+
+const removeSupervisor = async (idVendedor) => assignSupervisor(idVendedor, null);
 
 const assignSupervisorBulk = async ({ id_supervisor, vendedores }) => {
     const listaVendedores = Array.isArray(vendedores) ? vendedores : [];
@@ -113,5 +125,6 @@ module.exports = {
     create,
     updateById,
     assignSupervisor,
+    removeSupervisor,
     assignSupervisorBulk
 };
