@@ -45,6 +45,19 @@ module.exports = sequelize => {
         model: "usuario"
       }
     },
+    id_supervisor: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      comment: null,
+      primaryKey: false,
+      field: "id_supervisor",
+      autoIncrement: false,
+      references: {
+        key: "id_usuario",
+        model: "usuario"
+      }
+    },
     id_cuotaMes: {
       type: DataTypes.INTEGER,
       allowNull: true,

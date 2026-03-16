@@ -62,5 +62,68 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async assignSupervisor(req, res) {
+        try {
+            const resultado = await vendedorService.assignSupervisor(
+                req.params.id,
+                req.body.id_supervisor
+            );
+
+            if (resultado?.error === 'VENDEDOR_NOT_FOUND') {
+                return res.status(404).send({ message: 'vendedor Not Found' });
+            }
+
+            if (resultado?.error === 'SUPERVISOR_NOT_FOUND') {
+                return res.status(404).send({ message: 'supervisor Not Found' });
+            }
+
+            if (resultado?.error === 'USUARIO_NOT_SUPERVISOR') {
+                return res.status(400).send({ message: 'El usuario indicado no tiene rol de supervisor' });
+            }
+
+            if (resultado?.error === 'VENDEDOR_ALREADY_ASSIGNED_TO_OTHER_SUPERVISOR') {
+                return res.status(409).send({
+                    message: 'El vendedor ya está asignado a otro supervisor. Primero debe quitar el supervisor actual para reasignar.',
+                    id_supervisor_actual: resultado.currentSupervisorId
+                });
+            }
+
+            return res.status(200).send(resultado.data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async assignSupervisorBulk(req, res) {
+        try {
+            const resultado = await vendedorService.assignSupervisorBulk({
+                id_supervisor: req.body.id_supervisor,
+                vendedores: req.body.vendedores
+            });
+
+            if (resultado?.error === 'EMPTY_VENDEDORES_LIST') {
+                return res.status(400).send({ message: resultado.message });
+            }
+
+            return res.status(200).send(resultado.data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async removeSupervisor(req, res) {
+        try {
+            const resultado = await vendedorService.removeSupervisor(req.params.id);
+
+            if (resultado?.error === 'VENDEDOR_NOT_FOUND') {
+                return res.status(404).send({ message: 'vendedor Not Found' });
+            }
+
+            return res.status(200).send(resultado.data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };
