@@ -182,6 +182,44 @@ const getCuotaMesGlobal = async (filters = {}) => {
     return toNumber(row?.cuota_mes);
 };
 
+const getCuotaMesPorVendedor = async (codigoVendedor, filters = {}) => {
+    const replacements = {
+        codigoVendedor: String(codigoVendedor || '').trim()
+    };
+
+    const conditions = ['cm.id_usuario = vd.id_usuario'];
+
+    if (filters.fechaInicio) {
+        conditions.push('cm.fecha_fin >= :cuotaFechaInicio');
+        replacements.cuotaFechaInicio = filters.fechaInicio;
+    }
+
+    if (filters.fechaFin) {
+        conditions.push('cm.fecha_inicio <= :cuotaFechaFin');
+        replacements.cuotaFechaFin = filters.fechaFin;
+    }
+
+    const row = await sequelize.query(`
+        SELECT COALESCE(cm.cuota_mes, 0) AS cuota_mes
+        FROM vendedor vd
+        LEFT JOIN LATERAL (
+            SELECT cm.cuota_mes
+            FROM "cuotaMes" cm
+            WHERE ${conditions.join(' AND ')}
+            ORDER BY cm.fecha_fin DESC NULLS LAST, cm."id_cuotaMes" DESC
+            LIMIT 1
+        ) cm ON true
+        WHERE vd.codigo_vendedor = :codigoVendedor
+        LIMIT 1
+    `, {
+        replacements,
+        type: QueryTypes.SELECT,
+        plain: true
+    });
+
+    return toNumber(row?.cuota_mes);
+};
+
 const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
     return rows.map((row) => {
         const cuotaMes = toNumber(row.cuota_mes);
@@ -303,8 +341,10 @@ const getCumplimientoMes = async (filters = {}) => {
 };
 
 const getCumplimientoPorCodigo = async (codigo, filters = {}) => {
-    const data = await getCumplimientoMes({ ...filters, vendedor: codigo });
-    return data.find((row) => row.codVendedor === codigo) || null;
+    const data = await getCumplimientoMesFront({ ...filters, vendedor: codigo });
+    const codigoNormalizado = String(codigo || '').trim();
+
+    return data.detalle.find((row) => String(row.codVendedor || '').trim() === codigoNormalizado) || null;
 };
 
 const getCumplimientoMesFront = async (filters = {}) => {
@@ -421,15 +461,15 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     });
 
     const { diasCorridos, diasHabiles } = await getRangoDias(filters);
-    const cuotaMesGlobal = await getCuotaMesGlobal(filters);
+    const cuotaMesVendedor = await getCuotaMesPorVendedor(codigoVendedor, filters);
 
     return {
         codigoVendedor,
         detallePorLinea: detallePorLinea.map((row) => {
             const ventaAcum = toNumber(row.venta);
             const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
-            const porcCump = cuotaMesGlobal > 0 ? (ventaAcum / cuotaMesGlobal) * 100 : 0;
-            const porcCumProy = cuotaMesGlobal > 0 ? (proyeccionVenta / cuotaMesGlobal) * 100 : 0;
+            const porcCump = cuotaMesVendedor > 0 ? (ventaAcum / cuotaMesVendedor) * 100 : 0;
+            const porcCumProy = cuotaMesVendedor > 0 ? (proyeccionVenta / cuotaMesVendedor) * 100 : 0;
 
             return {
                 codigoLinea: row.codigo_linea,
@@ -524,15 +564,15 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
     });
 
     const { diasCorridos, diasHabiles } = await getRangoDias(filters);
-    const cuotaMesGlobal = await getCuotaMesGlobal(filters);
+    const cuotaMesVendedor = await getCuotaMesPorVendedor(codigoVendedor, filters);
 
     return {
         codigoVendedor,
         detallePorCiudad: detallePorCiudad.map((row) => {
             const ventaAcum = toNumber(row.venta);
             const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
-            const porcCump = cuotaMesGlobal > 0 ? (ventaAcum / cuotaMesGlobal) * 100 : 0;
-            const porcCumProy = cuotaMesGlobal > 0 ? (proyeccionVenta / cuotaMesGlobal) * 100 : 0;
+            const porcCump = cuotaMesVendedor > 0 ? (ventaAcum / cuotaMesVendedor) * 100 : 0;
+            const porcCumProy = cuotaMesVendedor > 0 ? (proyeccionVenta / cuotaMesVendedor) * 100 : 0;
 
             return {
                 ciudad: row.ciudad,
