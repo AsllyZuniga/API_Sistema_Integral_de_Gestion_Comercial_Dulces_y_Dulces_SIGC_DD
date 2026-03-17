@@ -30,6 +30,7 @@ var rango_diasRouter = require("./routes/rango_diasRouter");
 var cumplimientoMesRouter = require("./routes/cumplimientoMesRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
+const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 
 
 
@@ -38,6 +39,8 @@ const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRou
 
 var cors = require('cors');
 var app = express();
+
+startRangoDiasScheduler();
 
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
