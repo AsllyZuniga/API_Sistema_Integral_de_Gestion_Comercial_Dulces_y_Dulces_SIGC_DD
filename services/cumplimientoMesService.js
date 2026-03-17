@@ -1,5 +1,6 @@
 const { QueryTypes, Op } = require('sequelize');
 const { sequelize, rango_dias_model } = require('../models');
+const { getResumenPeriodoLaboral } = require('../utils/calendarioLaboralColombia');
 
 const round = (value, decimals = 2) => {
     const factor = 10 ** decimals;
@@ -7,6 +8,56 @@ const round = (value, decimals = 2) => {
 };
 
 const toNumber = (value) => Number(value || 0);
+
+const toDateOnly = (value) => {
+    const date = value ? new Date(value) : new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
+
+const formatDateOnly = (date) => date.toISOString().slice(0, 10);
+
+const getMonthRange = (baseDate = new Date()) => {
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const start = new Date(year, month, 1);
+    const end = new Date(year, month + 1, 0);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return { start, end };
+};
+
+const normalizePeriodFilters = (filters = {}) => {
+    if (filters.fechaInicio && filters.fechaFin) {
+        return {
+            ...filters,
+            fechaInicio: formatDateOnly(toDateOnly(filters.fechaInicio)),
+            fechaFin: formatDateOnly(toDateOnly(filters.fechaFin))
+        };
+    }
+
+    const base = filters.fechaInicio ? toDateOnly(filters.fechaInicio) : new Date();
+    const { start, end } = getMonthRange(base);
+
+    return {
+        ...filters,
+        fechaInicio: formatDateOnly(start),
+        fechaFin: formatDateOnly(end)
+    };
+};
+
+const calculateRangoFromPeriod = (fechaInicio, fechaFin) => {
+    const resumen = getResumenPeriodoLaboral({
+        fechaInicio,
+        fechaFin,
+        fechaCorte: new Date()
+    });
+
+    return {
+        diasCorridos: toNumber(resumen.dias_corridos),
+        diasHabiles: toNumber(resumen.dias_habiles)
+    };
+};
 
 const buildVentasFilters = (filters = {}, replacements = {}) => {
     const conditions = [];
@@ -79,15 +130,19 @@ const getRangoDias = async (filters = {}) => {
         where.fecha_fin = { [Op.gte]: today };
     }
 
-    let rango = await rango_dias_model.findOne({
+    const rango = await rango_dias_model.findOne({
         where,
         order: [['fecha_fin', 'DESC']]
     });
 
     if (!rango) {
-        rango = await rango_dias_model.findOne({
-            order: [['fecha_fin', 'DESC']]
-        });
+        if (filters.fechaInicio && filters.fechaFin) {
+            return calculateRangoFromPeriod(filters.fechaInicio, filters.fechaFin);
+        }
+
+        const today = new Date();
+        const { start, end } = getMonthRange(today);
+        return calculateRangoFromPeriod(start, end);
     }
 
     return {
@@ -172,6 +227,24 @@ const addTotalsRow = (rows, diasCorridos, diasHabiles) => {
     ];
 };
 
+const buildTotales = (rows, diasCorridos, diasHabiles) => {
+    const totalCuota = rows.reduce((acc, row) => acc + toNumber(row.cuotaMes), 0);
+    const totalVenta = rows.reduce((acc, row) => acc + toNumber(row.ventaAcum), 0);
+    const totalCumplimiento = totalCuota > 0 ? (totalVenta / totalCuota) * 100 : 0;
+    const totalProyeccion = diasCorridos > 0 ? (totalVenta / diasCorridos) * diasHabiles : 0;
+    const totalCumplimientoProyectado = totalCuota > 0 ? (totalProyeccion / totalCuota) * 100 : 0;
+
+    return {
+        cuotaMes: round(totalCuota, 2),
+        ventaAcum: round(totalVenta, 2),
+        porcCump: round(totalCumplimiento, 2),
+        proyeccionVenta: round(totalProyeccion, 2),
+        porcCumProy: round(totalCumplimientoProyectado, 2),
+        dias_corridos: diasCorridos,
+        dias_habiles: diasHabiles
+    };
+};
+
 const getCumplimientoMes = async (filters = {}) => {
     const replacements = {};
     const ventasWhere = buildVentasFilters(filters, replacements);
@@ -232,6 +305,69 @@ const getCumplimientoMes = async (filters = {}) => {
 const getCumplimientoPorCodigo = async (codigo, filters = {}) => {
     const data = await getCumplimientoMes({ ...filters, vendedor: codigo });
     return data.find((row) => row.codVendedor === codigo) || null;
+};
+
+const getCumplimientoMesFront = async (filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
+    const replacements = {};
+    const ventasWhere = buildVentasFilters(normalizedFilters, replacements);
+    const vendedorFilter = buildVendedorFilter(normalizedFilters, replacements);
+
+    const cuotaConditions = ['cm.id_usuario = vd.id_usuario'];
+    if (normalizedFilters.fechaInicio) {
+        cuotaConditions.push('cm.fecha_fin >= :cuotaFechaInicio');
+        replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
+    }
+    if (normalizedFilters.fechaFin) {
+        cuotaConditions.push('cm.fecha_inicio <= :cuotaFechaFin');
+        replacements.cuotaFechaFin = normalizedFilters.fechaFin;
+    }
+
+    const query = `
+        WITH ventas_filtradas AS (
+            SELECT
+                v.id_vendedor,
+                SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta_acum
+            FROM venta v
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            ${ventasWhere}
+            GROUP BY v.id_vendedor
+        )
+        SELECT
+            vd.codigo_vendedor AS cod,
+            vd.nombre AS vendedor,
+            COALESCE(cv.cuota_mes, 0) AS cuota_mes,
+            COALESCE(vf.venta_acum, 0) AS venta_acum
+        FROM vendedor vd
+        LEFT JOIN LATERAL (
+            SELECT cm.cuota_mes
+            FROM "cuotaMes" cm
+            WHERE ${cuotaConditions.join(' AND ')}
+            ORDER BY cm.fecha_fin DESC NULLS LAST, cm."id_cuotaMes" DESC
+            LIMIT 1
+        ) cv ON true
+        LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
+        WHERE (COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        ${vendedorFilter}
+        ORDER BY vd.nombre ASC
+    `;
+
+    const rows = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
+    const detalle = enrichCumplimiento(rows, diasCorridos, diasHabiles);
+
+    return {
+        periodo: {
+            fechaInicio: normalizedFilters.fechaInicio,
+            fechaFin: normalizedFilters.fechaFin
+        },
+        detalle,
+        totales: buildTotales(detalle, diasCorridos, diasHabiles)
+    };
 };
 
 const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
@@ -479,6 +615,7 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
 
 module.exports = {
     getCumplimientoMes,
+    getCumplimientoMesFront,
     getCumplimientoPorCodigo,
     getLineasPorVendedor,
     getLineaEspecificaPorVendedor,
