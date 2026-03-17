@@ -2,7 +2,12 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { importarVentas, importarVentasConArchivo, verificarEstado } = require('../controllers/importController');
+const {
+    importarVentas,
+    importarVentasConArchivo,
+    verificarEstado,
+    importarCuotasConArchivo
+} = require('../controllers/importController');
 
 /**
  * Configurar multer para manejar uploads de TSV
@@ -36,6 +41,20 @@ const upload = multer({
     }
 });
 
+const uploadCsvOnly = multer({
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (ext !== '.csv') {
+            return cb(new Error('Para cuotas solo se permiten archivos .csv'));
+        }
+        cb(null, true);
+    },
+    limits: {
+        fileSize: 5000 * 1024 * 1024 // Máximo 5GB
+    }
+});
+
 /**
  * Rutas para importación de datos
  */
@@ -48,5 +67,8 @@ router.post('/ventas/upload', upload.single('archivo'), importarVentasConArchivo
 
 // Importar ventas desde ruta en servidor (Node.js)
 router.post('/ventas', importarVentas);
+
+// Importar cuotas desde archivo CSV cargado (Postman/Frontend)
+router.post('/cuotas/upload', uploadCsvOnly.single('archivo'), importarCuotasConArchivo);
 
 module.exports = router;

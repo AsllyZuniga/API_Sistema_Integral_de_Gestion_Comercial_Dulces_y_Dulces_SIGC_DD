@@ -1,4 +1,5 @@
 const ImportadorVentasOptimizado = require('../services/importventas-optimizado');
+const importCuotasService = require('../services/importCuotas');
 const models = require('../models');
 const fs = require('fs');
 const path = require('path');
@@ -217,8 +218,68 @@ async function verificarEstado(req, res) {
     }
 }
 
+/**
+ * POST /import/cuotas/upload
+ * Importa cuotas (día/semana/mes) desde un archivo CSV cargado vía multipart/form-data
+ */
+async function importarCuotasConArchivo(req, res) {
+    let archivoProcesado = null;
+
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                error: 'Archivo requerido',
+                mensaje: 'Debes adjuntar un archivo CSV en el campo "archivo"'
+            });
+        }
+
+        const extension = path.extname(req.file.originalname || '').toLowerCase();
+        if (extension !== '.csv') {
+            return res.status(400).json({
+                error: 'Tipo de archivo inválido',
+                mensaje: 'Para este endpoint solo se permiten archivos .csv'
+            });
+        }
+
+        const rutaArchivo = req.file.path;
+        const nombreArchivo = req.file.originalname;
+        const tamanoMB = (req.file.size / (1024 * 1024)).toFixed(2);
+        const yearInput = req.body.year;
+
+        archivoProcesado = rutaArchivo;
+
+        const options = {};
+        if (yearInput !== undefined && yearInput !== null && String(yearInput).trim() !== '') {
+            options.year = Number(yearInput);
+        }
+
+        const resultado = await importCuotasService.importFromFile(rutaArchivo, options);
+
+        if (archivoProcesado && fs.existsSync(archivoProcesado)) {
+            fs.unlinkSync(archivoProcesado);
+        }
+
+        return res.status(200).json({
+            mensaje: 'Importación de cuotas completada exitosamente',
+            archivo: nombreArchivo,
+            tamano_mb: parseFloat(tamanoMB),
+            resumen: resultado
+        });
+    } catch (error) {
+        if (archivoProcesado && fs.existsSync(archivoProcesado)) {
+            fs.unlinkSync(archivoProcesado);
+        }
+
+        return res.status(500).json({
+            error: 'Error en la importación de cuotas',
+            mensaje: error.message
+        });
+    }
+}
+
 module.exports = {
     importarVentas,
     importarVentasConArchivo,
-    verificarEstado
+    verificarEstado,
+    importarCuotasConArchivo
 };

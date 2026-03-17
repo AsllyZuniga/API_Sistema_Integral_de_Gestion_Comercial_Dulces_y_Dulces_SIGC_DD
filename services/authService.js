@@ -1,6 +1,7 @@
 const { vendedor_model, usuario_model, rol_model, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const { signAuthToken, DEFAULT_EXPIRES_IN } = require('../utils/jwt');
 
 const SALT_ROUNDS = 10;
 
@@ -40,6 +41,14 @@ const buildUsuarioPayload = (usuario) => ({
             nombre: normalizeText(usuario.rol.nombre)
         }
         : null
+});
+
+const buildAuthTokenPayload = (userPayload) => ({
+    idUsuario: userPayload.idUsuario,
+    idVendedor: userPayload.idVendedor,
+    codVendedor: userPayload.codVendedor || null,
+    username: userPayload.username || null,
+    rol: userPayload.rol?.idRol || null
 });
 
 const login = async ({ codigo, username, password }) => {
@@ -97,12 +106,18 @@ const login = async ({ codigo, username, password }) => {
             return { success: false, status: 401, message: 'Código o contraseña no válidos' };
         }
 
+        const payloadVendedor = buildVendedorPayload(vendedor);
+        const token = signAuthToken(buildAuthTokenPayload(payloadVendedor));
+
         return {
             success: true,
             status: 200,
             data: {
                 message: 'Autenticación exitosa',
-                vendedor: buildVendedorPayload(vendedor)
+                vendedor: payloadVendedor,
+                token,
+                tokenType: 'Bearer',
+                expiresIn: DEFAULT_EXPIRES_IN
             }
         };
     }
@@ -142,12 +157,18 @@ const login = async ({ codigo, username, password }) => {
         return { success: false, status: 401, message: 'Código o contraseña no válidos' };
     }
 
+    const payloadUsuario = buildUsuarioPayload(usuarioDirecto);
+    const token = signAuthToken(buildAuthTokenPayload(payloadUsuario));
+
     return {
         success: true,
         status: 200,
         data: {
             message: 'Autenticación exitosa',
-            vendedor: buildUsuarioPayload(usuarioDirecto)
+            vendedor: payloadUsuario,
+            token,
+            tokenType: 'Bearer',
+            expiresIn: DEFAULT_EXPIRES_IN
         }
     };
 };
