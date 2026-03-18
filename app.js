@@ -76,7 +76,7 @@ app.use("/detalle_venta", detalle_ventaRouter);
 app.use("/items", itemRouter);
 app.use("/megacategoria", megacategoriaRouter);
 app.use("/obsequio", obsequioRouter);
-app.use("/proveedore", proveedorRouter);
+app.use("/proveedor", proveedorRouter);
 app.use("/roles", rolRouter);
 app.use("/subcanale", subcanalRouter);
 app.use("/subcategoria", subcategoriaRouter);
