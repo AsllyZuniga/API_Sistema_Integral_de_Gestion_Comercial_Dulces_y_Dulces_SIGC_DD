@@ -28,6 +28,7 @@ var vendedorRouter = require("./routes/vendedorRouter");
 var ventaRouter = require("./routes/ventaRouter");
 var rango_diasRouter = require("./routes/rango_diasRouter");
 var cumplimientoMesRouter = require("./routes/cumplimientoMesRouter");
+var cumplimientoSemanaRouter = require("./routes/cumplimientoSemanaRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
@@ -87,6 +88,7 @@ app.use("/vendedor", vendedorRouter);
 app.use("/venta", ventaRouter);
 app.use("/rango-dias", rango_diasRouter);
 app.use('/mes/cumplimiento', cumplimientoMesRouter);
+app.use('/semana/cumplimiento', cumplimientoSemanaRouter);
 app.use('/import', importRouter);
 app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 
