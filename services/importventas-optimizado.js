@@ -3,6 +3,8 @@ const path = require('path');
 const readline = require('readline');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
+const parse = require('csv-parse/sync').parse;
+const iconv = require('iconv-lite');
 
 class ImportadorVentasOptimizado {
     constructor(sequelize, models) {
@@ -173,13 +175,40 @@ class ImportadorVentasOptimizado {
         return { nombre: null, consecutivo: null };
     }
 
-    parsearLinea(linea, encabezados) {
-        const valores = linea.split('\t');
+    parsearLinea(linea, encabezados, delimitador = '\t') {
+        // Manejar comillas en CSV
+        let valores;
+        if (delimitador === ',') {
+            // Separar por coma, respetando comillas
+            valores = this.parseCSVLine(linea);
+        } else {
+            valores = linea.split(delimitador);
+        }
         const registro = {};
         encabezados.forEach((encabezado, index) => {
             registro[encabezado.trim()] = valores[index] ? valores[index].trim() : '';
         });
         return registro;
+    }
+
+    // Simple CSV parser for a line (handles quoted commas)
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result;
     }
 
     validarEncabezados(encabezados) {
@@ -197,12 +226,12 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    validarArchivoTxt(rutaArchivo) {
+    validarArchivoPlano(rutaArchivo) {
         const extension = path.extname(String(rutaArchivo || '')).toLowerCase();
-
-        if (extension !== '.txt') {
-            throw new Error('El archivo seleccionado no es válido. Solo se permiten archivos con extensión .txt');
+        if (extension !== '.txt' && extension !== '.csv' && extension !== '.tsv') {
+            throw new Error('El archivo seleccionado no es válido. Solo se permiten archivos con extensión .txt, .csv o .tsv');
         }
+        return extension;
     }
 
     async obtenerHashArchivo(rutaArchivo) {
@@ -642,55 +671,72 @@ class ImportadorVentasOptimizado {
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
         let hashArchivo = null;
-
         try {
             console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
-
-            this.validarArchivoTxt(rutaArchivo);
+            const extension = this.validarArchivoPlano(rutaArchivo);
             hashArchivo = await this.validarArchivoNoDuplicado(rutaArchivo);
-
             await this.precargaDatos();
-
-            const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
-
-            const rl = readline.createInterface({
-                input: fileStream,
-                crlfDelay: Infinity
-            });
-
-            let encabezados = [];
-            let batch = [];
-            let esEncabezado = true;
-
-            for await (const linea of rl) {
-                if (!linea || linea.trim() === '') continue;
-
-                if (esEncabezado) {
-                    encabezados = linea.split('\t').map(h => h.trim());
-                    this.validarEncabezados(encabezados);
-                    esEncabezado = false;
-                    console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
-                    continue;
+            if (extension === '.csv') {
+                // Leer el archivo como buffer para detectar y convertir encoding
+                let contenido = fs.readFileSync(rutaArchivo);
+                // Detectar si es UTF-8 o ISO-8859-1 (Latin-1)
+                // Por simplicidad, intentamos decodificar como UTF-8 y si hay caracteres inválidos, usamos Latin-1
+                let texto;
+                try {
+                    texto = contenido.toString('utf8');
+                    // Si contiene caracteres de reemplazo, probablemente no es UTF-8
+                    if (texto.includes('�')) {
+                        texto = iconv.decode(contenido, 'latin1');
+                    }
+                } catch (e) {
+                    texto = iconv.decode(contenido, 'latin1');
                 }
-
-                batch.push(linea);
-
-                if (batch.length >= this.BATCH_INSERT_SIZE) {
-                    await this.procesarBatch(batch, encabezados);
-                    batch = [];
+                const registros = parse(texto, { columns: true, skip_empty_lines: true });
+                const encabezados = Object.keys(registros[0] || {});
+                this.validarEncabezados(encabezados);
+                // Procesar en batches
+                let batch = [];
+                for (const fila of registros) {
+                    batch.push(fila);
+                    if (batch.length >= this.BATCH_INSERT_SIZE) {
+                        await this.procesarBatchCSV(batch, encabezados);
+                        batch = [];
+                    }
+                }
+                if (batch.length > 0) {
+                    await this.procesarBatchCSV(batch, encabezados);
+                }
+            } else {
+                // TXT o TSV: igual que antes
+                const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
+                let delimitador = '\t';
+                if (extension === '.tsv') delimitador = '\t';
+                const rl = readline.createInterface({
+                    input: fileStream,
+                    crlfDelay: Infinity
+                });
+                let encabezados = [];
+                let batch = [];
+                let esEncabezado = true;
+                for await (const linea of rl) {
+                    if (!linea || linea.trim() === '') continue;
+                    if (esEncabezado) {
+                        encabezados = linea.split(delimitador).map(h => h.trim());
+                        this.validarEncabezados(encabezados);
+                        esEncabezado = false;
+                        console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
+                        continue;
+                    }
+                    batch.push(linea);
+                    if (batch.length >= this.BATCH_INSERT_SIZE) {
+                        await this.procesarBatch(batch, encabezados, delimitador);
+                        batch = [];
+                    }
+                }
+                if (batch.length > 0) {
+                    await this.procesarBatch(batch, encabezados, delimitador);
                 }
             }
-
-            if (batch.length > 0) {
-                await this.procesarBatch(batch, encabezados);
-            }
-
-            this.estadisticas.tiempoFin = Date.now();
-            this.archivosEnProceso.delete(hashArchivo);
-            this.archivosImportados.add(hashArchivo);
-            this.mostrarResumen();
-            return this.estadisticas;
-
         } catch (error) {
             if (hashArchivo) {
                 this.archivosEnProceso.delete(hashArchivo);
@@ -699,38 +745,22 @@ class ImportadorVentasOptimizado {
             throw error;
         }
     }
-
-    mostrarResumen() {
-        const tiempoTotal = (this.estadisticas.tiempoFin - this.estadisticas.tiempoInicio) / 1000;
-        const velocidad = (this.estadisticas.exitosas / tiempoTotal).toFixed(2);
-
-        console.log(`
-╔════════════════════════════════════════════════════════╗
-║           ✅ IMPORTACIÓN COMPLETADA                    ║
-╚════════════════════════════════════════════════════════╝
-
-📊 RESULTADOS:
-   ✅ Exitosas: ${this.estadisticas.exitosas}
-   ❌ Errores: ${this.estadisticas.errores}
-   ⏱️  Tiempo total: ${tiempoTotal.toFixed(2)}s
-   ⚡ Velocidad: ${velocidad} registros/segundo
-
-🆕 NUEVOS CREADOS:
-   • Proveedores: ${this.estadisticas.nuevosProveedores}
-   • Megacategorías: ${this.estadisticas.nuevasMegacategorias}
-   • Ventas: ${this.estadisticas.nuevasVentas}
-
-📦 PRECARGAS INICIALES:
-   • Proveedores: ${this.estadisticas.maestrosPreCargados.proveedores}
-   • Megacategorías: ${this.estadisticas.maestrosPreCargados.megacategorias}
-   • Categorías: ${this.estadisticas.maestrosPreCargados.categorias}
-   • Canales: ${this.estadisticas.maestrosPreCargados.canales}
-   • Ciudades: ${this.estadisticas.maestrosPreCargados.ciudades}
-   • Clientes: ${this.estadisticas.maestrosPreCargados.clientes}
-   • Items: ${this.estadisticas.maestrosPreCargados.items}
-
-        `);
+    // Procesa un batch de objetos (no líneas) para CSV
+    async procesarBatchCSV(filas, encabezados) {
+        // Convierte cada fila (objeto) a formato esperado por prepararDatosFila
+        for (let i = 0; i < filas.length; i++) {
+            filas[i] = this.normalizarFilaCSV(filas[i], encabezados);
+        }
+        await this.procesarBatch(filas, encabezados, ',');
     }
-}
 
-module.exports = ImportadorVentasOptimizado;
+    // Normaliza los valores de una fila CSV (quita comillas, espacios, etc.)
+    normalizarFilaCSV(fila, encabezados) {
+        const obj = {};
+        for (const key of encabezados) {
+            obj[key] = typeof fila[key] === 'string' ? fila[key].trim() : fila[key];
+        }
+        return obj;
+    }
+
+}
