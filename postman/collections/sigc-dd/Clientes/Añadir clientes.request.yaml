@@ -1,0 +1,29 @@
+$kind: http-request
+url: http://localhost:3000/clientes
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \    \"nro_documento\": \"1010\",\r
+
+    \    \"razon_social\": \"Dulces SAS\",\r
+
+    \    \"direccion\": \"Catambuco\",\r
+
+    \    \"ciudad\": \"Pasto\",\r
+
+    \    \"barrio\": \"Centro\",\r
+
+    \    \"condicion_pago\": \"Crédito 30 días\",\r
+
+    \    \"tipo_negocio\": \"Tienda Mayorista\",\r
+
+    \    \"subacanal\": \"Tradicional\",\r
+
+    \    \"subcanal_detallado\": \"Distribuidor Local\",\r
+
+    \    \"ventas\": \"15000000\"\r
+
+    }\r\n"
+order: 3000

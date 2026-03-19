@@ -1,0 +1,13 @@
+$kind: http-request
+url: http://localhost:3000/import/ventas/upload
+method: POST
+body:
+  type: formdata
+  content:
+    - type: file
+      key: archivo
+      src: postman-cloud:///1f11bc66-8d5c-4270-9bd5-fa1d27ad289d
+    - type: text
+      key: batchSize
+      value: "100"
+order: 1000

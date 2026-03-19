@@ -1,0 +1,7 @@
+$kind: http-request
+url: http://localhost:3000/semana/cumplimiento/ciudades/0550?fechaInicio=2026-02-2&fechaFin=2026-02-16
+method: GET
+queryParams:
+  fechaInicio: 2026-02-2
+  fechaFin: 2026-02-16
+order: 5000

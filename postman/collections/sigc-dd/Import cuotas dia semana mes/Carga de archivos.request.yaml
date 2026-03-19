@@ -1,0 +1,14 @@
+$kind: http-request
+url: http://localhost:3000/import/cuotas/upload
+method: POST
+queryParams:
+  - key: archivo
+    value: null
+    disabled: true
+body:
+  type: formdata
+  content:
+    - type: file
+      key: archivo
+      src: /home/felipe-rivas/Descargas/cuotaMes-semana febrero.csv
+order: 1000

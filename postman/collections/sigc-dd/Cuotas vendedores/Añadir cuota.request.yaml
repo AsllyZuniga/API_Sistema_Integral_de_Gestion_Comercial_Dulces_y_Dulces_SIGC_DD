@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:3000/cuotas_vendedores
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \    \"vendedor_id\": \"12\",\r
+
+    \    \"anio\": \"2026\",\r
+
+    \    \"mes\": \"02\",\r
+
+    \    \"cuota\": \"25000000\"\r
+
+    }\r\n"
+order: 3000

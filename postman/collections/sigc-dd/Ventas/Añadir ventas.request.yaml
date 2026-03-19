@@ -1,0 +1,27 @@
+$kind: http-request
+url: http://localhost:3000/ventas
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"tipo_documento_id\": 4,\r
+
+    \  \"numero_documento\": \"FAC-2026-0001\",\r
+
+    \  \"fecha\": \"2026-02-19\",\r
+
+    \  \"cliente_id\": 1,\r
+
+    \  \"vendedor_id\": 1,\r
+
+    \  \"sucursal\": \"001\",\r
+
+    \  \"canal\": \"Tradicional\",\r
+
+    \  \"linea\": \"Confitería\",\r
+
+    \  \"nombre_establecimiento\": \"Super Dulces\"\r
+
+    }\r\n"
+order: 3000

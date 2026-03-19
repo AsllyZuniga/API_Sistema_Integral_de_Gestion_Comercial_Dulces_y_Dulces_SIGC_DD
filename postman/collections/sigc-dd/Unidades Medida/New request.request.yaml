@@ -1,0 +1,7 @@
+$kind: http-request
+url: http://localhost:3000/unidades_medida
+method: POST
+body:
+  type: json
+  content: "{\r\n  \"codigo\": \"KG\"\r\n}\r\n"
+order: 3000

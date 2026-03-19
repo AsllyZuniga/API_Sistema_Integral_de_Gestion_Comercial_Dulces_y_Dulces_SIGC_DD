@@ -1,0 +1,7 @@
+$kind: http-request
+url: http://localhost:3000/clientes
+method: GET
+body:
+  type: json
+  content: ""
+order: 1000
