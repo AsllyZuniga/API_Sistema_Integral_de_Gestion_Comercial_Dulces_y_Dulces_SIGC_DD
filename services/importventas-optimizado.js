@@ -121,12 +121,20 @@ class ImportadorVentasOptimizado {
     }
 
     normalizarValor(valor) {
-        if (!valor) return null;
-        valor = valor.trim();
-        if (valor === '$0,00' || valor === '0' || valor === '0,00') return 0;
-        if (valor.includes('$')) valor = valor.substring(1);
+        if (valor === undefined || valor === null) return null;
+        valor = String(valor).trim();
+        // Permitir valores negativos, por ejemplo: -$1.234,56 o -1.234,56
+        // Quitar el signo y el símbolo de peso
+        let negativo = false;
+        if (valor.startsWith('-')) {
+            negativo = true;
+            valor = valor.substring(1).trim();
+        }
+        if (valor.startsWith('$')) valor = valor.substring(1);
         valor = valor.replace(/\./g, '').replace(',', '.');
-        const numero = parseFloat(valor);
+        let numero = parseFloat(valor);
+        if (negativo) numero = -numero;
+        if (valor === '0' || valor === '0,00' || valor === '$0,00') return 0;
         return isNaN(numero) ? null : numero;
     }
 
@@ -535,14 +543,25 @@ class ImportadorVentasOptimizado {
         // id_venta lo asignará procesarBatch tras el bulkCreate con returning
         const detalleData = {
             id_item: item?.id_item,
-            cantidad_emp: this.normalizarValor(fila['Cantidad emp.']) || 0,
-            cantidad: this.normalizarValor(fila['Cantidad']) || 0,
+            cantidad_emp: this.normalizarValor(fila['Cantidad emp.']),
+            cantidad: this.normalizarValor(fila['Cantidad']),
             precio_unitario: this.normalizarValor(fila['Costo promedio total']),
             costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
             descuento: this.normalizarValor(fila['Valor descuentos']),
             subtotal: this.normalizarValor(fila['Valor subtotal'])
         };
 
+        // Si es NC (Nota de Crédito), asegurarse de que los valores negativos se mantengan
+        // Puedes identificar NC por el tipo de documento o por el valor negativo en subtotal
+        // Aquí se asume que si subtotal es negativo, es NC
+        if (detalleData.subtotal < 0) {
+            // Asegurar que cantidad, valor, subtotal, etc. sean negativos si corresponde
+            if (detalleData.cantidad && detalleData.cantidad > 0) detalleData.cantidad = -Math.abs(detalleData.cantidad);
+            if (detalleData.cantidad_emp && detalleData.cantidad_emp > 0) detalleData.cantidad_emp = -Math.abs(detalleData.cantidad_emp);
+            if (detalleData.precio_unitario && detalleData.precio_unitario > 0) detalleData.precio_unitario = -Math.abs(detalleData.precio_unitario);
+            if (detalleData.costo_promedio_total && detalleData.costo_promedio_total > 0) detalleData.costo_promedio_total = -Math.abs(detalleData.costo_promedio_total);
+            if (detalleData.descuento && detalleData.descuento > 0) detalleData.descuento = -Math.abs(detalleData.descuento);
+        }
         return { ventaData, detalleData };
     }
 

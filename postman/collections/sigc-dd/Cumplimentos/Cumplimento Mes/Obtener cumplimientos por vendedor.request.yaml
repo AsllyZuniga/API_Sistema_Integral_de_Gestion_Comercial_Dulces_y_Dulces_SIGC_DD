@@ -1,0 +1,16 @@
+$kind: http-request
+url: http://localhost:3000/mes/cumplimiento/front/me?fechaInicio=2026-02-01&fechaFin=2026-02-28
+method: GET
+queryParams:
+  - key: vendedor
+    value: "0550"
+    disabled: true
+  - key: fechaInicio
+    value: 2026-02-01
+  - key: fechaFin
+    value: 2026-02-28
+auth:
+  type: bearer
+  credentials:
+    token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3NzM3NTYwOTIsImV4cCI6MTc3Mzc5OTI5Mn0.sQMA1WtX6HZ0S9krdkev0Z-Gt5DfP8kX2GXIKBaNBHA
+order: 2000

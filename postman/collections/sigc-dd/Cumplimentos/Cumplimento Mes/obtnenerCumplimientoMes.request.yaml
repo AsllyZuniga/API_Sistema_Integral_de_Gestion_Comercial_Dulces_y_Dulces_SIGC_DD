@@ -1,0 +1,4 @@
+$kind: http-request
+url: http://localhost:3000/cuota-mes
+method: GET
+order: 8000
