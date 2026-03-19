@@ -1,0 +1,15 @@
+$kind: http-request
+url: http://localhost:3000/categorias
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \    \"categoria\": \"Test\",\r
+
+    \    \"megacategoria\": \"test1\",\r
+
+    \    \"subcategoria\": \"test2\"\r
+
+    }"
+order: 3000

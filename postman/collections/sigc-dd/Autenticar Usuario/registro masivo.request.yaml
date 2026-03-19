@@ -1,0 +1,351 @@
+$kind: http-request
+url: http://localhost:3000/api/auth/register/bulk
+method: POST
+body:
+  type: json
+  content: |-
+    [
+      {
+        "username": "0990",
+        "password": "Urbano2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0265",
+        "password": "Segura2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0550",
+        "password": "Campo2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0275",
+        "password": "Muñoz2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0002",
+        "password": "Meneses2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0250",
+        "password": "Valencia2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0200",
+        "password": "Florez2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0235",
+        "password": "Oliva2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0240",
+        "password": "Oviedo2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0372",
+        "password": "Munos2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0128",
+        "password": "Lasso2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0361",
+        "password": "Toro2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0290",
+        "password": "Moncayo2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0301",
+        "password": "Mallama2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0241",
+        "password": "Cumbalaza2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0371",
+        "password": "Benavides2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0555",
+        "password": "Pasaje2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0245",
+        "password": "Diaz2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0225",
+        "password": "Cordoba2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0211",
+        "password": "Rojas2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0210",
+        "password": "Castro2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0085",
+        "password": "Aguirre2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0170",
+        "password": "Morales2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0300",
+        "password": "Belalcazar2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0560",
+        "password": "Ordoñez2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0086",
+        "password": "Ocaña2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0105",
+        "password": "Burbano2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0174",
+        "password": "Cuatis2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0370",
+        "password": "Muñoz2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0172",
+        "password": "Polo2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0444",
+        "password": "Claros2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0521",
+        "password": "Cisneros2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0360",
+        "password": "Rodriguez2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0266",
+        "password": "Rodriguez2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0115",
+        "password": "Pazos2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0095",
+        "password": "Montenegro2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0150",
+        "password": "De2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0070",
+        "password": "Castro2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0004",
+        "password": "Cabrera2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0127",
+        "password": "Paz2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0001",
+        "password": "Fajardo2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0126",
+        "password": "Jojoa2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0003",
+        "password": "Aguirre2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0125",
+        "password": "Castro2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0129",
+        "password": "Ospina2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0071",
+        "password": "Mallama2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0173",
+        "password": "Yama2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0180",
+        "password": "Chacon2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0445",
+        "password": "Ortega2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0460",
+        "password": "Getial2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0522",
+        "password": "Leiton2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0440",
+        "password": "Zambrano2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0455",
+        "password": "Acosta2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0520",
+        "password": "Bernal2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0420",
+        "password": "Calvache2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "0400",
+        "password": "Cordoba2026",
+        "estado": 1,
+        "id_rol": 3
+      },
+      {
+        "username": "9999",
+        "password": "Distribuidora2026",
+        "estado": 1,
+        "id_rol": 3
+      }
+    ]
+order: 4000

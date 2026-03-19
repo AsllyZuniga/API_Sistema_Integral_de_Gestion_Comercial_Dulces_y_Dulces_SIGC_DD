@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:3000/mes/cumplimiento/front?fechaInicio=2026-02-01&fechaFin=2026-02-28
+method: GET
+queryParams:
+  fechaInicio: 2026-02-01
+  fechaFin: 2026-02-28
+body:
+  type: urlencoded
+  content:
+    - key: fechaInicio
+      value: 2025-12-02
+      disabled: true
+    - key: fechaFin
+      value: 2025-12-03
+      disabled: true
+examples: ./.resources/Obtener todos los cumplimientos.resources/examples
+order: 1000

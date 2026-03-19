@@ -1,0 +1,11 @@
+$kind: http-request
+url: http://localhost:3000/mes/cumplimiento/vendedor/0550/productos
+method: GET
+queryParams:
+  - key: fechaInicio
+    value: 2025-12-02
+    disabled: true
+  - key: fechaFin
+    value: 2025-12-03
+    disabled: true
+order: 7000

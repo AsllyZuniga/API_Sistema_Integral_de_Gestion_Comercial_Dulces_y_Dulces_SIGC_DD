@@ -1,0 +1,10 @@
+$kind: http-request
+url: http://localhost:3000/vendedor/108/asignar-supervisor
+method: PUT
+body:
+  type: json
+  content: |-
+    {
+       "id_supervisor":75
+    }
+order: 1000

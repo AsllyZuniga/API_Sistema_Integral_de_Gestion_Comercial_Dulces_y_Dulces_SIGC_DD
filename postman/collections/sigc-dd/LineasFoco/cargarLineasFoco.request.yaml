@@ -1,0 +1,16 @@
+$kind: http-request
+url: http://localhost:3000/vendedor-cuota-proveedor/upload
+method: POST
+body:
+  type: formdata
+  content:
+    - type: file
+      key: file
+      src: []
+    - type: text
+      key: fecha_inicio
+      value: 2026-02-02
+    - type: text
+      key: fecha_fin
+      value: 2026-02-28
+order: 1000

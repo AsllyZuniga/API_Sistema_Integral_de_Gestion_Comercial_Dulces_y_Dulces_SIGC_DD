@@ -1,0 +1,4 @@
+$kind: http-request
+url: http://localhost:3000/mes/cumplimiento/vendedor/0990/ciudades
+method: GET
+order: 6000
