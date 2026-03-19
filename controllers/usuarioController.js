@@ -4,7 +4,7 @@ const {
 } = require('../models');
 module.exports = {
     list(req, res) {
-        return usuario
+        return usuario_model
             .findAll({})
             .then((usuario) => res.status(200).send(usuario))
             .catch((error) => { res.status(400).send(error); });
@@ -12,7 +12,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return usuario
+        return usuario_model
             .findByPk(req.params.id)
             .then((usuario) => {
                 console.log(usuario);
@@ -27,7 +27,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return usuario
+        return usuario_model
             .create({
                 username: req.body.username,
                 password: req.body.password,
@@ -38,7 +38,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return usuario
+        return usuario_model
             .findByPk(req.params.id)
             .then(usuario => {
                 if (!usuario) {

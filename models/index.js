@@ -186,42 +186,42 @@ module.exports.vendedorCuotaProveedor_model = vendedorCuotaProveedor_model;
 
 // ── VendedorCuotaProveedor (tabla intermedia) ──────────────────────────
 vendedor_model.hasMany(vendedorCuotaProveedor_model, {
-    foreignKey: 'id_vendedor',
-    as: 'cuotasProveedor'
+  foreignKey: 'id_vendedor',
+  as: 'cuotasProveedor'
 });
 vendedorCuotaProveedor_model.belongsTo(vendedor_model, {
-    foreignKey: 'id_vendedor',
-    as: 'vendedor'
+  foreignKey: 'id_vendedor',
+  as: 'vendedor'
 });
 
 proveedor_model.hasMany(vendedorCuotaProveedor_model, {
-    foreignKey: 'id_proveedor',
-    as: 'cuotasVendedor'
+  foreignKey: 'id_proveedor',
+  as: 'cuotasVendedor'
 });
 vendedorCuotaProveedor_model.belongsTo(proveedor_model, {
-    foreignKey: 'id_proveedor',
-    as: 'proveedor'
+  foreignKey: 'id_proveedor',
+  as: 'proveedor'
 });
 
 cuotaProveedor_model.hasMany(vendedorCuotaProveedor_model, {
-    foreignKey: 'id_cuotaProveedor',
-    as: 'asignaciones'
+  foreignKey: 'id_cuotaProveedor',
+  as: 'asignaciones'
 });
 vendedorCuotaProveedor_model.belongsTo(cuotaProveedor_model, {
-    foreignKey: 'id_cuotaProveedor',
-    as: 'cuotaProveedor'
+  foreignKey: 'id_cuotaProveedor',
+  as: 'cuotaProveedor'
 });
 
 // Muchos a muchos entre vendedor y proveedor a través de la tabla intermedia
 vendedor_model.belongsToMany(proveedor_model, {
-    through: vendedorCuotaProveedor_model,
-    foreignKey: 'id_vendedor',
-    otherKey: 'id_proveedor',
-    as: 'proveedoresConCuota'
+  through: vendedorCuotaProveedor_model,
+  foreignKey: 'id_vendedor',
+  otherKey: 'id_proveedor',
+  as: 'proveedoresConCuota'
 });
 proveedor_model.belongsToMany(vendedor_model, {
-    through: vendedorCuotaProveedor_model,
-    foreignKey: 'id_proveedor',
-    otherKey: 'id_vendedor',
-    as: 'vendedoresConCuota'
+  through: vendedorCuotaProveedor_model,
+  foreignKey: 'id_proveedor',
+  otherKey: 'id_vendedor',
+  as: 'vendedoresConCuota'
 });
