@@ -85,6 +85,10 @@ async function importarVentasConArchivo(req, res) {
                 timestamp: new Date().toISOString()
             };
 
+            // Mostrar resumen en consola para depuración
+            console.log('\n===== RESUMEN FINAL IMPORTACIÓN =====');
+            console.log(JSON.stringify(resultado, null, 2));
+            console.log('====================================\n');
             res.end(JSON.stringify(resultado));
 
         } catch (importError) {
