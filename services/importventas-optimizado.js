@@ -64,7 +64,8 @@ class ImportadorVentasOptimizado {
         this.archivosEnProceso = new Set();
         this.archivosImportados = new Set();
 
-        this.BATCH_INSERT_SIZE = 10000;
+        this.BATCH_INSERT_SIZE = 10000; // batch de carga general
+        this.BATCH_UPSERT_DETALLE_SIZE = 1000; // batch para upsert de detalle_venta
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 5000;
 
@@ -647,10 +648,23 @@ class ImportadorVentasOptimizado {
                 }));
 
                 // Insert masivo de detalles
-                await this.detalle_venta.bulkCreate(detallesConId, {
-                    transaction: transaccion,
-                    returning: false
-                });
+
+                // Procesar detalles en batches más pequeños para upsert
+                const totalDetalles = detallesConId.length;
+                let detallesProcesados = 0;
+                while (detallesProcesados < totalDetalles) {
+                    const batchDetalles = detallesConId.slice(detallesProcesados, detallesProcesados + this.BATCH_UPSERT_DETALLE_SIZE);
+                    await this.detalle_venta.bulkCreate(batchDetalles, {
+                        transaction: transaccion,
+                        returning: false,
+                        updateOnDuplicate: [
+                            'cantidad', 'valor_bruto', 'valor_descuentos', 'valor_impuestos', 'valor_neto', 'valor_subtotal', 'margen_promedio', 'impuesto_afecta_margen', 'costo_promedio_total'
+                        ]
+                    });
+                    detallesProcesados += batchDetalles.length;
+                    // Mostrar progreso de upsert de detalles
+                    console.log(`      ↪️ Detalles actualizados: ${detallesProcesados}/${totalDetalles}`);
+                }
 
                 await transaccion.commit();
 
@@ -737,6 +751,8 @@ class ImportadorVentasOptimizado {
                     await this.procesarBatch(batch, encabezados, delimitador);
                 }
             }
+            this.estadisticas.tiempoFin = Date.now();
+            return this.estadisticas;
         } catch (error) {
             if (hashArchivo) {
                 this.archivosEnProceso.delete(hashArchivo);
@@ -764,3 +780,6 @@ class ImportadorVentasOptimizado {
     }
 
 }
+
+// Exporta la clase correctamente para uso con require()
+module.exports = ImportadorVentasOptimizado;
