@@ -1,0 +1,5 @@
+$kind: http-request
+name: Obtener Supervisor
+url: http://localhost:3000/usuario/supervisores
+method: GET
+order: 3727954988237660
