@@ -3,6 +3,19 @@ const {
     rol_model
 } = require('../models');
 module.exports = {
+        // Devuelve solo los usuarios con rol de supervisor
+        listSupervisores(req, res) {
+            // Puedes cambiar el nombre del rol si es diferente
+            rol_model.findOne({ where: { id_rol: '2' } })
+                .then(rol => {
+                    if (!rol) {
+                        return res.status(404).send({ message: 'Rol SUPERVISOR no encontrado' });
+                    }
+                    return usuario_model.findAll({ where: { id_rol: rol.id_rol } });
+                })
+                .then(supervisores => res.status(200).send(supervisores))
+                .catch(error => res.status(400).send(error));
+        },
     list(req, res) {
         return usuario_model
             .findAll({})
