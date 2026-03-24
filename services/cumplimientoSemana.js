@@ -397,13 +397,13 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
 
     const query = `
 		WITH ventas_filtradas AS (
-			SELECT
-				v.id_vendedor,
-				SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta_acum
-			FROM venta v
-			LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-			${ventasWhere}
-			GROUP BY v.id_vendedor
+            SELECT
+                v.id_vendedor,
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum
+            FROM venta v
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            ${ventasWhere}
+            GROUP BY v.id_vendedor
 		)
 		SELECT
 			vd.codigo_vendedor AS cod,

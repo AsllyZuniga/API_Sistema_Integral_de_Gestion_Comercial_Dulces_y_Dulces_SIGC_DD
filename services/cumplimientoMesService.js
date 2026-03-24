@@ -305,7 +305,7 @@ const getCumplimientoMes = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta_acum
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
@@ -367,7 +367,7 @@ const getCumplimientoMesFront = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta_acum
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
