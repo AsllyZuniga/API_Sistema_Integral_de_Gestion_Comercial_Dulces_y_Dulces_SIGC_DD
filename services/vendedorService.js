@@ -119,6 +119,13 @@ const assignSupervisorBulk = async ({ id_supervisor, vendedores }) => {
     };
 };
 
+const getBySupervisor = async (id_supervisor) => {
+    return vendedor_model.findAll({
+        where: { id_supervisor },
+        include: includeRelations
+    });
+};
+
 module.exports = {
     getAll,
     getById,
@@ -126,5 +133,6 @@ module.exports = {
     updateById,
     assignSupervisor,
     removeSupervisor,
-    assignSupervisorBulk
+    assignSupervisorBulk,
+    getBySupervisor
 };
