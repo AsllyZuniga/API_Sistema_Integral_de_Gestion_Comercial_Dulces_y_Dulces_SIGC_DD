@@ -1,6 +1,14 @@
 const vendedorService = require('../services/vendedorService');
 
 module.exports = {
+    async getBySupervisor(req, res) {
+        try {
+            const data = await vendedorService.getBySupervisor(req.params.id_supervisor);
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
     async list(req, res) {
         try {
             const data = await vendedorService.getAll();
