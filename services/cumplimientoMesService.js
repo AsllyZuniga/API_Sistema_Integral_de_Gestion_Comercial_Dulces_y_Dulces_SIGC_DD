@@ -224,6 +224,7 @@ const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
     return rows.map((row) => {
         const cuotaMes = toNumber(row.cuota_mes);
         const ventaAcum = toNumber(row.venta_acum);
+        const totalNC = toNumber(row.total_nc);
         const porcentajeCumplimiento = cuotaMes > 0 ? (ventaAcum / cuotaMes) * 100 : 0;
         const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
         const porcentajeCumplimientoProyectado = cuotaMes > 0 ? (proyeccionVenta / cuotaMes) * 100 : 0;
@@ -233,6 +234,7 @@ const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
             nombre: row.vendedor,
             cuotaMes: round(cuotaMes, 2),
             ventaAcum: round(ventaAcum, 2),
+            totalNC: round(totalNC, 2),
             porcCump: round(porcentajeCumplimiento, 2),
             proyeccionVenta: round(proyeccionVenta, 2),
             porcCumProy: round(porcentajeCumplimientoProyectado, 2),
@@ -305,7 +307,8 @@ const getCumplimientoMes = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum,
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.subtotal, 0) ELSE 0 END) AS total_nc
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
@@ -315,7 +318,8 @@ const getCumplimientoMes = async (filters = {}) => {
             vd.codigo_vendedor AS cod,
             vd.nombre AS vendedor,
             COALESCE(cg.cuota_mes, 0) AS cuota_mes,
-            COALESCE(vf.venta_acum, 0) AS venta_acum
+            COALESCE(vf.venta_acum, 0) AS venta_acum,
+            COALESCE(vf.total_nc, 0) AS total_nc
         FROM vendedor vd
         LEFT JOIN LATERAL (
             SELECT cm.cuota_mes
