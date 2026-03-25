@@ -336,6 +336,7 @@ const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
     return rows.map((row) => {
         const cuotaSemana = toNumber(row.cuota_semana);
         const ventaAcum = toNumber(row.venta_acum);
+        const totalNC = toNumber(row.total_nc);
         const cuotaDiaria = diasHabiles > 0 ? cuotaSemana / diasHabiles : 0;
         const porcentajeCumplimiento = cuotaSemana > 0 ? (ventaAcum / cuotaSemana) * 100 : 0;
         const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
@@ -346,6 +347,7 @@ const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
             cuotaSemana: round(cuotaSemana, 2),
             cuotaDiaria: round(cuotaDiaria, 2),
             ventaAcum: round(ventaAcum, 2),
+            totalNC: round(totalNC, 2),
             porcCump: round(porcentajeCumplimiento, 2),
             proyeccionVenta: round(proyeccionVenta, 2),
             porcCumProy: round(porcentajeCumplimientoProyectado, 2),
@@ -396,33 +398,35 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
     }
 
     const query = `
-		WITH ventas_filtradas AS (
+        WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum,
+                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.subtotal, 0) ELSE 0 END) AS total_nc
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
             GROUP BY v.id_vendedor
-		)
-		SELECT
-			vd.codigo_vendedor AS cod,
-			vd.nombre AS vendedor,
-			COALESCE(cs.cuota_semana, 0) AS cuota_semana,
-			COALESCE(vf.venta_acum, 0) AS venta_acum
-		FROM vendedor vd
-		LEFT JOIN LATERAL (
-			SELECT cs.cuota_semana
-			FROM "cuotaSemana" cs
-			WHERE ${cuotaConditions.join(' AND ')}
-			ORDER BY cs.fecha_fin DESC NULLS LAST, cs."id_cuotaSemana" DESC
-			LIMIT 1
-		) cs ON true
-		LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-		WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
-		${vendedorFilter}
-		ORDER BY vd.nombre ASC
-	`;
+        )
+        SELECT
+            vd.codigo_vendedor AS cod,
+            vd.nombre AS vendedor,
+            COALESCE(cs.cuota_semana, 0) AS cuota_semana,
+            COALESCE(vf.venta_acum, 0) AS venta_acum,
+            COALESCE(vf.total_nc, 0) AS total_nc
+        FROM vendedor vd
+        LEFT JOIN LATERAL (
+            SELECT cs.cuota_semana
+            FROM "cuotaSemana" cs
+            WHERE ${cuotaConditions.join(' AND ')}
+            ORDER BY cs.fecha_fin DESC NULLS LAST, cs."id_cuotaSemana" DESC
+            LIMIT 1
+        ) cs ON true
+        LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
+        WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        ${vendedorFilter}
+        ORDER BY vd.nombre ASC
+    `;
 
     const rows = await sequelize.query(query, {
         replacements,
