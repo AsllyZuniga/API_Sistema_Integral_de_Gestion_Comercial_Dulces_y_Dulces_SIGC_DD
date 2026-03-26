@@ -337,20 +337,26 @@ const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
         const cuotaSemana = toNumber(row.cuota_semana);
         const ventaAcum = toNumber(row.venta_acum);
         const totalNC = toNumber(row.total_nc);
+        const cuotaProveedor = toNumber(row.cuota_proveedor);
         const cuotaDiaria = diasHabiles > 0 ? cuotaSemana / diasHabiles : 0;
         const porcentajeCumplimiento = cuotaSemana > 0 ? (ventaAcum / cuotaSemana) * 100 : 0;
+        const porcentajeCumplimientoProveedor = cuotaProveedor > 0 ? (ventaAcum / cuotaProveedor) * 100 : 0;
         const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
         const porcentajeCumplimientoProyectado = cuotaSemana > 0 ? (proyeccionVenta / cuotaSemana) * 100 : 0;
+        const porcentajeCumplimientoProveedorProy = cuotaProveedor > 0 ? (proyeccionVenta / cuotaProveedor) * 100 : 0;
         return {
             codVendedor: row.cod,
             nombre: row.vendedor,
             cuotaSemana: round(cuotaSemana, 2),
+            cuotaProveedor: round(cuotaProveedor, 2),
             cuotaDiaria: round(cuotaDiaria, 2),
             ventaAcum: round(ventaAcum, 2),
             totalNC: round(totalNC, 2),
             porcCump: round(porcentajeCumplimiento, 2),
+            porcCumpProveedor: round(porcentajeCumplimientoProveedor, 2),
             proyeccionVenta: round(proyeccionVenta, 2),
             porcCumProy: round(porcentajeCumplimientoProyectado, 2),
+            porcCumProyProveedor: round(porcentajeCumplimientoProveedorProy, 2),
             dias_corridos: diasCorridos,
             dias_habiles: diasHabiles
         };
@@ -397,6 +403,17 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         replacements.cuotaFechaFin = normalizedFilters.fechaFin;
     }
 
+    let cuotaProveedorJoin = '';
+    let cuotaProveedorSelect = 'NULL AS cuota_proveedor';
+    if (filters.proveedor) {
+        cuotaProveedorJoin = `LEFT JOIN vendedor_cuota_proveedor vcp ON vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :proveedor
+            LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
+            AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio`;
+        cuotaProveedorSelect = 'COALESCE(cp.cuota, 0) AS cuota_proveedor';
+        replacements.proveedor = String(filters.proveedor);
+        replacements.cuotaFechaFin = normalizedFilters.fechaFin;
+        replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
+    }
     const query = `
         WITH ventas_filtradas AS (
             SELECT
@@ -412,6 +429,7 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             vd.codigo_vendedor AS cod,
             vd.nombre AS vendedor,
             COALESCE(cs.cuota_semana, 0) AS cuota_semana,
+            ${cuotaProveedorSelect},
             COALESCE(vf.venta_acum, 0) AS venta_acum,
             COALESCE(vf.total_nc, 0) AS total_nc
         FROM vendedor vd
@@ -422,6 +440,7 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             ORDER BY cs.fecha_fin DESC NULLS LAST, cs."id_cuotaSemana" DESC
             LIMIT 1
         ) cs ON true
+        ${cuotaProveedorJoin}
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
         WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
         ${vendedorFilter}
