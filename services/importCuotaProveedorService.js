@@ -170,38 +170,46 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
         vendedores_creados:         []
     };
 
-    // Procesar fila por fila
+    // --- Bulk processing ---
+    // 1. Crear vendedores faltantes en bulk
+    const nuevosVendedores = [];
     for (const row of rows) {
         const codigoVendedor = String(row[codigoHeader] || '').trim();
         if (!codigoVendedor) continue;
-
-        let vendedor = vendedorMap[codigoVendedor];
-        if (!vendedor) {
-            try {
-                vendedor = await models.vendedor_model.create({
-                    codigo_vendedor: codigoVendedor,
-                    nombre: String(row[nombreHeader] || '').trim() || `VENDEDOR ${codigoVendedor}`
-                });
-                vendedorMap[codigoVendedor] = vendedor;
-                resumen.vendedores_creados.push(codigoVendedor);
-            } catch (err) {
-                resumen.errores.push({
-                    codigo_vendedor: codigoVendedor,
-                    motivo: `No se pudo crear vendedor: ${err.message}`
-                });
-                continue;
-            }
+        if (!vendedorMap[codigoVendedor]) {
+            nuevosVendedores.push({
+                codigo_vendedor: codigoVendedor,
+                nombre: String(row[nombreHeader] || '').trim() || `VENDEDOR ${codigoVendedor}`
+            });
         }
+    }
+    if (nuevosVendedores.length > 0) {
+        try {
+            const creados = await models.vendedor_model.bulkCreate(nuevosVendedores, { ignoreDuplicates: true });
+            creados.forEach(v => {
+                vendedorMap[String(v.codigo_vendedor).trim()] = v;
+                resumen.vendedores_creados.push(v.codigo_vendedor);
+            });
+        } catch (err) {
+            resumen.errores.push({ motivo: `Error en bulkCreate de vendedores: ${err.message}` });
+        }
+    }
 
+    // 2. Preparar cuotas y asignaciones para bulkCreate
+    const cuotasProveedorBulk = [];
+    const asignacionesBulk = [];
+    for (const row of rows) {
+        const codigoVendedor = String(row[codigoHeader] || '').trim();
+        if (!codigoVendedor) continue;
+        const vendedor = vendedorMap[codigoVendedor];
+        if (!vendedor) continue;
         resumen.filas_procesadas++;
-
         for (const colProveedor of proveedorCols) {
             const valorCrudo = row[colProveedor] ?? '';
             if (isSinCuota(valorCrudo)) {
                 resumen.cuotas_omitidas++;
                 continue;
             }
-
             const cuotaNum = parseCuota(valorCrudo);
             if (isNaN(cuotaNum)) {
                 resumen.errores.push({
@@ -212,7 +220,6 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 });
                 continue;
             }
-
             const proveedor = proveedorMap[colProveedor.toUpperCase()];
             if (!proveedor) {
                 resumen.errores.push({
@@ -222,31 +229,58 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 });
                 continue;
             }
+            cuotasProveedorBulk.push({
+                cuota:        BigInt(Math.round(cuotaNum)),
+                fecha_inicio,
+                fecha_fin,
+                _meta: {
+                    id_vendedor: vendedor.id_vendedor,
+                    id_proveedor: proveedor.id_proveedor
+                }
+            });
+        }
+    }
 
-            try {
-                // Crear cuotaProveedor para este vendedor+proveedor+periodo
-                const cuotaProveedor = await models.cuotaProveedor_model.create({
-                    cuota:        BigInt(Math.round(cuotaNum)),
-                    fecha_inicio,
-                    fecha_fin
-                });
+    // 3. Bulk create de cuotasProveedor
+    let cuotasProveedorCreadas = [];
+    if (cuotasProveedorBulk.length > 0) {
+        try {
+            // El _meta no se guarda, solo para mapear luego
+            cuotasProveedorCreadas = await models.cuotaProveedor_model.bulkCreate(
+                cuotasProveedorBulk.map(q => {
+                    const { _meta, ...rest } = q; return rest;
+                }),
+                { returning: true }
+            );
+        } catch (err) {
+            resumen.errores.push({ motivo: `Error en bulkCreate de cuotasProveedor: ${err.message}` });
+        }
+    }
 
-                // Upsert de la asignación vendedor <-> proveedor <-> cuota
-                await models.vendedorCuotaProveedor_model.upsert({
-                    id_vendedor:      vendedor.id_vendedor,
-                    id_proveedor:     proveedor.id_proveedor,
-                    id_cuotaProveedor: cuotaProveedor.id_cuotaProveedor,
-                    estado:           true
-                });
+    // 4. Mapear cuotasProveedor a asignaciones
+    let idx = 0;
+    for (const q of cuotasProveedorBulk) {
+        if (cuotasProveedorCreadas[idx]) {
+            asignacionesBulk.push({
+                id_vendedor: q._meta.id_vendedor,
+                id_proveedor: q._meta.id_proveedor,
+                id_cuotaProveedor: cuotasProveedorCreadas[idx].id_cuotaProveedor,
+                estado: true
+            });
+            resumen.cuotas_creadas++;
+        }
+        idx++;
+    }
 
-                resumen.cuotas_creadas++;
-            } catch (err) {
-                resumen.errores.push({
-                    codigo_vendedor: codigoVendedor,
-                    proveedor:       colProveedor,
-                    motivo:          err.message
-                });
-            }
+    // 5. Bulk upsert de asignaciones (no existe bulkUpsert en Sequelize, así que se hace bulkCreate con updateOnDuplicate)
+    if (asignacionesBulk.length > 0) {
+        try {
+            await models.vendedorCuotaProveedor_model.bulkCreate(
+                asignacionesBulk,
+                { updateOnDuplicate: ['id_cuotaProveedor', 'estado'] }
+            );
+        } catch (err) {
+            resumen.errores.push({ motivo: `Error en bulkCreate de asignaciones: ${err.message}` });
         }
     }
 
