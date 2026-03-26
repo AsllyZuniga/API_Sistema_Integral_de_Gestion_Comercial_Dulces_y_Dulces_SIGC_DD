@@ -1,41 +1,26 @@
-/**
- * importCuotaProveedorService.js
- *
- * Importa asignaciones de cuotas por proveedor a partir de un CSV/TSV.
- *
- * Formato esperado (primera fila = encabezados):
- *   codigo_vendedor | nombre_vendedor | TONING | ARCOR | INCODEPF | ITALO | ...
- *
- * - Las columnas a partir de la 3ª son nombres de proveedores (dinámico).
- * - Un valor "-" o vacío en la celda significa "sin cuota" (se omite o desactiva).
- * - fecha_inicio y fecha_fin se pasan como parámetros externos (no en el CSV).
- *
- * Delimitador: se detecta automáticamente (pipe "|", tabulación "\t" o coma ",").
- */
-
 'use strict';
 
 const { Op } = require('sequelize');
-const models  = require('../models');
+const models = require('../models');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function detectDelimiter(headerLine) {
-    if (headerLine.includes('|'))  return '|';
+    if (headerLine.includes('|')) return '|';
     if (headerLine.includes('\t')) return '\t';
     return ',';
 }
 
 function parseCsv(content) {
-    const lines     = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-    const nonEmpty  = lines.filter(l => l.trim().length > 0);
+    const lines = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const nonEmpty = lines.filter(l => l.trim().length > 0);
     if (nonEmpty.length < 2) throw new Error('El archivo debe tener al menos una fila de encabezados y una de datos.');
 
     const delimiter = detectDelimiter(nonEmpty[0]);
-    const headers   = nonEmpty[0].split(delimiter).map(h => h.trim());
-    const rows      = nonEmpty.slice(1).map(line => {
+    const headers = nonEmpty[0].split(delimiter).map(h => h.trim());
+    const rows = nonEmpty.slice(1).map(line => {
         const cells = line.split(delimiter).map(c => c.trim());
-        const row   = {};
+        const row = {};
         headers.forEach((h, i) => { row[h] = cells[i] ?? ''; });
         return row;
     });
@@ -149,7 +134,7 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 .filter(Boolean)
         )
     ];
-    const vendedoresDB    = await models.vendedor_model.findAll({
+    const vendedoresDB = await models.vendedor_model.findAll({
         where: { codigo_vendedor: { [Op.in]: codigosVendedor } },
         attributes: ['id_vendedor', 'codigo_vendedor', 'nombre']
     });
@@ -160,14 +145,14 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
     const resumen = {
         fecha_inicio,
         fecha_fin,
-        filas_procesadas:   0,
-        cuotas_creadas:     0,
-        cuotas_omitidas:    0,
-        errores:            [],
+        filas_procesadas: 0,
+        cuotas_creadas: 0,
+        cuotas_omitidas: 0,
+        errores: [],
         proveedores_no_encontrados: [],
-        proveedores_procesados:     proveedorCols,
-        proveedores_creados:        proveedoresCreados,
-        vendedores_creados:         []
+        proveedores_procesados: proveedorCols,
+        proveedores_creados: proveedoresCreados,
+        vendedores_creados: []
     };
 
     // --- Bulk processing ---
@@ -230,7 +215,7 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 continue;
             }
             cuotasProveedorBulk.push({
-                cuota:        BigInt(Math.round(cuotaNum)),
+                cuota: BigInt(Math.round(cuotaNum)),
                 fecha_inicio,
                 fecha_fin,
                 _meta: {
