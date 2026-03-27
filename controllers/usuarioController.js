@@ -2,6 +2,11 @@ const {
     usuario_model, 
     rol_model
 } = require('../models');
+const bcrypt = require('bcryptjs');
+
+const SALT_ROUNDS = 10;
+const isBcryptHash = (value) => /^\$2[aby]\$\d{2}\$/.test(String(value || ''));
+
 module.exports = {
         // Devuelve solo los usuarios con rol de supervisor
         listSupervisores(req, res) {
@@ -39,32 +44,49 @@ module.exports = {
             .catch((error) =>
                 res.status(400).send(error));
     },
-    add(req, res) {
-        return usuario_model
-            .create({
+    async add(req, res) {
+        try {
+            const passwordRaw = String(req.body.password || '').trim();
+            const password = passwordRaw
+                ? (isBcryptHash(passwordRaw) ? passwordRaw : await bcrypt.hash(passwordRaw, SALT_ROUNDS))
+                : passwordRaw;
+
+            const usuario = await usuario_model.create({
                 username: req.body.username,
-                password: req.body.password,
+                password,
                 estado: req.body.estado,
                 id_rol: req.body.id_rol,
-            })
-            .then((usuario) => res.status(201).send(usuario))
-            .catch((error) => res.status(400).send(error));
+            });
+
+            return res.status(201).send(usuario);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     },
     update(req, res) {
         return usuario_model
             .findByPk(req.params.id)
-            .then(usuario => {
+            .then(async usuario => {
                 if (!usuario) {
                     return res.status(404).send({
                         message: 'usuario Not Found',
                     });
                 }
+
+                let passwordToSave = usuario.password;
+                if (req.body.password !== undefined && req.body.password !== null) {
+                    const passwordRaw = String(req.body.password).trim();
+                    passwordToSave = passwordRaw
+                        ? (isBcryptHash(passwordRaw) ? passwordRaw : await bcrypt.hash(passwordRaw, SALT_ROUNDS))
+                        : usuario.password;
+                }
+
                 return usuario
                     .update({
-                        username: req.body.username || usuario.username,
-                        password: req.body.password || usuario.password,
-                        estado: req.body.estado || usuario.estado,
-                        id_rol: req.body.id_rol || usuario.id_rol,
+                        username: req.body.username ?? usuario.username,
+                        password: passwordToSave,
+                        estado: req.body.estado ?? usuario.estado,
+                        id_rol: req.body.id_rol ?? usuario.id_rol,
                     })
                     .then(() => res.status(200).send(usuario))
                     .catch((error) => res.status(400).send(error));
