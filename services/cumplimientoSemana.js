@@ -93,10 +93,6 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = filters.fechaFin;
     }
-    if (filters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
-    }
     if (filters.proveedor || filters.categoria) {
         const sub = [];
         if (filters.proveedor) {
@@ -117,9 +113,19 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
             )
         `);
     }
+        if (filters.ciudad) {
+            where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+            replacements.ciudad = String(filters.ciudad);
+        }
+        let ciudadSelect = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
+        let ciudadGroup = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
+        if (filters.ciudad) {
+            ciudadSelect = 'TRIM(ci.nombre) AS ciudad';
+            ciudadGroup = 'TRIM(ci.nombre)';
+        }
     const query = `
         SELECT
-            COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+                ${ciudadSelect},
             SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
@@ -127,6 +133,7 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
         LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
         WHERE ${where.join(' AND ')}
         GROUP BY COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+            GROUP BY ${ciudadGroup}
         ORDER BY venta DESC
     `;
     const detallePorCiudad = await sequelize.query(query, { replacements, type: QueryTypes.SELECT });
