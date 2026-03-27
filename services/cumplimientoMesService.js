@@ -572,18 +572,37 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         `);
     }
 
-    const query = `
-        SELECT
-            ${ciudadSelect},
-            SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
-        FROM venta v
-        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
-        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-        LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
-        WHERE ${where.join(' AND ')}
-        GROUP BY ${ciudadGroup}
-        ORDER BY venta DESC
-    `;
+    // Si hay filtro de proveedor o categoría, sumar solo ventas de esos items
+    let query;
+    if (filters.proveedor || filters.categoria) {
+        query = `
+            SELECT
+                ${ciudadSelect},
+                SUM(COALESCE(dv.subtotal, 0)) AS venta
+            FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item it ON it.id_item = dv.id_item
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
+            WHERE ${where.join(' AND ')}
+            GROUP BY ${ciudadGroup}
+            ORDER BY venta DESC
+        `;
+    } else {
+        query = `
+            SELECT
+                ${ciudadSelect},
+                SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
+            FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
+            WHERE ${where.join(' AND ')}
+            GROUP BY ${ciudadGroup}
+            ORDER BY venta DESC
+        `;
+    }
 
     const detallePorCiudad = await sequelize.query(query, {
         replacements,
