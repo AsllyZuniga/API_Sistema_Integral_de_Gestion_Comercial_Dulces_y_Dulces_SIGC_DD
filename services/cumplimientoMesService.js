@@ -542,9 +542,13 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         replacements.fechaFin = filters.fechaFin;
     }
 
+    let ciudadSelect = 'ci.id_ciudad AS id_ciudad, COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
+    let ciudadGroup = 'ci.id_ciudad, COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
     if (filters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(filters.ciudad);
+        ciudadSelect = 'ci.id_ciudad AS id_ciudad, TRIM(ci.nombre) AS ciudad';
+        ciudadGroup = 'ci.id_ciudad, TRIM(ci.nombre)';
     }
 
     if (filters.proveedor || filters.categoria) {
@@ -570,14 +574,14 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
 
     const query = `
         SELECT
-            COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+            ${ciudadSelect},
             SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
         LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
         WHERE ${where.join(' AND ')}
-        GROUP BY COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+        GROUP BY ${ciudadGroup}
         ORDER BY venta DESC
     `;
 
@@ -598,6 +602,7 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
             const porcCumProy = cuotaMesVendedor > 0 ? (proyeccionVenta / cuotaMesVendedor) * 100 : 0;
 
             return {
+                id_ciudad: row.id_ciudad,
                 ciudad: row.ciudad,
                 ventaAcum: round(ventaAcum, 2),
                 porcCump: round(porcCump, 4),
