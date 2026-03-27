@@ -1,3 +1,4 @@
+const clienteProductoService = require('../services/clienteProductoService');
 const {
     cliente_model,
     ciudad_model,
@@ -6,6 +7,14 @@ const {
     tipo_negocio_model
 } = require('../models');
 module.exports = {
+        async productosPorCliente(req, res) {
+            try {
+                const data = await clienteProductoService.getProductosPorCliente();
+                res.status(200).send(data);
+            } catch (error) {
+                res.status(400).send(error);
+            }
+        },
     list(req, res) {
         return cliente_model
             .findAll({
