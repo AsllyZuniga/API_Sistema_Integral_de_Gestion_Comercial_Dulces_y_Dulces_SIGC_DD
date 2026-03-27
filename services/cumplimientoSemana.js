@@ -113,16 +113,16 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
             )
         `);
     }
-        if (filters.ciudad) {
-            where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-            replacements.ciudad = String(filters.ciudad);
-        }
-        let ciudadSelect = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
-        let ciudadGroup = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
-        if (filters.ciudad) {
-            ciudadSelect = 'TRIM(ci.nombre) AS ciudad';
-            ciudadGroup = 'TRIM(ci.nombre)';
-        }
+    if (filters.ciudad) {
+        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(filters.ciudad);
+    }
+    let ciudadSelect = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
+    let ciudadGroup = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
+    if (filters.ciudad) {
+        ciudadSelect = 'TRIM(ci.nombre) AS ciudad';
+        ciudadGroup = 'TRIM(ci.nombre)';
+    }
     const query = `
         SELECT
                 ${ciudadSelect},
