@@ -551,30 +551,17 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         ciudadGroup = 'ci.id_ciudad, TRIM(ci.nombre)';
     }
 
-    if (filters.proveedor || filters.categoria) {
-        const sub = [];
-        if (filters.proveedor) {
-            sub.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-            replacements.proveedor = String(filters.proveedor);
-        }
-        if (filters.categoria) {
-            sub.push('CAST(it.id_categoria AS TEXT) = :categoria');
-            replacements.categoria = String(filters.categoria);
-        }
-        where.push(`
-            EXISTS (
-                SELECT 1
-                FROM detalle_venta dv
-                JOIN item it ON it.id_item = dv.id_item
-                WHERE dv.id_venta = v.id_venta
-                  AND ${sub.join(' AND ')}
-            )
-        `);
-    }
-
-    // Si hay filtro de proveedor o categoría, sumar solo ventas de esos items
+    // Si hay filtro de proveedor o categoría, sumar solo ventas de esos items (igual que en productos/lineas)
     let query;
     if (filters.proveedor || filters.categoria) {
+        if (filters.proveedor) {
+            where.push('it.id_proveedor = :proveedor');
+            replacements.proveedor = Number(filters.proveedor);
+        }
+        if (filters.categoria) {
+            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(filters.categoria);
+        }
         query = `
             SELECT
                 ${ciudadSelect},
@@ -652,8 +639,8 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
     }
 
     if (filters.proveedor) {
-        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-        replacements.proveedor = String(filters.proveedor);
+        where.push('it.id_proveedor = :proveedor');
+        replacements.proveedor = Number(filters.proveedor);
     }
 
     if (filters.categoria) {
