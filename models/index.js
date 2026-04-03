@@ -35,6 +35,7 @@ const venta_model = require('./venta')(sequelize);
 const cuotaDia_model = require('./cuotaDia')(sequelize);
 const cuotaSemana_model = require('./cuotaSemana')(sequelize);
 const cuotaMes_model = require('./cuotaMes')(sequelize);
+const cuotaCategoria_model = require('./cuotaCategoria')(sequelize);
 const cuotaProveedor_model = require('./cuotaProveedor')(sequelize);
 const vendedorCuotaProveedor_model = require('./vendedorCuotaProveedor')(sequelize);
 const rango_dias_model = require('./rango_dias')(sequelize);
@@ -46,6 +47,10 @@ categoria_model.belongsTo(megacategoria_model, { foreignKey: 'id_megacategoria',
 
 categoria_model.hasMany(subcategoria_model, { foreignKey: 'id_categoria', as: 'subcategorias' });
 subcategoria_model.belongsTo(categoria_model, { foreignKey: 'id_categoria', as: 'categoria' });
+
+// Cuotas de categoría
+categoria_model.belongsTo(cuotaCategoria_model, { foreignKey: 'id_cuota_categoria', as: 'cuotaCategoria' });
+cuotaCategoria_model.hasMany(categoria_model, { foreignKey: 'id_cuota_categoria', as: 'categorias' });
 
 // Ubicación geográfica
 ciudad_model.hasMany(barrio_model, { foreignKey: 'id_ciudad', as: 'barrios' });
@@ -144,6 +149,7 @@ module.exports = {
   usuario_model,
   vendedor_model,
   venta_model,
+  cuotaCategoria_model,
   rango_dias_model
 };
 // Cuotas relaciones
@@ -181,6 +187,7 @@ usuario_model.hasMany(cuotaMes_model, {
 module.exports.cuotaDia_model = cuotaDia_model;
 module.exports.cuotaSemana_model = cuotaSemana_model;
 module.exports.cuotaMes_model = cuotaMes_model;
+module.exports.cuotaCategoria_model = cuotaCategoria_model;
 module.exports.cuotaProveedor_model = cuotaProveedor_model;
 module.exports.vendedorCuotaProveedor_model = vendedorCuotaProveedor_model;
 
