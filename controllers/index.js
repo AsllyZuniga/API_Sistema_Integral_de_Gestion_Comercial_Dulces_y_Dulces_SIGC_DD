@@ -5,6 +5,7 @@ const categoriaController = require('./categoriaController');
 const ciudadController = require('./ciudadController');
 const clienteController = require('./clienteController');
 const cuotaDiaController = require('./cuotaDiaController');
+const cuotaCategoriaController = require('./cuotaCategoriaController');
 const cuotaMesController = require('./cuotaMesController');
 const cuotaSemanaController = require('./cuotaSemanaController');
 const detalle_ventaController = require('./detalle_ventaController');
@@ -31,6 +32,7 @@ module.exports = {
     ciudadController,
     clienteController,
     cuotaDiaController,
+    cuotaCategoriaController,
     cuotaMesController,
     cuotaSemanaController,
     detalle_ventaController,
