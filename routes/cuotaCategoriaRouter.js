@@ -2,6 +2,7 @@ var express = require('express');
 var router = express.Router();
 const cuotaCategoriaController = require('../controllers').cuotaCategoriaController;
 
+router.get('/vendedores', cuotaCategoriaController.todosVendedores);
 router.get('/general', cuotaCategoriaController.general);
 router.get('/vendedor/:codigoVendedor', cuotaCategoriaController.byVendedor);
 
