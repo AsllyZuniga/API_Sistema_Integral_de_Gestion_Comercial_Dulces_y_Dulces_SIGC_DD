@@ -225,7 +225,184 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
     });
 };
 
+const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
+	const period = normalizePeriodFilters(filters);
+	const replacements = {
+		fechaInicio: period.fechaInicio,
+		fechaFin: period.fechaFin
+	};
+
+	const rows = await sequelize.query(`
+		WITH acumulado_por_vendedor_categoria AS (
+			SELECT
+				v.id_vendedor,
+				vd.codigo_vendedor,
+				vd.nombre AS vendedor,
+				it.id_categoria,
+				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
+			FROM detalle_venta dv
+			JOIN item it ON it.id_item = dv.id_item
+			JOIN venta v ON v.id_venta = dv.id_venta
+			JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+			WHERE v.fecha >= :fechaInicio
+			  AND v.fecha <= :fechaFin
+			GROUP BY v.id_vendedor, vd.codigo_vendedor, vd.nombre, it.id_categoria
+		)
+		SELECT
+			avc.id_vendedor,
+			avc.codigo_vendedor,
+			avc.vendedor,
+			c.id_categoria,
+			c.nombre AS categoria,
+			COALESCE(cc.cuota, 0) AS cuota,
+			COALESCE(avc.acumulado, 0) AS acumulado
+		FROM categoria c
+		CROSS JOIN (
+			SELECT DISTINCT id_vendedor, codigo_vendedor, vendedor
+			FROM acumulado_por_vendedor_categoria
+		) vendedores_distintos
+		LEFT JOIN acumulado_por_vendedor_categoria avc 
+			ON avc.id_categoria = c.id_categoria 
+			AND avc.id_vendedor = vendedores_distintos.id_vendedor
+		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = c.id_cuota_categoria
+		ORDER BY avc.vendedor ASC, c.nombre ASC
+	`, {
+		replacements,
+		type: QueryTypes.SELECT
+	});
+
+	const { diasCorridos, diasHabiles } = await getRangoDias(period.fechaInicio, period.fechaFin);
+
+	// Agrupar por vendedor
+	const vendedoresMap = new Map();
+	const categoriasSet = new Set();
+
+	rows.forEach((row) => {
+		const vendedorKey = row.id_vendedor;
+		const categoriaKey = row.id_categoria;
+
+		categoriasSet.add(categoriaKey);
+
+		if (!vendedoresMap.has(vendedorKey)) {
+			vendedoresMap.set(vendedorKey, {
+				id_vendedor: row.id_vendedor,
+				codigo_vendedor: row.codigo_vendedor,
+				nombre_vendedor: row.vendedor,
+				categorias: []
+			});
+		}
+
+		vendedoresMap.get(vendedorKey).categorias.push({
+			id_categoria: row.id_categoria,
+			categoria: row.categoria,
+			cuota: toNumber(row.cuota),
+			acumulado: toNumber(row.acumulado)
+		});
+	});
+
+	// Construir respuesta con totales por categoría y por vendedor
+	const detalle = [];
+	const totalPorCategoria = {};
+
+	vendedoresMap.forEach((vendedor) => {
+		const totalAcumuladoVendedor = vendedor.categorias.reduce((acc, cat) => acc + cat.acumulado, 0);
+		const totalCuotaVendedor = vendedor.categorias.reduce((acc, cat) => acc + cat.cuota, 0);
+
+		const vendedorData = {
+			vendedor: {
+				id_vendedor: vendedor.id_vendedor,
+				codigo_vendedor: vendedor.codigo_vendedor,
+				nombre: vendedor.nombre_vendedor
+			},
+			categorias: vendedor.categorias.map((cat) => {
+				const cuota = cat.cuota;
+				const acumulado = cat.acumulado;
+				const porcentajeCumplimiento = cuota > 0 ? (acumulado / cuota) * 100 : 0;
+				const proyectado = diasCorridos > 0 ? (acumulado / diasCorridos) * diasHabiles : 0;
+				const porcentajeCumplimientoProyectado = cuota > 0 ? (proyectado / cuota) * 100 : 0;
+
+				// Acumular totales por categoría
+				if (!totalPorCategoria[cat.id_categoria]) {
+					totalPorCategoria[cat.id_categoria] = {
+						id_categoria: cat.id_categoria,
+						categoria: cat.categoria,
+						cuota: 0,
+						acumulado: 0,
+						proyectado: 0
+					};
+				}
+				totalPorCategoria[cat.id_categoria].cuota += cuota;
+				totalPorCategoria[cat.id_categoria].acumulado += acumulado;
+				totalPorCategoria[cat.id_categoria].proyectado += proyectado;
+
+				return {
+					id_categoria: cat.id_categoria,
+					categoria: cat.categoria,
+					cuota: round(cuota, 2),
+					acumulado: round(acumulado, 2),
+					porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
+					proyectado: round(proyectado, 2),
+					porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
+				};
+			}),
+			total_vendedor: {
+				cuota: round(totalCuotaVendedor, 2),
+				acumulado: round(totalAcumuladoVendedor, 2),
+				porcentajeCumplimiento: round(totalCuotaVendedor > 0 ? (totalAcumuladoVendedor / totalCuotaVendedor) * 100 : 0, 2),
+				proyectado: round(diasCorridos > 0 ? (totalAcumuladoVendedor / diasCorridos) * diasHabiles : 0, 2)
+			}
+		};
+
+		detalle.push(vendedorData);
+	});
+
+	// Construir totales por categoría
+	const totalesCategoria = Object.values(totalPorCategoria).map((cat) => {
+		const porcentajeCumplimiento = cat.cuota > 0 ? (cat.acumulado / cat.cuota) * 100 : 0;
+		const porcentajeCumplimientoProyectado = cat.cuota > 0 ? (cat.proyectado / cat.cuota) * 100 : 0;
+
+		return {
+			id_categoria: cat.id_categoria,
+			categoria: cat.categoria,
+			cuota: round(cat.cuota, 2),
+			acumulado: round(cat.acumulado, 2),
+			porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
+			proyectado: round(cat.proyectado, 2),
+			porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
+		};
+	});
+
+	// Total general
+	const totalGeneral = Object.values(totalPorCategoria).reduce((acc, cat) => ({
+		cuota: acc.cuota + cat.cuota,
+		acumulado: acc.acumulado + cat.acumulado,
+		proyectado: acc.proyectado + cat.proyectado
+	}), { cuota: 0, acumulado: 0, proyectado: 0 });
+
+	const porcentajeCumpGeneral = totalGeneral.cuota > 0 ? (totalGeneral.acumulado / totalGeneral.cuota) * 100 : 0;
+	const porcentajeCumpProyGeneral = totalGeneral.cuota > 0 ? (totalGeneral.proyectado / totalGeneral.cuota) * 100 : 0;
+
+	return {
+		periodo: {
+			fechaInicio: period.fechaInicio,
+			fechaFin: period.fechaFin,
+			dias_corridos: diasCorridos,
+			dias_habiles: diasHabiles
+		},
+		detalle,
+		totales_por_categoria: totalesCategoria,
+		total_general: {
+			cuota: round(totalGeneral.cuota, 2),
+			acumulado: round(totalGeneral.acumulado, 2),
+			porcentajeCumplimiento: round(porcentajeCumpGeneral, 2),
+			proyectado: round(totalGeneral.proyectado, 2),
+			porcentajeCumplimientoProyectado: round(porcentajeCumpProyGeneral, 2)
+		}
+	};
+};
+
 module.exports = {
-    getCuotaCategoriaGeneral,
-    getCuotaCategoriaPorVendedor
+	getCuotaCategoriaGeneral,
+	getCuotaCategoriaPorVendedor,
+	getCuotaCategoriaTodosVendedores
 };
