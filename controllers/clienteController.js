@@ -7,14 +7,27 @@ const {
     tipo_negocio_model
 } = require('../models');
 module.exports = {
-        async productosPorCliente(req, res) {
-            try {
-                const data = await clienteProductoService.getProductosPorCliente();
-                res.status(200).send(data);
-            } catch (error) {
-                res.status(400).send(error);
+    async productosPorCliente(req, res) {
+        try {
+            const data = await clienteProductoService.getProductosPorCliente();
+            res.status(200).send(data);
+        } catch (error) {
+            res.status(400).send(error);
+        }
+    },
+
+    async productosPorClientePorVendedor(req, res) {
+        try {
+            const { idVendedor } = req.params;
+            if (!idVendedor) {
+                return res.status(400).send({ message: 'Falta el parámetro idVendedor' });
             }
-        },
+            const data = await clienteProductoService.getProductosPorClientePorVendedor(idVendedor);
+            res.status(200).send(data);
+        } catch (error) {
+            res.status(400).send(error);
+        }
+    },
     list(req, res) {
         return cliente_model
             .findAll({
