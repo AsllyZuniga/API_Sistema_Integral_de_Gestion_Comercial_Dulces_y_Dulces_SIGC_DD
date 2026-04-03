@@ -4,6 +4,8 @@ const clienteController = require('../controllers').clienteController;
 router.get('/', clienteController.list);
 router.get('/productos-por-cliente', clienteController.productosPorCliente);
 router.get('/productos-por-cliente/vendedor/:idVendedor', clienteController.productosPorClientePorVendedor);
+router.get('/debug-productos-por-cliente/vendedor/:idVendedor', clienteController.debugProductosPorClientePorVendedor);
+router.get('/debug-ventas-por-vendedor/:idVendedor', clienteController.debugVentasPorVendedor);
 router.get('/:id', clienteController.getById);
 router.post('/', clienteController.add);
 module.exports = router;
