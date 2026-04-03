@@ -74,3 +74,29 @@ module.exports = sequelize => {
   const CategoriaModel = sequelize.define("categoria_model", attributes, options);
   return CategoriaModel;
 };
+const _categoriaFactory = module.exports;
+
+module.exports = (sequelize) => {
+  const CategoriaModel = _categoriaFactory(sequelize);
+
+  CategoriaModel.removeAttribute('cuota');
+
+  CategoriaModel.rawAttributes.nombre.type = DataTypes.STRING(150);
+  CategoriaModel.rawAttributes.fecha_inicio.type = DataTypes.DATEONLY;
+  CategoriaModel.rawAttributes.fecha_fin.type = DataTypes.DATEONLY;
+
+  CategoriaModel.rawAttributes.id_cuota_categoria = {
+    type: DataTypes.BIGINT,
+    allowNull: true,
+    defaultValue: null,
+    field: 'id_cuota_categoria',
+    references: {
+      model: 'cuotaCategoria_model',
+      key: 'id_cuota_categoria'
+    }
+  };
+
+  CategoriaModel.refreshAttributes();
+
+  return CategoriaModel;
+};
