@@ -141,6 +141,11 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
     const vendedorMap = {};
     vendedoresDB.forEach(v => { vendedorMap[String(v.codigo_vendedor).trim()] = v; });
 
+    // Resolver ids de proveedores para consultas masivas posteriores
+    const proveedorIds = Object.values(proveedorMap)
+        .map(p => p.id_proveedor)
+        .filter(Boolean);
+
     // Contadores
     const resumen = {
         fecha_inicio,
@@ -170,13 +175,55 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
     }
     if (nuevosVendedores.length > 0) {
         try {
-            const creados = await models.vendedor_model.bulkCreate(nuevosVendedores, { ignoreDuplicates: true });
-            creados.forEach(v => {
-                vendedorMap[String(v.codigo_vendedor).trim()] = v;
-                resumen.vendedores_creados.push(v.codigo_vendedor);
+            await models.vendedor_model.bulkCreate(nuevosVendedores, { ignoreDuplicates: true });
+
+            // Recargar vendedores para garantizar id_vendedor incluso con duplicados ignorados
+            const vendedoresActualizados = await models.vendedor_model.findAll({
+                where: { codigo_vendedor: { [Op.in]: codigosVendedor } },
+                attributes: ['id_vendedor', 'codigo_vendedor', 'nombre']
+            });
+
+            vendedoresActualizados.forEach(v => {
+                const codigo = String(v.codigo_vendedor).trim();
+                if (!vendedorMap[codigo]) {
+                    resumen.vendedores_creados.push(v.codigo_vendedor);
+                }
+                vendedorMap[codigo] = v;
             });
         } catch (err) {
             resumen.errores.push({ motivo: `Error en bulkCreate de vendedores: ${err.message}` });
+        }
+    }
+
+    // Buscar asignaciones existentes para el mismo periodo (vendedor + proveedor)
+    const vendedorIds = Object.values(vendedorMap)
+        .map(v => v.id_vendedor)
+        .filter(Boolean);
+
+    const asignacionExistentePorClave = new Map();
+    if (vendedorIds.length > 0 && proveedorIds.length > 0) {
+        try {
+            const asignacionesExistentes = await models.vendedorCuotaProveedor_model.findAll({
+                where: {
+                    id_vendedor: { [Op.in]: vendedorIds },
+                    id_proveedor: { [Op.in]: proveedorIds }
+                },
+                include: [{
+                    model: models.cuotaProveedor_model,
+                    as: 'cuotaProveedor',
+                    required: true,
+                    where: { fecha_inicio, fecha_fin },
+                    attributes: ['id_cuotaProveedor']
+                }],
+                attributes: ['id_vendedor_cuota_proveedor', 'id_vendedor', 'id_proveedor']
+            });
+
+            asignacionesExistentes.forEach(a => {
+                const key = `${a.id_vendedor}|${a.id_proveedor}`;
+                asignacionExistentePorClave.set(key, a.id_vendedor_cuota_proveedor);
+            });
+        } catch (err) {
+            resumen.errores.push({ motivo: `Error consultando asignaciones existentes del periodo: ${err.message}` });
         }
     }
 
@@ -215,7 +262,7 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 continue;
             }
             cuotasProveedorBulk.push({
-                cuota: BigInt(Math.round(cuotaNum)),
+                cuota: Math.round(cuotaNum),
                 fecha_inicio,
                 fecha_fin,
                 _meta: {
@@ -244,18 +291,30 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
 
     // 4. Mapear cuotasProveedor a asignaciones
     let idx = 0;
+    const asignacionPorClave = new Map();
     for (const q of cuotasProveedorBulk) {
         if (cuotasProveedorCreadas[idx]) {
-            asignacionesBulk.push({
+            const key = `${q._meta.id_vendedor}|${q._meta.id_proveedor}`;
+            const asignacion = {
                 id_vendedor: q._meta.id_vendedor,
                 id_proveedor: q._meta.id_proveedor,
                 id_cuotaProveedor: cuotasProveedorCreadas[idx].id_cuotaProveedor,
                 estado: true
-            });
-            resumen.cuotas_creadas++;
+            };
+
+            const idExistente = asignacionExistentePorClave.get(key);
+            if (idExistente) {
+                asignacion.id_vendedor_cuota_proveedor = idExistente;
+            }
+
+            // Si en el archivo viene repetido vendedor/proveedor, prevalece la última cuota
+            asignacionPorClave.set(key, asignacion);
         }
         idx++;
     }
+
+    asignacionesBulk.push(...asignacionPorClave.values());
+    resumen.cuotas_creadas = asignacionesBulk.length;
 
     // 5. Bulk upsert de asignaciones (no existe bulkUpsert en Sequelize, así que se hace bulkCreate con updateOnDuplicate)
     if (asignacionesBulk.length > 0) {
