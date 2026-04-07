@@ -434,47 +434,65 @@ const getCumplimientoMesFront = async (filters = {}) => {
 };
 
 const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
 
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = filters.fechaInicio;
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
 
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = filters.fechaFin;
+        replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
+        replacements.ciudad = String(normalizedFilters.ciudad);
     }
 
-    if (filters.proveedor) {
+    if (normalizedFilters.proveedor) {
         where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-        replacements.proveedor = String(filters.proveedor);
+        replacements.proveedor = String(normalizedFilters.proveedor);
     }
 
-    if (filters.categoria) {
+    if (normalizedFilters.categoria) {
         where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-        replacements.categoria = String(filters.categoria);
+        replacements.categoria = String(normalizedFilters.categoria);
     }
+
+    replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
+    replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
     const query = `
         SELECT
+            pr.id_proveedor AS id_proveedor,
             COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo_linea,
             COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_linea,
+            COALESCE(cpv.cuota, 0) AS cuota_proveedor,
             SUM(COALESCE(dv.subtotal, 0)) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         JOIN item it ON it.id_item = dv.id_item
         LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
+        LEFT JOIN LATERAL (
+            SELECT cp.cuota
+            FROM "vendedorCuotaProveedor" vcp
+            JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+            WHERE vcp.id_vendedor = vd.id_vendedor
+              AND vcp.id_proveedor = pr.id_proveedor
+              AND vcp.estado = true
+              AND cp.fecha_inicio <= :cuotaFechaFin
+              AND cp.fecha_fin >= :cuotaFechaInicio
+            ORDER BY cp.fecha_fin DESC NULLS LAST, cp."id_cuotaProveedor" DESC
+            LIMIT 1
+        ) cpv ON true
         LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
         WHERE ${where.join(' AND ')}
-        GROUP BY COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA')
+        GROUP BY pr.id_proveedor, COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA'), COALESCE(cpv.cuota, 0)
         ORDER BY venta DESC
     `;
 
@@ -483,24 +501,37 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         type: QueryTypes.SELECT
     });
 
-    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
-    const cuotaMesVendedor = await getCuotaMesPorVendedor(codigoVendedor, filters);
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
+    const cuotaMesVendedor = await getCuotaMesPorVendedor(codigoVendedor, normalizedFilters);
 
     return {
         codigoVendedor,
+        cuotaVendedor: round(cuotaMesVendedor, 2),
+        periodo: {
+            fechaInicio: normalizedFilters.fechaInicio,
+            fechaFin: normalizedFilters.fechaFin
+        },
         detallePorLinea: detallePorLinea.map((row) => {
             const ventaAcum = toNumber(row.venta);
+            const cuotaProveedor = toNumber(row.cuota_proveedor);
             const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
             const porcCump = cuotaMesVendedor > 0 ? (ventaAcum / cuotaMesVendedor) * 100 : 0;
             const porcCumProy = cuotaMesVendedor > 0 ? (proyeccionVenta / cuotaMesVendedor) * 100 : 0;
+            const porcCumpProveedor = cuotaProveedor > 0 ? (ventaAcum / cuotaProveedor) * 100 : 0;
+            const porcCumProyProveedor = cuotaProveedor > 0 ? (proyeccionVenta / cuotaProveedor) * 100 : 0;
 
             return {
+                idProveedor: row.id_proveedor,
                 codigoLinea: row.codigo_linea,
                 linea: `${row.codigo_linea} - ${row.nombre_linea}`,
+                cuotaProveedor: round(cuotaProveedor, 2),
+                cuotaVendedor: round(cuotaMesVendedor, 2),
                 ventaAcum: round(ventaAcum, 2),
                 porcCump: round(porcCump, 4),
+                porcCumpProveedor: round(porcCumpProveedor, 4),
                 proyeccionVenta: round(proyeccionVenta, 2),
-                porcCumProy: round(porcCumProy, 4)
+                porcCumProy: round(porcCumProy, 4),
+                porcCumProyProveedor: round(porcCumProyProveedor, 4)
             };
         })
     };
