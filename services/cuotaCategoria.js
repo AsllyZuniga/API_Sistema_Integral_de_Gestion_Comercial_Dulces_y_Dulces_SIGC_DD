@@ -9,6 +9,42 @@ const round = (value, decimals = 2) => {
     return Math.round((toNumber(value) + Number.EPSILON) * factor) / factor;
 };
 
+const normalizeCategoryLabel = (value) => String(value ?? '')
+	.trim()
+	.toUpperCase()
+	.replace(/\s+/g, ' ');
+
+const collapseDuplicateCategories = (rows = []) => {
+	const grouped = new Map();
+
+	rows.forEach((row) => {
+		const key = normalizeCategoryLabel(row.categoria);
+		if (!grouped.has(key)) {
+			grouped.set(key, {
+				id_categoria: row.id_categoria,
+				categoria: row.categoria,
+				cuota: toNumber(row.cuota),
+				acumulado: toNumber(row.acumulado)
+			});
+			return;
+		}
+
+		const current = grouped.get(key);
+		current.acumulado += toNumber(row.acumulado);
+
+		const cuotaActual = toNumber(row.cuota);
+		if (cuotaActual > 0 && cuotaActual > current.cuota) {
+			current.cuota = cuotaActual;
+		}
+
+		if (!current.id_categoria && row.id_categoria) {
+			current.id_categoria = row.id_categoria;
+		}
+	});
+
+	return [...grouped.values()];
+};
+
 const toDateOnly = (value) => {
     const date = value ? new Date(value) : new Date();
     date.setHours(0, 0, 0, 0);
@@ -79,10 +115,11 @@ const getRangoDias = async (fechaInicio, fechaFin) => {
 };
 
 const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
-    const { diasCorridos, diasHabiles } = await getRangoDias(period.fechaInicio, period.fechaFin);
-    const totalAcumulado = rows.reduce((acc, row) => acc + toNumber(row.acumulado), 0);
+	const normalizedRows = collapseDuplicateCategories(rows);
+	const { diasCorridos, diasHabiles } = await getRangoDias(period.fechaInicio, period.fechaFin);
+	const totalAcumulado = normalizedRows.reduce((acc, row) => acc + toNumber(row.acumulado), 0);
 
-    const detalle = rows.map((row) => {
+	const detalle = normalizedRows.map((row) => {
         const cuota = toNumber(row.cuota);
         const acumulado = toNumber(row.acumulado);
         const porcentajeCumplimiento = cuota > 0 ? (acumulado / cuota) * 100 : 0;
