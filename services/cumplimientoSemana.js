@@ -1,27 +1,28 @@
 // === FUNCIONES POR PROVEEDOR, CIUDAD, ITEM ===
 // Por proveedor (líneas)
 async function getLineasPorVendedor(codigoVendedor, filters = {}) {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = filters.fechaInicio;
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = filters.fechaFin;
+        replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
+        replacements.ciudad = String(normalizedFilters.ciudad);
     }
-    if (filters.proveedor) {
+    if (normalizedFilters.proveedor) {
         where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-        replacements.proveedor = String(filters.proveedor);
+        replacements.proveedor = String(normalizedFilters.proveedor);
     }
-    if (filters.categoria) {
+    if (normalizedFilters.categoria) {
         where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-        replacements.categoria = String(filters.categoria);
+        replacements.categoria = String(normalizedFilters.categoria);
     }
     const query = `
         SELECT
@@ -39,9 +40,9 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
         ORDER BY venta DESC
     `;
     const detallePorLinea = await sequelize.query(query, { replacements, type: QueryTypes.SELECT });
-    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
     // Usar cuota semanal
-    const cuotaSemana = await getCuotaSemanaPorVendedor(codigoVendedor, filters);
+    const cuotaSemana = await getCuotaSemanaPorVendedor(codigoVendedor, normalizedFilters);
     return {
         codigoVendedor,
         detallePorLinea: detallePorLinea.map((row) => {
@@ -83,25 +84,26 @@ async function getLineaEspecificaPorVendedor(codigoVendedor, codigoLinea, filter
 
 // Por ciudad
 async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = filters.fechaInicio;
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = filters.fechaFin;
+        replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    if (filters.proveedor || filters.categoria) {
+    if (normalizedFilters.proveedor || normalizedFilters.categoria) {
         const sub = [];
-        if (filters.proveedor) {
+        if (normalizedFilters.proveedor) {
             sub.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-            replacements.proveedor = String(filters.proveedor);
+            replacements.proveedor = String(normalizedFilters.proveedor);
         }
-        if (filters.categoria) {
+        if (normalizedFilters.categoria) {
             sub.push('CAST(it.id_categoria AS TEXT) = :categoria');
-            replacements.categoria = String(filters.categoria);
+            replacements.categoria = String(normalizedFilters.categoria);
         }
         where.push(`
             EXISTS (
@@ -113,13 +115,13 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
             )
         `);
     }
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
+        replacements.ciudad = String(normalizedFilters.ciudad);
     }
     let ciudadSelect = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
     let ciudadGroup = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         ciudadSelect = 'TRIM(ci.nombre) AS ciudad';
         ciudadGroup = 'TRIM(ci.nombre)';
     }
@@ -137,8 +139,8 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
         ORDER BY venta DESC
     `;
     const detallePorCiudad = await sequelize.query(query, { replacements, type: QueryTypes.SELECT });
-    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
-    const cuotaSemana = await getCuotaSemanaPorVendedor(codigoVendedor, filters);
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
+    const cuotaSemana = await getCuotaSemanaPorVendedor(codigoVendedor, normalizedFilters);
     return {
         codigoVendedor,
         detallePorCiudad: detallePorCiudad.map((row) => {
@@ -159,27 +161,28 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
 
 // Por producto/item
 async function getProductosPorVendedor(codigoVendedor, filters = {}) {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = filters.fechaInicio;
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = filters.fechaFin;
+        replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
+        replacements.ciudad = String(normalizedFilters.ciudad);
     }
-    if (filters.proveedor) {
+    if (normalizedFilters.proveedor) {
         where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-        replacements.proveedor = String(filters.proveedor);
+        replacements.proveedor = String(normalizedFilters.proveedor);
     }
-    if (filters.categoria) {
+    if (normalizedFilters.categoria) {
         where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-        replacements.categoria = String(filters.categoria);
+        replacements.categoria = String(normalizedFilters.categoria);
     }
     const query = `
         SELECT
@@ -217,15 +220,16 @@ async function getProductosPorVendedor(codigoVendedor, filters = {}) {
 
 // Utilidad: obtener cuota semana por vendedor
 async function getCuotaSemanaPorVendedor(codigoVendedor, filters = {}) {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor: String(codigoVendedor || '').trim() };
     const conditions = ['cs.id_usuario = vd.id_usuario'];
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         conditions.push('cs.fecha_fin >= :cuotaFechaInicio');
-        replacements.cuotaFechaInicio = filters.fechaInicio;
+        replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     }
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         conditions.push('cs.fecha_inicio <= :cuotaFechaFin');
-        replacements.cuotaFechaFin = filters.fechaFin;
+        replacements.cuotaFechaFin = normalizedFilters.fechaFin;
     }
     const row = await sequelize.query(`
         SELECT COALESCE(cs.cuota_semana, 0) AS cuota_semana
@@ -254,11 +258,27 @@ const round = (value, decimals = 2) => {
 };
 const toNumber = (value) => Number(value || 0);
 const toDateOnly = (value) => {
-    const date = value ? new Date(value) : new Date();
+    if (!value) {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    }
+
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    const date = new Date(value);
     date.setHours(0, 0, 0, 0);
     return date;
 };
-const formatDateOnly = (date) => date.toISOString().slice(0, 10);
+const formatDateOnly = (date) => {
+    const localDate = toDateOnly(date);
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 const normalizePeriodFilters = (filters = {}) => {
     if (filters.fechaInicio && filters.fechaFin) {
@@ -269,7 +289,10 @@ const normalizePeriodFilters = (filters = {}) => {
         };
     }
     // Por defecto, semana actual (lunes a domingo)
-    const now = new Date();
+    const baseDate = filters.fechaInicio
+        ? toDateOnly(filters.fechaInicio)
+        : (filters.fechaFin ? toDateOnly(filters.fechaFin) : new Date());
+    const now = new Date(baseDate);
     const day = now.getDay();
     const diffToMonday = (day === 0 ? -6 : 1) - day; // Lunes=1, Domingo=0
     const monday = new Date(now);
@@ -412,12 +435,12 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
 
     let cuotaProveedorJoin = '';
     let cuotaProveedorSelect = 'NULL AS cuota_proveedor';
-    if (filters.proveedor) {
+    if (normalizedFilters.proveedor) {
         cuotaProveedorJoin = `LEFT JOIN vendedor_cuota_proveedor vcp ON vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :proveedor
             LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
             AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio`;
         cuotaProveedorSelect = 'COALESCE(cp.cuota, 0) AS cuota_proveedor';
-        replacements.proveedor = String(filters.proveedor);
+        replacements.proveedor = String(normalizedFilters.proveedor);
         replacements.cuotaFechaFin = normalizedFilters.fechaFin;
         replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     }

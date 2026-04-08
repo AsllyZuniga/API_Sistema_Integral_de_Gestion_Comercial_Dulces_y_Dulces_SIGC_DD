@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const crypto = require('crypto');
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const parse = require('csv-parse/sync').parse;
 const iconv = require('iconv-lite');
 
@@ -139,6 +139,87 @@ class ImportadorVentasOptimizado {
         if (negativo) numero = -numero;
         if (valor === '0' || valor === '0,00' || valor === '$0,00') return 0;
         return isNaN(numero) ? null : numero;
+    }
+
+    valorClave(valor) {
+        if (valor === undefined || valor === null) return 'NULL';
+        return String(valor).trim();
+    }
+
+    construirClaveVentaDetalle(ventaData, detalleData) {
+        return [
+            this.valorClave(ventaData.numero_documento),
+            this.valorClave(ventaData.fecha),
+            this.valorClave(ventaData.id_cliente),
+            this.valorClave(ventaData.id_vendedor),
+            this.valorClave(ventaData.id_tipo_documento),
+            this.valorClave(ventaData.subtotal),
+            this.valorClave(ventaData.valor_neto),
+            this.valorClave(detalleData.id_item),
+            this.valorClave(detalleData.cantidad),
+            this.valorClave(detalleData.cantidad_emp),
+            this.valorClave(detalleData.precio_unitario),
+            this.valorClave(detalleData.subtotal)
+        ].join('|');
+    }
+
+    async obtenerClavesExistentesEnDB(pares) {
+        if (!pares || pares.length === 0) return new Set();
+
+        const fechas = [...new Set(pares.map(p => p.ventaData.fecha).filter(Boolean))];
+        const documentos = [...new Set(pares.map(p => p.ventaData.numero_documento).filter(Boolean))];
+        const vendedores = [...new Set(pares.map(p => p.ventaData.id_vendedor).filter(Boolean))];
+
+        if (fechas.length === 0 || documentos.length === 0 || vendedores.length === 0) {
+            return new Set();
+        }
+
+        const rows = await this.sequelize.query(`
+            SELECT
+                v.numero_documento,
+                v.fecha,
+                v.id_cliente,
+                v.id_vendedor,
+                v.id_tipo_documento,
+                v.subtotal,
+                v.valor_neto,
+                d.id_item,
+                d.cantidad,
+                d.cantidad_emp,
+                d.precio_unitario,
+                d.subtotal AS detalle_subtotal
+            FROM venta v
+            JOIN detalle_venta d ON d.id_venta = v.id_venta
+            WHERE v.fecha IN (:fechas)
+              AND v.numero_documento IN (:documentos)
+              AND v.id_vendedor IN (:vendedores)
+        `, {
+            replacements: { fechas, documentos, vendedores },
+            type: QueryTypes.SELECT
+        });
+
+        const claves = new Set();
+        rows.forEach((r) => {
+            const ventaData = {
+                numero_documento: r.numero_documento,
+                fecha: r.fecha,
+                id_cliente: r.id_cliente,
+                id_vendedor: r.id_vendedor,
+                id_tipo_documento: r.id_tipo_documento,
+                subtotal: r.subtotal,
+                valor_neto: r.valor_neto
+            };
+            const detalleData = {
+                id_item: r.id_item,
+                cantidad: r.cantidad,
+                cantidad_emp: r.cantidad_emp,
+                precio_unitario: r.precio_unitario,
+                subtotal: r.detalle_subtotal
+            };
+            claves.add(this.construirClaveVentaDetalle(ventaData, detalleData));
+        });
+
+        return claves;
     }
 
     parsearFecha(valor) {
@@ -632,18 +713,39 @@ class ImportadorVentasOptimizado {
                 return;
             }
 
+            // 1) Deduplicación dentro del mismo batch
+            const paresUnicos = [];
+            const clavesBatch = new Set();
+            for (let i = 0; i < ventasData.length; i++) {
+                const ventaData = ventasData[i];
+                const detalleData = detallesData[i];
+                const clave = this.construirClaveVentaDetalle(ventaData, detalleData);
+                if (clavesBatch.has(clave)) continue;
+                clavesBatch.add(clave);
+                paresUnicos.push({ ventaData, detalleData, clave });
+            }
+
+            // 2) Deduplicación contra datos ya existentes en DB
+            const clavesExistentes = await this.obtenerClavesExistentesEnDB(paresUnicos);
+            const paresNuevos = paresUnicos.filter((p) => !clavesExistentes.has(p.clave));
+
+            if (paresNuevos.length === 0) {
+                console.log('⚠️ Lote descartado: todas las filas ya existen (duplicados evitados)');
+                return;
+            }
+
             const transaccion = await this.sequelize.transaction();
 
             try {
                 // Insert masivo de ventas — Postgres devuelve los IDs generados
-                const ventasCreadas = await this.venta.bulkCreate(ventasData, {
+                const ventasCreadas = await this.venta.bulkCreate(paresNuevos.map(p => p.ventaData), {
                     transaction: transaccion,
                     returning: true
                 });
 
                 // Asignar id_venta a cada detalle según su posición
-                const detallesConId = detallesData.map((d, i) => ({
-                    ...d,
+                const detallesConId = paresNuevos.map((p, i) => ({
+                    ...p.detalleData,
                     id_venta: ventasCreadas[i]?.id_venta
                 }));
 
