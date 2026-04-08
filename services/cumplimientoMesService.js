@@ -349,7 +349,7 @@ const getCumplimientoMes = async (filters = {}) => {
             SELECT
                 v.id_vendedor,
                 SUM(${signedNcAmountSql('v')}) AS venta_acum,
-                SUM(${signedNcSubtotalSql('v')}) AS total_nc
+                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE 0 END) AS total_nc
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
