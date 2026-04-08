@@ -5,175 +5,154 @@ const { getResumenPeriodoLaboral } = require('../utils/calendarioLaboralColombia
 const toNumber = (value) => Number(value || 0);
 
 const round = (value, decimals = 2) => {
-    const factor = 10 ** decimals;
-    return Math.round((toNumber(value) + Number.EPSILON) * factor) / factor;
-};
-
-const normalizeCategoryLabel = (value) => String(value ?? '')
-	.trim()
-	.toUpperCase()
-	.replace(/\s+/g, ' ');
-
-const collapseDuplicateCategories = (rows = []) => {
-	const grouped = new Map();
-
-	rows.forEach((row) => {
-		const key = normalizeCategoryLabel(row.categoria);
-		if (!grouped.has(key)) {
-			grouped.set(key, {
-				id_categoria: row.id_categoria,
-				categoria: row.categoria,
-				cuota: toNumber(row.cuota),
-				acumulado: toNumber(row.acumulado)
-			});
-			return;
-		}
-
-		const current = grouped.get(key);
-		current.acumulado += toNumber(row.acumulado);
-
-		const cuotaActual = toNumber(row.cuota);
-		if (cuotaActual > 0 && cuotaActual > current.cuota) {
-			current.cuota = cuotaActual;
-		}
-
-		if (!current.id_categoria && row.id_categoria) {
-			current.id_categoria = row.id_categoria;
-		}
-	});
-
-	return [...grouped.values()];
+	const factor = 10 ** decimals;
+	return Math.round((toNumber(value) + Number.EPSILON) * factor) / factor;
 };
 
 const toDateOnly = (value) => {
-    const date = value ? new Date(value) : new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
+	if (!value) {
+		const today = new Date();
+		return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+	}
+
+	if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+		const [year, month, day] = value.split('-').map(Number);
+		return new Date(year, month - 1, day);
+	}
+
+	const date = new Date(value);
+	date.setHours(0, 0, 0, 0);
+	return date;
 };
 
-const formatDateOnly = (date) => toDateOnly(date).toISOString().slice(0, 10);
+const formatDateOnly = (date) => {
+	const localDate = toDateOnly(date);
+	const year = localDate.getFullYear();
+	const month = String(localDate.getMonth() + 1).padStart(2, '0');
+	const day = String(localDate.getDate()).padStart(2, '0');
+	return `${year}-${month}-${day}`;
+};
 
 const getMonthRange = (baseDate = new Date()) => {
-    const year = baseDate.getFullYear();
-    const month = baseDate.getMonth();
-    const start = new Date(year, month, 1);
-    const end = new Date(year, month + 1, 0);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
-    return { start, end };
+	const year = baseDate.getFullYear();
+	const month = baseDate.getMonth();
+	const start = new Date(year, month, 1);
+	const end = new Date(year, month + 1, 0);
+	start.setHours(0, 0, 0, 0);
+	end.setHours(0, 0, 0, 0);
+	return { start, end };
 };
 
 const normalizePeriodFilters = (filters = {}) => {
-    if (filters.fechaInicio && filters.fechaFin) {
-        return {
-            fechaInicio: formatDateOnly(filters.fechaInicio),
-            fechaFin: formatDateOnly(filters.fechaFin)
-        };
-    }
+	if (filters.fechaInicio && filters.fechaFin) {
+		return {
+			fechaInicio: formatDateOnly(filters.fechaInicio),
+			fechaFin: formatDateOnly(filters.fechaFin)
+		};
+	}
 
-    const base = filters.fechaInicio ? toDateOnly(filters.fechaInicio) : new Date();
-    const { start, end } = getMonthRange(base);
+	const base = filters.fechaInicio ? toDateOnly(filters.fechaInicio) : new Date();
+	const { start, end } = getMonthRange(base);
 
-    return {
-        fechaInicio: formatDateOnly(start),
-        fechaFin: formatDateOnly(end)
-    };
+	return {
+		fechaInicio: formatDateOnly(start),
+		fechaFin: formatDateOnly(end)
+	};
 };
 
 const calculateRangoFromPeriod = (fechaInicio, fechaFin) => {
-    const resumen = getResumenPeriodoLaboral({
-        fechaInicio,
-        fechaFin,
-        fechaCorte: new Date()
-    });
+	const resumen = getResumenPeriodoLaboral({
+		fechaInicio,
+		fechaFin,
+		fechaCorte: new Date()
+	});
 
-    return {
-        diasCorridos: toNumber(resumen.dias_corridos),
-        diasHabiles: toNumber(resumen.dias_habiles)
-    };
+	return {
+		diasCorridos: toNumber(resumen.dias_corridos),
+		diasHabiles: toNumber(resumen.dias_habiles)
+	};
 };
 
 const getRangoDias = async (fechaInicio, fechaFin) => {
-    const where = {
-        fecha_inicio: { [Op.lte]: fechaFin },
-        fecha_fin: { [Op.gte]: fechaInicio }
-    };
+	const where = {
+		fecha_inicio: { [Op.lte]: fechaFin },
+		fecha_fin: { [Op.gte]: fechaInicio }
+	};
 
-    const rango = await rango_dias_model.findOne({
-        where,
-        order: [['fecha_fin', 'DESC']]
-    });
+	const rango = await rango_dias_model.findOne({
+		where,
+		order: [['fecha_fin', 'DESC']]
+	});
 
-    if (!rango) {
-        return calculateRangoFromPeriod(fechaInicio, fechaFin);
-    }
+	if (!rango) {
+		return calculateRangoFromPeriod(fechaInicio, fechaFin);
+	}
 
-    return {
-        diasCorridos: toNumber(rango.dias_corridos),
-        diasHabiles: toNumber(rango.dias_habiles)
-    };
+	return {
+		diasCorridos: toNumber(rango.dias_corridos),
+		diasHabiles: toNumber(rango.dias_habiles)
+	};
 };
 
 const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
-	const normalizedRows = collapseDuplicateCategories(rows);
 	const { diasCorridos, diasHabiles } = await getRangoDias(period.fechaInicio, period.fechaFin);
-	const totalAcumulado = normalizedRows.reduce((acc, row) => acc + toNumber(row.acumulado), 0);
+	const totalAcumulado = rows.reduce((acc, row) => acc + toNumber(row.acumulado), 0);
 
-	const detalle = normalizedRows.map((row) => {
-        const cuota = toNumber(row.cuota);
-        const acumulado = toNumber(row.acumulado);
-        const porcentajeCumplimiento = cuota > 0 ? (acumulado / cuota) * 100 : 0;
-        const part = totalAcumulado > 0 ? (acumulado / totalAcumulado) * 100 : 0;
-        const proyectado = diasCorridos > 0 ? (acumulado / diasCorridos) * diasHabiles : 0;
-        const porcentajeCumplimientoProyectado = cuota > 0 ? (proyectado / cuota) * 100 : 0;
+	const detalle = rows.map((row) => {
+		const cuota = toNumber(row.cuota);
+		const acumulado = toNumber(row.acumulado);
+		const porcentajeCumplimiento = cuota > 0 ? (acumulado / cuota) * 100 : 0;
+		const part = totalAcumulado > 0 ? (acumulado / totalAcumulado) * 100 : 0;
+		const proyectado = diasCorridos > 0 ? (acumulado / diasCorridos) * diasHabiles : 0;
+		const porcentajeCumplimientoProyectado = cuota > 0 ? (proyectado / cuota) * 100 : 0;
 
-        return {
-            id_categoria: row.id_categoria,
-            categoria: row.categoria,
-            cuota: round(cuota, 2),
-            acumulado: round(acumulado, 2),
-            porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
-            part: round(part, 2),
-            proyectado: round(proyectado, 2),
-            porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
-        };
-    });
+		return {
+			id_categoria: row.id_categoria,
+			categoria: row.categoria,
+			cuota: round(cuota, 2),
+			acumulado: round(acumulado, 2),
+			porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
+			part: round(part, 2),
+			proyectado: round(proyectado, 2),
+			porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
+		};
+	});
 
-    const totalCuota = detalle.reduce((acc, row) => acc + toNumber(row.cuota), 0);
-    const totalProyectado = detalle.reduce((acc, row) => acc + toNumber(row.proyectado), 0);
-    const totalPorcentajeCumplimiento = totalCuota > 0 ? (totalAcumulado / totalCuota) * 100 : 0;
-    const totalPorcentajeCumplimientoProyectado = totalCuota > 0 ? (totalProyectado / totalCuota) * 100 : 0;
+	const totalCuota = detalle.reduce((acc, row) => acc + toNumber(row.cuota), 0);
+	const totalProyectado = detalle.reduce((acc, row) => acc + toNumber(row.proyectado), 0);
+	const totalPorcentajeCumplimiento = totalCuota > 0 ? (totalAcumulado / totalCuota) * 100 : 0;
+	const totalPorcentajeCumplimientoProyectado = totalCuota > 0 ? (totalProyectado / totalCuota) * 100 : 0;
 
-    return {
-        ...extra,
-        periodo: {
-            fechaInicio: period.fechaInicio,
-            fechaFin: period.fechaFin,
-            dias_corridos: diasCorridos,
-            dias_habiles: diasHabiles
-        },
-        detalle,
-        total: {
-            categoria: 'TOTAL X CATEGORIA',
-            cuota: round(totalCuota, 2),
-            acumulado: round(totalAcumulado, 2),
-            porcentajeCumplimiento: round(totalPorcentajeCumplimiento, 2),
-            part: round(totalAcumulado > 0 ? 100 : 0, 2),
-            proyectado: round(totalProyectado, 2),
-            porcentajeCumplimientoProyectado: round(totalPorcentajeCumplimientoProyectado, 2)
-        }
-    };
+	return {
+		...extra,
+		periodo: {
+			fechaInicio: period.fechaInicio,
+			fechaFin: period.fechaFin,
+			dias_corridos: diasCorridos,
+			dias_habiles: diasHabiles
+		},
+		detalle,
+		total: {
+			categoria: 'TOTAL X CATEGORIA',
+			cuota: round(totalCuota, 2),
+			acumulado: round(totalAcumulado, 2),
+			porcentajeCumplimiento: round(totalPorcentajeCumplimiento, 2),
+			part: round(totalAcumulado > 0 ? 100 : 0, 2),
+			proyectado: round(totalProyectado, 2),
+			porcentajeCumplimientoProyectado: round(totalPorcentajeCumplimientoProyectado, 2)
+		}
+	};
 };
 
 const getCuotaCategoriaGeneral = async (filters = {}) => {
-    const period = normalizePeriodFilters(filters);
+	const period = normalizePeriodFilters(filters);
 
-    const replacements = {
-        fechaInicio: period.fechaInicio,
-        fechaFin: period.fechaFin
-    };
+	const replacements = {
+		fechaInicio: period.fechaInicio,
+		fechaFin: period.fechaFin
+	};
 
-    const rows = await sequelize.query(`
+	const rows = await sequelize.query(`
 		WITH acumulado_por_categoria AS (
 			SELECT
 				it.id_categoria,
@@ -195,38 +174,38 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
 		ORDER BY c.nombre ASC
 	`, {
-        replacements,
-        type: QueryTypes.SELECT
-    });
+		replacements,
+		type: QueryTypes.SELECT
+	});
 
-    return buildCuotaCategoriaPayload(rows, period);
+	return buildCuotaCategoriaPayload(rows, period);
 };
 
 const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
-    const codigoNormalizado = String(codigoVendedor || '').trim();
-    if (!codigoNormalizado) return null;
+	const codigoNormalizado = String(codigoVendedor || '').trim();
+	if (!codigoNormalizado) return null;
 
-    const vendedor = await sequelize.query(`
+	const vendedor = await sequelize.query(`
 		SELECT id_vendedor, codigo_vendedor, nombre
 		FROM vendedor
 		WHERE codigo_vendedor = :codigoVendedor
 		LIMIT 1
 	`, {
-        replacements: { codigoVendedor: codigoNormalizado },
-        type: QueryTypes.SELECT,
-        plain: true
-    });
+		replacements: { codigoVendedor: codigoNormalizado },
+		type: QueryTypes.SELECT,
+		plain: true
+	});
 
-    if (!vendedor) return null;
+	if (!vendedor) return null;
 
-    const period = normalizePeriodFilters(filters);
-    const replacements = {
-        fechaInicio: period.fechaInicio,
-        fechaFin: period.fechaFin,
-        idVendedor: vendedor.id_vendedor
-    };
+	const period = normalizePeriodFilters(filters);
+	const replacements = {
+		fechaInicio: period.fechaInicio,
+		fechaFin: period.fechaFin,
+		idVendedor: vendedor.id_vendedor
+	};
 
-    const rows = await sequelize.query(`
+	const rows = await sequelize.query(`
 		WITH acumulado_por_categoria AS (
 			SELECT
 				it.id_categoria,
@@ -249,17 +228,17 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
 		ORDER BY c.nombre ASC
 	`, {
-        replacements,
-        type: QueryTypes.SELECT
-    });
+		replacements,
+		type: QueryTypes.SELECT
+	});
 
-    return buildCuotaCategoriaPayload(rows, period, {
-        vendedor: {
-            id_vendedor: vendedor.id_vendedor,
-            codigo_vendedor: vendedor.codigo_vendedor,
-            nombre: vendedor.nombre
-        }
-    });
+	return buildCuotaCategoriaPayload(rows, period, {
+		vendedor: {
+			id_vendedor: vendedor.id_vendedor,
+			codigo_vendedor: vendedor.codigo_vendedor,
+			nombre: vendedor.nombre
+		}
+	});
 };
 
 const getCuotaCategoriaTodosVendedores = async (filters = {}) => {

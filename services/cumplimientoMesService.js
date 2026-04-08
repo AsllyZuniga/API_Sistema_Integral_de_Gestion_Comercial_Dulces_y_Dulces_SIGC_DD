@@ -10,12 +10,28 @@ const round = (value, decimals = 2) => {
 const toNumber = (value) => Number(value || 0);
 
 const toDateOnly = (value) => {
-    const date = value ? new Date(value) : new Date();
+    if (!value) {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    }
+
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    const date = new Date(value);
     date.setHours(0, 0, 0, 0);
     return date;
 };
 
-const formatDateOnly = (date) => date.toISOString().slice(0, 10);
+const formatDateOnly = (date) => {
+    const localDate = toDateOnly(date);
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 const getMonthRange = (baseDate = new Date()) => {
     const year = baseDate.getFullYear();
@@ -36,7 +52,9 @@ const normalizePeriodFilters = (filters = {}) => {
         };
     }
 
-    const base = filters.fechaInicio ? toDateOnly(filters.fechaInicio) : new Date();
+    const base = filters.fechaInicio
+        ? toDateOnly(filters.fechaInicio)
+        : (filters.fechaFin ? toDateOnly(filters.fechaFin) : new Date());
     const { start, end } = getMonthRange(base);
 
     return {
@@ -292,18 +310,19 @@ const buildTotales = (rows, diasCorridos, diasHabiles) => {
 };
 
 const getCumplimientoMes = async (filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
-    const ventasWhere = buildVentasFilters(filters, replacements);
-    const vendedorFilter = buildVendedorFilter(filters, replacements);
+    const ventasWhere = buildVentasFilters(normalizedFilters, replacements);
+    const vendedorFilter = buildVendedorFilter(normalizedFilters, replacements);
 
     const cuotaConditions = [];
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         cuotaConditions.push('cm.fecha_fin >= :cuotaFechaInicio');
-        replacements.cuotaFechaInicio = filters.fechaInicio;
+        replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     }
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         cuotaConditions.push('cm.fecha_inicio <= :cuotaFechaFin');
-        replacements.cuotaFechaFin = filters.fechaFin;
+        replacements.cuotaFechaFin = normalizedFilters.fechaFin;
     }
     const cuotaWhere = cuotaConditions.length > 0
         ? `WHERE ${cuotaConditions.join(' AND ')}`
@@ -311,14 +330,14 @@ const getCumplimientoMes = async (filters = {}) => {
 
     let cuotaProveedorJoin = '';
     let cuotaProveedorSelect = 'NULL AS cuota_proveedor';
-    if (filters.proveedor) {
+    if (normalizedFilters.proveedor) {
         cuotaProveedorJoin = `LEFT JOIN vendedor_cuota_proveedor vcp ON vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :proveedor
             LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
             AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio`;
         cuotaProveedorSelect = 'COALESCE(cp.cuota, 0) AS cuota_proveedor';
-        replacements.proveedor = String(filters.proveedor);
-        replacements.cuotaFechaFin = filters.fechaFin;
-        replacements.cuotaFechaInicio = filters.fechaInicio;
+        replacements.proveedor = String(normalizedFilters.proveedor);
+        replacements.cuotaFechaFin = normalizedFilters.fechaFin;
+        replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     }
     const query = `
         WITH ventas_filtradas AS (
@@ -358,7 +377,7 @@ const getCumplimientoMes = async (filters = {}) => {
         type: QueryTypes.SELECT
     });
 
-    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
     const enriched = enrichCumplimiento(rows, diasCorridos, diasHabiles);
     return addTotalsRow(enriched, diasCorridos, diasHabiles);
 };
@@ -560,38 +579,39 @@ const getLineaEspecificaPorVendedor = async (codigoVendedor, codigoLinea, filter
 };
 
 const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
 
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = filters.fechaInicio;
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
 
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = filters.fechaFin;
+        replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
     let ciudadSelect = 'ci.id_ciudad AS id_ciudad, COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
     let ciudadGroup = 'ci.id_ciudad, COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
+        replacements.ciudad = String(normalizedFilters.ciudad);
         ciudadSelect = 'ci.id_ciudad AS id_ciudad, TRIM(ci.nombre) AS ciudad';
         ciudadGroup = 'ci.id_ciudad, TRIM(ci.nombre)';
     }
 
     // Si hay filtro de proveedor o categoría, sumar solo ventas de esos items (igual que en productos/lineas)
     let query;
-    if (filters.proveedor || filters.categoria) {
-        if (filters.proveedor) {
+    if (normalizedFilters.proveedor || normalizedFilters.categoria) {
+        if (normalizedFilters.proveedor) {
             where.push('it.id_proveedor = :proveedor');
-            replacements.proveedor = Number(filters.proveedor);
+            replacements.proveedor = Number(normalizedFilters.proveedor);
         }
-        if (filters.categoria) {
+        if (normalizedFilters.categoria) {
             where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-            replacements.categoria = String(filters.categoria);
+            replacements.categoria = String(normalizedFilters.categoria);
         }
         query = `
             SELECT
@@ -627,8 +647,8 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         type: QueryTypes.SELECT
     });
 
-    const { diasCorridos, diasHabiles } = await getRangoDias(filters);
-    const cuotaMesVendedor = await getCuotaMesPorVendedor(codigoVendedor, filters);
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
+    const cuotaMesVendedor = await getCuotaMesPorVendedor(codigoVendedor, normalizedFilters);
 
     return {
         codigoVendedor,
@@ -651,32 +671,33 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
 };
 
 const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
 
-    if (filters.fechaInicio) {
+    if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = filters.fechaInicio;
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
 
-    if (filters.fechaFin) {
+    if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = filters.fechaFin;
+        replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
-    if (filters.ciudad) {
+    if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(filters.ciudad);
+        replacements.ciudad = String(normalizedFilters.ciudad);
     }
 
-    if (filters.proveedor) {
+    if (normalizedFilters.proveedor) {
         where.push('it.id_proveedor = :proveedor');
-        replacements.proveedor = Number(filters.proveedor);
+        replacements.proveedor = Number(normalizedFilters.proveedor);
     }
 
-    if (filters.categoria) {
+    if (normalizedFilters.categoria) {
         where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-        replacements.categoria = String(filters.categoria);
+        replacements.categoria = String(normalizedFilters.categoria);
     }
 
     const query = `
