@@ -28,7 +28,7 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
         SELECT
             COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo_linea,
             COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_linea,
-            SUM(COALESCE(dv.subtotal, 0)) AS venta
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
@@ -128,14 +128,13 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
     const query = `
         SELECT
                 ${ciudadSelect},
-            SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
+            SUM(${signedNcAmountSql('v')}) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
         LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
         WHERE ${where.join(' AND ')}
-        GROUP BY COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
-            GROUP BY ${ciudadGroup}
+        GROUP BY ${ciudadGroup}
         ORDER BY venta DESC
     `;
     const detallePorCiudad = await sequelize.query(query, { replacements, type: QueryTypes.SELECT });
@@ -192,7 +191,7 @@ async function getProductosPorVendedor(codigoVendedor, filters = {}) {
             TRIM(it.descripcion) AS "Descripcion",
             SUM(COALESCE(dv.cantidad_emp, 0)) AS "Venta_Unid_Cajas",
             SUM(COALESCE(dv.cantidad, 0)) AS "Cantidad",
-            SUM(COALESCE(dv.subtotal, 0)) AS "Subtotal"
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS "Subtotal"
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
