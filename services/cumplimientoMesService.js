@@ -136,6 +136,11 @@ const buildVendedorFilter = (filters = {}, replacements = {}) => {
     `;
 };
 
+const signedNcAmountSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)) ELSE COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0) END`;
+
+const signedNcSubtotalSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.subtotal, 0)) ELSE COALESCE(${alias}.subtotal, 0) END`;
+const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `CASE WHEN UPPER(TRIM(${ventaAlias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${detalleAlias}.subtotal, 0)) ELSE COALESCE(${detalleAlias}.subtotal, 0) END`;
+
 const getRangoDias = async (filters = {}) => {
     const where = {};
 
@@ -343,8 +348,8 @@ const getCumplimientoMes = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.subtotal, 0) ELSE 0 END) AS total_nc
+                SUM(${signedNcAmountSql('v')}) AS venta_acum,
+                SUM(${signedNcSubtotalSql('v')}) AS total_nc
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
@@ -409,7 +414,8 @@ const getCumplimientoMesFront = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum
+                SUM(${signedNcAmountSql('v')}) AS venta_acum,
+                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE 0 END) AS total_nc
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
@@ -419,7 +425,8 @@ const getCumplimientoMesFront = async (filters = {}) => {
             vd.codigo_vendedor AS cod,
             vd.nombre AS vendedor,
             COALESCE(cv.cuota_mes, 0) AS cuota_mes,
-            COALESCE(vf.venta_acum, 0) AS venta_acum
+            COALESCE(vf.venta_acum, 0) AS venta_acum,
+            COALESCE(vf.total_nc, 0) AS total_nc
         FROM vendedor vd
         LEFT JOIN LATERAL (
             SELECT cm.cuota_mes
@@ -491,7 +498,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo_linea,
             COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_linea,
             COALESCE(cpv.cuota, 0) AS cuota_proveedor,
-            SUM(COALESCE(dv.subtotal, 0)) AS venta
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
@@ -616,7 +623,7 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         query = `
             SELECT
                 ${ciudadSelect},
-                SUM(COALESCE(dv.subtotal, 0)) AS venta
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
             FROM venta v
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
@@ -631,7 +638,7 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         query = `
             SELECT
                 ${ciudadSelect},
-                SUM(COALESCE(v.valor_neto, v.subtotal, 0)) AS venta
+                SUM(${signedNcAmountSql('v')}) AS venta
             FROM venta v
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
@@ -708,7 +715,7 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
             TRIM(it.descripcion) AS "Descripcion",
             SUM(COALESCE(dv.cantidad_emp, 0)) AS "Venta_Unid_Cajas",
             SUM(COALESCE(dv.cantidad, 0)) AS "Cantidad",
-            SUM(COALESCE(dv.subtotal, 0)) AS "Subtotal"
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS "Subtotal"
         FROM venta v
         JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
