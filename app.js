@@ -33,10 +33,7 @@ var cumplimientoSemanaRouter = require("./routes/cumplimientoSemanaRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
-
-
-
-
+const exportRoutes = require('./routes/exportRoutes');
 
 
 var cors = require('cors');
@@ -104,8 +101,8 @@ app.use('/mes/cumplimiento', cumplimientoMesRouter);
 app.use('/semana/cumplimiento', cumplimientoSemanaRouter);
 app.use('/import', importRouter);
 app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
-
-
+app.use('/export', exportRoutes);
+app.use("/", exportRoutes);
 
 
 // catch 404 and forward to error handler
