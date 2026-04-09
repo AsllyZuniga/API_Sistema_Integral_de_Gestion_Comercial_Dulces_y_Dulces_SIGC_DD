@@ -348,8 +348,7 @@ const getCumplimientoMes = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(${signedNcAmountSql('v')}) AS venta_acum,
-                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE 0 END) AS total_nc
+                SUM(COALESCE(v.subtotal, 0)) AS venta_acum
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
@@ -361,7 +360,7 @@ const getCumplimientoMes = async (filters = {}) => {
             COALESCE(cg.cuota_mes, 0) AS cuota_mes,
             ${cuotaProveedorSelect},
             COALESCE(vf.venta_acum, 0) AS venta_acum,
-            COALESCE(vf.total_nc, 0) AS total_nc
+            0 AS total_nc
         FROM vendedor vd
         LEFT JOIN LATERAL (
             SELECT cm.cuota_mes
@@ -414,8 +413,7 @@ const getCumplimientoMesFront = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(${signedNcAmountSql('v')}) AS venta_acum,
-                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE 0 END) AS total_nc
+                SUM(COALESCE(v.subtotal, 0)) AS venta_acum
             FROM venta v
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
@@ -426,7 +424,7 @@ const getCumplimientoMesFront = async (filters = {}) => {
             vd.nombre AS vendedor,
             COALESCE(cv.cuota_mes, 0) AS cuota_mes,
             COALESCE(vf.venta_acum, 0) AS venta_acum,
-            COALESCE(vf.total_nc, 0) AS total_nc
+            0 AS total_nc
         FROM vendedor vd
         LEFT JOIN LATERAL (
             SELECT cm.cuota_mes
@@ -541,7 +539,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             const ventaAcum = toNumber(row.venta);
             const cuotaProveedor = toNumber(row.cuota_proveedor);
             const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
-            const porcCump = cuotaMesVendedor > 0 ? (ventaAcum / cuotaMesVendedor) * 100 : 0;
+            const porcCump = cuotaProveedor > 0 ? (ventaAcum / cuotaProveedor) * 100 : 0;
             const porcCumProy = cuotaMesVendedor > 0 ? (proyeccionVenta / cuotaMesVendedor) * 100 : 0;
             const porcCumpProveedor = cuotaProveedor > 0 ? (ventaAcum / cuotaProveedor) * 100 : 0;
             const porcCumProyProveedor = cuotaProveedor > 0 ? (proyeccionVenta / cuotaProveedor) * 100 : 0;
