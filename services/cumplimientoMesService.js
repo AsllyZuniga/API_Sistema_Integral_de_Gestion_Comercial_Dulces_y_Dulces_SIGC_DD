@@ -348,8 +348,9 @@ const getCumplimientoMes = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(COALESCE(v.subtotal, 0)) AS venta_acum
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_acum
             FROM venta v
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
             GROUP BY v.id_vendedor
@@ -413,8 +414,9 @@ const getCumplimientoMesFront = async (filters = {}) => {
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(COALESCE(v.subtotal, 0)) AS venta_acum
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_acum
             FROM venta v
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhere}
             GROUP BY v.id_vendedor
@@ -620,7 +622,8 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         }
         query = `
             SELECT
-                ${ciudadSelect},
+                COALESCE(c.id_ciudad, 0) AS id_ciudad,
+                COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
             FROM venta v
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
@@ -629,20 +632,22 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
             WHERE ${where.join(' AND ')}
-            GROUP BY ${ciudadGroup}
+            GROUP BY COALESCE(c.id_ciudad, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
             ORDER BY venta DESC
         `;
     } else {
         query = `
             SELECT
-                ${ciudadSelect},
-                SUM(${signedNcAmountSql('v')}) AS venta
+                COALESCE(c.id_ciudad, 0) AS id_ciudad,
+                COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
             FROM venta v
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
             WHERE ${where.join(' AND ')}
-            GROUP BY ${ciudadGroup}
+            GROUP BY COALESCE(c.id_ciudad, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
             ORDER BY venta DESC
         `;
     }
