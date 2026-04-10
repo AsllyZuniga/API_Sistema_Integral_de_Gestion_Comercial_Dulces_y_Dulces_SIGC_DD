@@ -163,13 +163,21 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			GROUP BY it.id_categoria
+		),
+		categorias_distintas AS (
+			SELECT
+				MIN(id_categoria) AS id_categoria,
+				nombre,
+				MIN(id_cuota_categoria) AS id_cuota_categoria
+			FROM categoria
+			GROUP BY nombre
 		)
 		SELECT
 			c.id_categoria,
 			c.nombre AS categoria,
 			COALESCE(cc.cuota, 0) AS cuota,
 			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM categoria c
+		FROM categorias_distintas c
 		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = c.id_cuota_categoria
 		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
 		ORDER BY c.nombre ASC
@@ -217,13 +225,21 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 			  AND v.fecha <= :fechaFin
 			  AND v.id_vendedor = :idVendedor
 			GROUP BY it.id_categoria
+		),
+		categorias_distintas AS (
+			SELECT
+				MIN(id_categoria) AS id_categoria,
+				nombre,
+				MIN(id_cuota_categoria) AS id_cuota_categoria
+			FROM categoria
+			GROUP BY nombre
 		)
 		SELECT
 			c.id_categoria,
 			c.nombre AS categoria,
 			COALESCE(cc.cuota, 0) AS cuota,
 			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM categoria c
+		FROM categorias_distintas c
 		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = c.id_cuota_categoria
 		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
 		ORDER BY c.nombre ASC
@@ -263,6 +279,14 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			GROUP BY v.id_vendedor, vd.codigo_vendedor, vd.nombre, it.id_categoria
+		),
+		categorias_distintas AS (
+			SELECT
+				MIN(id_categoria) AS id_categoria,
+				nombre,
+				MIN(id_cuota_categoria) AS id_cuota_categoria
+			FROM categoria
+			GROUP BY nombre
 		)
 		SELECT
 			avc.id_vendedor,
@@ -272,7 +296,7 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 			c.nombre AS categoria,
 			COALESCE(cc.cuota, 0) AS cuota,
 			COALESCE(avc.acumulado, 0) AS acumulado
-		FROM categoria c
+		FROM categorias_distintas c
 		CROSS JOIN (
 			SELECT DISTINCT id_vendedor, codigo_vendedor, vendedor
 			FROM acumulado_por_vendedor_categoria
