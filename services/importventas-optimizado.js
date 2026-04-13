@@ -681,11 +681,25 @@ class ImportadorVentasOptimizado {
         const detallesData = [];
 
         try {
+            // 1) BUCLE DE PREPARACIÓN: Recorre el batch y prepara datos
             for (const linea of filas) {
                 if (!linea || linea.trim() === '') continue;
 
                 this.estadisticas.totalLineas++;
-                const fila = this.parsearLinea(linea, encabezados);
+                let fila;
+                try {
+                    fila = this.parsearLinea(linea, encabezados);
+                } catch (err) {
+                    this.estadisticas.errores++;
+                    if (this.verbose) {
+                        console.error(`❌ Error parseando fila ${this.estadisticas.totalLineas}:`, err.message);
+                    }
+                    this.estadisticas.erroresDetallados.push({
+                        fila: this.estadisticas.totalLineas,
+                        error: err.message
+                    });
+                    continue;
+                }
 
                 try {
                     const resultado = await this.prepararDatosFila(fila, null);
@@ -713,67 +727,119 @@ class ImportadorVentasOptimizado {
                 return;
             }
 
-            // 1) Deduplicación dentro del mismo batch
-            const paresUnicos = [];
-            const clavesBatch = new Set();
-            for (let i = 0; i < ventasData.length; i++) {
-                const ventaData = ventasData[i];
-                const detalleData = detallesData[i];
-                const clave = this.construirClaveVentaDetalle(ventaData, detalleData);
-                if (clavesBatch.has(clave)) continue;
-                clavesBatch.add(clave);
-                paresUnicos.push({ ventaData, detalleData, clave });
+            // 2) AGRUPAR CABECERAS ÚNICAS: Extrae cabeceras usando numero_documento como clave
+            const mapaVentasUnicas = new Map();
+            const ventasUnicas = [];
+            for (const ventaData of ventasData) {
+                const clave = ventaData.numero_documento || `FACTURA_${Date.now()}_${Math.random()}`;
+                if (!mapaVentasUnicas.has(clave)) {
+                    mapaVentasUnicas.set(clave, ventaData);
+                    ventasUnicas.push(ventaData);
+                }
             }
 
-            // 2) Deduplicación contra datos ya existentes en DB
-            const clavesExistentes = await this.obtenerClavesExistentesEnDB(paresUnicos);
-            const paresNuevos = paresUnicos.filter((p) => !clavesExistentes.has(p.clave));
-
-            if (paresNuevos.length === 0) {
-                console.log('⚠️ Lote descartado: todas las filas ya existen (duplicados evitados)');
-                return;
-            }
+            console.log(`   📋 ${ventasUnicas.length} cabeceras únicas de ${ventasData.length} detalles preparados`);
 
             const transaccion = await this.sequelize.transaction();
 
             try {
-                // Insert masivo de ventas — Postgres devuelve los IDs generados
-                const ventasCreadas = await this.venta.bulkCreate(paresNuevos.map(p => p.ventaData), {
+                // 3) INSERCIÓN DE CABECERAS (UPSERT): bulkCreate con updateOnDuplicate
+                const ventasCreadas = await this.venta.bulkCreate(ventasUnicas, {
                     transaction: transaccion,
-                    returning: true
+                    returning: true,
+                    updateOnDuplicate: [
+                        'fecha', 'id_cliente', 'id_vendedor', 'id_canal', 'id_subcanal',
+                        'id_tipo_documento', 'precio_unitario_con_impuesto', 'valor_descuentos',
+                        'valor_impuestos', 'valor_neto', 'subtotal', 'margen_promedio',
+                        'impuesto_afecta_margen', 'condicion_pago', 'porcentaje_descuento', 'porcentaje_impuesto'
+                    ]
                 });
 
-                // Asignar id_venta a cada detalle según su posición
-                const detallesConId = paresNuevos.map((p, i) => ({
-                    ...p.detalleData,
-                    id_venta: ventasCreadas[i]?.id_venta
-                }));
+                console.log(`   ✅ ${ventasCreadas.length} cabeceras procesadas (nuevas o actualizadas)`);
 
-                // Insert masivo de detalles
+                // 4) DICCIONARIO DE IDs: Consulta BD para obtener id_venta de los numero_documento
+                const numerosDocumento = [...mapaVentasUnicas.keys()].filter(k => k !== null && !k.startsWith('FACTURA_'));
+                const mapaVentas = new Map();
 
-                // Procesar detalles en batches más pequeños para upsert
-                const totalDetalles = detallesConId.length;
+                if (numerosDocumento.length > 0) {
+                    const ventasEnBD = await this.venta.findAll({
+                        where: { numero_documento: numerosDocumento },
+                        attributes: ['id_venta', 'numero_documento'],
+                        raw: true,
+                        transaction: transaccion
+                    });
+
+                    ventasEnBD.forEach(v => {
+                        mapaVentas.set(v.numero_documento, v.id_venta);
+                    });
+                }
+
+                // Asignar también los IDs de las ventas recién creadas
+                ventasCreadas.forEach(v => {
+                    mapaVentas.set(v.numero_documento, v.id_venta);
+                });
+
+                // 5) ASIGNAR IDs A DETALLES: Recorre TODOS los detalles sin descartar ninguno
+                const detallesConId = [];
+                for (let i = 0; i < ventasData.length; i++) {
+                    const ventaData = ventasData[i];
+                    const detalleData = detallesData[i];
+                    const clave = ventaData.numero_documento || `FACTURA_${Date.now()}_${Math.random()}`;
+                    const id_venta = mapaVentas.get(clave);
+
+                    if (!id_venta) {
+                        this.estadisticas.errores++;
+                        console.warn(`⚠️ No se encontró id_venta para ${clave}, fila omitida`);
+                        this.estadisticas.erroresDetallados.push({
+                            fila: i + 1,
+                            error: `No se encontró id_venta para numero_documento: ${clave}`
+                        });
+                        continue;
+                    }
+
+                    detallesConId.push({
+                        ...detalleData,
+                        id_venta: id_venta
+                    });
+                }
+
+                if (detallesConId.length === 0) {
+                    console.log('⚠️ No hay detalles con id_venta válido para insertar');
+                    await transaccion.commit();
+                    return;
+                }
+
+                console.log(`   📦 ${detallesConId.length} detalles preparados con id_venta asignado`);
+
+                // 6) INSERCIÓN MASIVA DE DETALLES: bulkCreate de todos los detalles
                 let detallesProcesados = 0;
-                while (detallesProcesados < totalDetalles) {
-                    const batchDetalles = detallesConId.slice(detallesProcesados, detallesProcesados + this.BATCH_UPSERT_DETALLE_SIZE);
+                while (detallesProcesados < detallesConId.length) {
+                    const batchDetalles = detallesConId.slice(
+                        detallesProcesados,
+                        detallesProcesados + this.BATCH_UPSERT_DETALLE_SIZE
+                    );
+
                     await this.detalle_venta.bulkCreate(batchDetalles, {
                         transaction: transaccion,
                         returning: false,
                         updateOnDuplicate: [
-                            'cantidad', 'valor_bruto', 'valor_descuentos', 'valor_impuestos', 'valor_neto', 'valor_subtotal', 'margen_promedio', 'impuesto_afecta_margen', 'costo_promedio_total'
+                            'cantidad_emp', 'cantidad', 'precio_unitario', 'costo_promedio_total',
+                            'descuento', 'subtotal'
                         ]
                     });
+
                     detallesProcesados += batchDetalles.length;
-                    // Mostrar progreso de upsert de detalles
-                    console.log(`      ↪️ Detalles actualizados: ${detallesProcesados}/${totalDetalles}`);
+                    console.log(`      ↪️ Detalles insertados: ${detallesProcesados}/${detallesConId.length}`);
                 }
 
                 await transaccion.commit();
 
-                this.estadisticas.exitosas += ventasCreadas.length;
+                // 7) MANTENER ESTADÍSTICAS: Sumar cantidad de detalles insertados
+                this.estadisticas.exitosas += detallesConId.length;
                 this.estadisticas.nuevasVentas += ventasCreadas.length;
 
-                console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} ventas | Total acumulado: ${this.estadisticas.totalLineas}`);
+                console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} cabeceras | ${detallesConId.length} detalles | Total acumulado: ${this.estadisticas.totalLineas}`);
+
             } catch (error) {
                 await transaccion.rollback();
                 throw error;
