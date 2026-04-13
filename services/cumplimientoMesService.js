@@ -493,33 +493,37 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
     const query = `
+        WITH ventas_por_proveedor AS (
+            SELECT
+                pr.id_proveedor,
+                pr.codigo,
+                pr.nombre,
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
+            FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item it ON it.id_item = dv.id_item
+            LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
+            WHERE ${where.join(' AND ')}
+            GROUP BY pr.id_proveedor, pr.codigo, pr.nombre
+        )
         SELECT
-            pr.id_proveedor AS id_proveedor,
-            COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo_linea,
-            COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_linea,
-            COALESCE(cpv.cuota, 0) AS cuota_proveedor,
-            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
-        FROM venta v
-        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
-        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-        JOIN item it ON it.id_item = dv.id_item
-        LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
-        LEFT JOIN LATERAL (
-            SELECT cp.cuota
-            FROM "vendedorCuotaProveedor" vcp
-            JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
-            WHERE vcp.id_vendedor = vd.id_vendedor
-              AND vcp.id_proveedor = pr.id_proveedor
-              AND vcp.estado = true
-              AND cp.fecha_inicio <= :cuotaFechaFin
-              AND cp.fecha_fin >= :cuotaFechaInicio
-            ORDER BY cp.fecha_fin DESC NULLS LAST, cp."id_cuotaProveedor" DESC
-            LIMIT 1
-        ) cpv ON true
-        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-        WHERE ${where.join(' AND ')}
-        GROUP BY pr.id_proveedor, COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA'), COALESCE(cpv.cuota, 0)
-        ORDER BY venta DESC
+            id_proveedor,
+            COALESCE(TRIM(codigo), 'SIN CODIGO') AS codigo_linea,
+            COALESCE(TRIM(nombre), 'SIN LINEA') AS nombre_linea,
+            (SELECT COALESCE(cp.cuota, 0)
+             FROM "vendedorCuotaProveedor" vcp
+             JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+             WHERE vcp.id_vendedor = (SELECT id_vendedor FROM vendedor WHERE codigo_vendedor = :codigoVendedor LIMIT 1)
+               AND vcp.id_proveedor = vpv.id_proveedor
+               AND vcp.estado = true
+               AND cp.fecha_inicio <= :cuotaFechaFin
+               AND cp.fecha_fin >= :cuotaFechaInicio
+             ORDER BY cp.fecha_fin DESC NULLS LAST, cp."id_cuotaProveedor" DESC
+             LIMIT 1) AS cuota_proveedor,
+            venta_total AS venta
+        FROM ventas_por_proveedor vpv
+        ORDER BY venta_total DESC
     `;
 
     const detallePorLinea = await sequelize.query(query, {
