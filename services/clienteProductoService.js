@@ -1,5 +1,5 @@
 const { sequelize } = require('../models');
-const { QueryTypes } = require('sequelize');
+const { QueryTypes, Op } = require('sequelize');
 
 // Devuelve todos los productos comprados por cada cliente (general)
 async function getProductosPorCliente() {
@@ -22,8 +22,36 @@ async function getProductosPorCliente() {
     return sequelize.query(query, { type: QueryTypes.SELECT });
 }
 
+// Helper functions for date parsing
+const toDateOnly = (value) => {
+    if (!value) {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    }
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    }
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
+
 // Devuelve los productos comprados por cada cliente asociados a un vendedor específico
-async function getProductosPorClientePorVendedor(idVendedor) {
+async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
+    const replacements = { idVendedor };
+    let whereClause = 'WHERE v.id_vendedor = :idVendedor';
+    
+    if (filters.fechaInicio) {
+        whereClause += ' AND v.fecha >= :fechaInicio';
+        replacements.fechaInicio = toDateOnly(filters.fechaInicio);
+    }
+    
+    if (filters.fechaFin) {
+        whereClause += ' AND v.fecha <= :fechaFin';
+        replacements.fechaFin = toDateOnly(filters.fechaFin);
+    }
+    
     const query = `
         SELECT 
             v.id_venta,
@@ -41,12 +69,12 @@ async function getProductosPorClientePorVendedor(idVendedor) {
         JOIN cliente c ON v.id_cliente = c.id_cliente
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         JOIN item it ON it.id_item = dv.id_item
-        WHERE v.id_vendedor = :idVendedor
+        ${whereClause}
         ORDER BY v.fecha DESC, v.id_venta, it.descripcion
     `;
     return sequelize.query(query, {
         type: QueryTypes.SELECT,
-        replacements: { idVendedor }
+        replacements
     });
 }
 

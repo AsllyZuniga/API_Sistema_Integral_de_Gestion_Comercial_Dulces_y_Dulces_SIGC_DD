@@ -12,8 +12,8 @@ class CuotaCategoriaImportService {
 
             // 1. Leer archivo
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
-            const registros = parse(contenido, { 
-                columns: true, 
+            const registros = parse(contenido, {
+                columns: true,
                 skip_empty_lines: true,
                 delimiter: ','
             });
@@ -25,7 +25,7 @@ class CuotaCategoriaImportService {
             // 2. Extraer cabeceras y normalizarlas (quitar espacios)
             const primerRegistro = registros[0];
             let cabeceras = Object.keys(primerRegistro).map(col => col.trim());
-            
+
             // Normalizar todos los registros: quitar espacios de las claves
             const registrosNormalizados = registros.map(row => {
                 const nuevoRow = {};
@@ -38,11 +38,11 @@ class CuotaCategoriaImportService {
 
             // Actualizar cabeceras después de normalizar
             cabeceras = Object.keys(registrosNormalizados[0]).map(col => col.trim());
-            
+
             // Filtrar solo columnas de categorías (excluir Codigo y Nombre)
-            const columnasCategoria = cabeceras.filter(col => 
-                !col.toLowerCase().includes('codigo') && 
-                !col.toLowerCase().includes('nombre') && 
+            const columnasCategoria = cabeceras.filter(col =>
+                !col.toLowerCase().includes('codigo') &&
+                !col.toLowerCase().includes('nombre') &&
                 col !== ''
             );
 
@@ -87,8 +87,8 @@ class CuotaCategoriaImportService {
 
                         if (!categoria) {
                             console.warn(`⚠️ Categoría no encontrada: "${nombreCategoria}"`);
-                            errores.push({ 
-                                categoria: nombreCategoria, 
+                            errores.push({
+                                categoria: nombreCategoria,
                                 error: 'No encontrada en BD',
                                 sugerencia: 'Verifica el nombre exacto en la tabla categoria'
                             });
@@ -97,7 +97,7 @@ class CuotaCategoriaImportService {
 
                         // Crear o actualizar cuota de categoría
                         let cuotaReg = await cuotaCategoria_model.findOne({
-                            where: { 
+                            where: {
                                 fecha_inicio: fechaInicio,
                                 fecha_fin: fechaFin
                             },
@@ -124,9 +124,9 @@ class CuotaCategoriaImportService {
                         console.log(`   ✅ ${categoria.nombre}: $${Math.round(cuota).toLocaleString()}`);
 
                     } catch (err) {
-                        errores.push({ 
-                            categoria: nombreCategoria, 
-                            error: err.message 
+                        errores.push({
+                            categoria: nombreCategoria,
+                            error: err.message
                         });
                         console.error(`   ❌ Error en ${nombreCategoria}:`, err.message);
                     }

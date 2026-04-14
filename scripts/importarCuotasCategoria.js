@@ -14,7 +14,7 @@ const cuotaCategoriaImportService = require('../services/cuotaCategoriaImportSer
 async function main() {
     try {
         const args = process.argv.slice(2);
-        
+
         if (args.length < 1) {
             console.log(`
 🚀 Importador de Cuotas por Categoría
