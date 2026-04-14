@@ -422,6 +422,7 @@ const getCumplimientoMesFront = async (filters = {}) => {
             GROUP BY v.id_vendedor
         )
         SELECT
+            vd.id_vendedor,
             vd.codigo_vendedor AS cod,
             vd.nombre AS vendedor,
             COALESCE(cv.cuota_mes, 0) AS cuota_mes,
@@ -432,11 +433,13 @@ const getCumplimientoMesFront = async (filters = {}) => {
             SELECT cm.cuota_mes
             FROM "cuotaMes" cm
             WHERE ${cuotaConditions.join(' AND ')}
+              AND cm.id_usuario IS NOT NULL
             ORDER BY cm.fecha_fin DESC NULLS LAST, cm."id_cuotaMes" DESC
             LIMIT 1
         ) cv ON true
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        WHERE vd.id_usuario IS NOT NULL
+          AND (COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
