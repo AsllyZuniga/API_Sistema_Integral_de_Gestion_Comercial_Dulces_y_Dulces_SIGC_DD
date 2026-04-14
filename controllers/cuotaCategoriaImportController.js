@@ -82,7 +82,7 @@ module.exports = {
     async obtenerCuotasActuales(req, res) {
         try {
             const cuotas = await cuotaCategoriaImportService.obtenerCuotasActuales();
-            
+
             return res.status(200).send({
                 total: cuotas.length,
                 detalle: cuotas
