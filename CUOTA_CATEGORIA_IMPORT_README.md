@@ -16,6 +16,7 @@ Este módulo permite cargar cuotas de categoría desde un archivo CSV de Nestlé
 **POST** `/cuota-categoria-import/importar/nestle`
 
 Body (JSON):
+
 ```json
 {
   "rutaArchivo": "./cuotas nestle - Hoja1.csv",
@@ -25,6 +26,7 @@ Body (JSON):
 ```
 
 Ejemplo con curl:
+
 ```bash
 curl -X POST http://localhost:3000/cuota-categoria-import/importar/nestle \
   -H "Content-Type: application/json" \
@@ -55,12 +57,14 @@ node scripts/importarCuotasCategoria.js "/media/felipe-rivas/Datos/.../cuotas ne
 ## 📊 Formato esperado del CSV
 
 El CSV debe tener:
+
 - Primera columna: `Codigo Vendedor`
 - Segunda columna: `Nombre de vendedor`
 - Columnas siguientes: Códigos de categoría con formato `XXXX - DESCRIPCION`
 - Valores: Montos de cuota por vendedor
 
 Ejemplo:
+
 ```csv
 Codigo Vendedor,Nombre de vendedor,0300 - 1000-CAFES,1201 - 1000-GALLETAS,2950 - 2500-CHOCOLATES
 0150,De La Cruz Meza,30846156,6407100,50000
@@ -89,20 +93,22 @@ Codigo Vendedor,Nombre de vendedor,0300 - 1000-CAFES,1201 - 1000-GALLETAS,2950 -
 
 ## ❌ Errores comunes
 
-| Error | Causa | Solución |
-|-------|-------|----------|
-| "Archivo no encontrado" | Ruta del CSV incorrecta | Verificar que el archivo existe |
+| Error                     | Causa                        | Solución                            |
+| ------------------------- | ---------------------------- | ----------------------------------- |
+| "Archivo no encontrado"   | Ruta del CSV incorrecta      | Verificar que el archivo existe     |
 | "Categoría no encontrada" | La categoría no existe en BD | Importar datos de categoría primero |
-| "Archivo CSV vacío" | El CSV está vacío | Verificar contenido del archivo |
+| "Archivo CSV vacío"       | El CSV está vacío            | Verificar contenido del archivo     |
 
 ## 🔍 Verificación de datos
 
 Consultar cuotas cargadas:
+
 ```bash
 curl http://localhost:3000/cuota-categoria-import/actuales
 ```
 
 O en BD:
+
 ```sql
 SELECT c.nombre, cc.cuota, cc.fecha_inicio, cc.fecha_fin
 FROM categoria c
@@ -114,6 +120,7 @@ ORDER BY c.nombre;
 ## 📅 Período de cuotas
 
 El servicio permite especificar diferentes períodos:
+
 - Default: 2026-03-01 a 2026-03-31
 - Personalizado: Pasar `fechaInicio` y `fechaFin` en formato YYYY-MM-DD
 

@@ -45,10 +45,14 @@ const getMonthRange = (baseDate = new Date()) => {
 
 const normalizePeriodFilters = (filters = {}) => {
     if (filters.fechaInicio && filters.fechaFin) {
+        const startDate = toDateOnly(filters.fechaInicio);
+        const endDate = toDateOnly(filters.fechaFin);
         return {
             ...filters,
-            fechaInicio: formatDateOnly(toDateOnly(filters.fechaInicio)),
-            fechaFin: formatDateOnly(toDateOnly(filters.fechaFin))
+            fechaInicio: startDate,
+            fechaFin: endDate,
+            fechaInicioFormatted: formatDateOnly(startDate),
+            fechaFinFormatted: formatDateOnly(endDate)
         };
     }
 
@@ -59,8 +63,10 @@ const normalizePeriodFilters = (filters = {}) => {
 
     return {
         ...filters,
-        fechaInicio: formatDateOnly(start),
-        fechaFin: formatDateOnly(end)
+        fechaInicio: start,
+        fechaFin: end,
+        fechaInicioFormatted: formatDateOnly(start),
+        fechaFinFormatted: formatDateOnly(end)
     };
 };
 
@@ -454,8 +460,8 @@ const getCumplimientoMesFront = async (filters = {}) => {
 
     return {
         periodo: {
-            fechaInicio: normalizedFilters.fechaInicio,
-            fechaFin: normalizedFilters.fechaFin
+            fechaInicio: normalizedFilters.fechaInicioFormatted,
+            fechaFin: normalizedFilters.fechaFinFormatted
         },
         detalle,
         totales: buildTotales(detalle, diasCorridos, diasHabiles)
@@ -541,8 +547,8 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         codigoVendedor,
         cuotaVendedor: round(cuotaMesVendedor, 2),
         periodo: {
-            fechaInicio: normalizedFilters.fechaInicio,
-            fechaFin: normalizedFilters.fechaFin
+            fechaInicio: normalizedFilters.fechaInicioFormatted,
+            fechaFin: normalizedFilters.fechaFinFormatted
         },
         detallePorLinea: detallePorLinea.map((row) => {
             const ventaAcum = toNumber(row.venta);
