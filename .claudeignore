@@ -1,0 +1,10 @@
+node_modules/
+vendor/
+.git/
+dist/
+build/
+.env
+*.log
+*.csv
+*.txt
+uploads/
