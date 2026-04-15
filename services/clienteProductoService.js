@@ -54,23 +54,22 @@ async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
     
     const query = `
         SELECT 
-            v.id_venta,
-            v.fecha,
             v.id_cliente,
             c.razon_social AS cliente,
-            v.id_vendedor,
-            v.numero_documento,
             dv.id_item,
+            it.codigo_item,
             it.descripcion AS producto,
-            dv.cantidad,
-            dv.precio_unitario,
-            COALESCE(dv.subtotal, dv.cantidad * dv.precio_unitario) AS subtotal_producto
+            SUM(dv.cantidad) AS cantidad_total,
+            SUM(COALESCE(dv.subtotal, dv.cantidad * dv.precio_unitario)) AS subtotal_total,
+            MIN(v.fecha) AS primera_venta,
+            MAX(v.fecha) AS ultima_venta
         FROM venta v
         JOIN cliente c ON v.id_cliente = c.id_cliente
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         JOIN item it ON it.id_item = dv.id_item
         ${whereClause}
-        ORDER BY v.fecha DESC, v.id_venta, it.descripcion
+        GROUP BY v.id_cliente, c.razon_social, dv.id_item, it.codigo_item, it.descripcion
+        ORDER BY c.razon_social, it.descripcion
     `;
     return sequelize.query(query, {
         type: QueryTypes.SELECT,
