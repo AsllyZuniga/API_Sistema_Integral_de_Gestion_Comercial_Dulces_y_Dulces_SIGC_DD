@@ -214,35 +214,29 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 	};
 
 	const rows = await sequelize.query(`
-		WITH acumulado_por_categoria AS (
+		WITH acumulado_por_categoria_nombre AS (
 			SELECT
-				it.id_categoria,
+				cat.nombre,
+				MIN(cat.id_categoria) AS id_categoria,
+				MIN(cat.id_cuota_categoria) AS id_cuota_categoria,
 				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
 			FROM detalle_venta dv
 			JOIN item it ON it.id_item = dv.id_item
+			JOIN categoria cat ON cat.id_categoria = it.id_categoria
 			JOIN venta v ON v.id_venta = dv.id_venta
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			  AND v.id_vendedor = :idVendedor
-			GROUP BY it.id_categoria
-		),
-		categorias_distintas AS (
-			SELECT
-				MIN(id_categoria) AS id_categoria,
-				nombre,
-				MIN(id_cuota_categoria) AS id_cuota_categoria
-			FROM categoria
-			GROUP BY nombre
+			GROUP BY cat.nombre
 		)
 		SELECT
-			c.id_categoria,
-			c.nombre AS categoria,
+			apcn.id_categoria,
+			apcn.nombre AS categoria,
 			COALESCE(cc.cuota, 0) AS cuota,
-			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM categorias_distintas c
-		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = c.id_cuota_categoria
-		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
-		ORDER BY c.nombre ASC
+			COALESCE(apcn.acumulado, 0) AS acumulado
+		FROM acumulado_por_categoria_nombre apcn
+		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = apcn.id_cuota_categoria
+		ORDER BY apcn.nombre ASC
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
