@@ -1,0 +1,393 @@
+{
+	"info": {
+		"_postman_id": "cuota-categoria-validacion",
+		"name": "Validación de Cuotas Marzo",
+		"description": "Endpoints para validar que las cuotas de categorías de marzo estén correctamente cargadas",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Validar Integridad Cuotas Marzo",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const responseData = pm.response.json();",
+							"",
+							"pm.test('Status code es 200', function() {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Respuesta contiene success = true', function() {",
+							"    pm.expect(responseData.success).to.equal(true);",
+							"});",
+							"",
+							"pm.test('Resumen existe y tiene datos', function() {",
+							"    pm.expect(responseData.resumen).to.exist;",
+							"    pm.expect(responseData.resumen.total_vendedores).to.be.above(0);",
+							"    pm.expect(responseData.resumen.total_categorias).to.be.above(0);",
+							"});",
+							"",
+							"pm.test('Validaciones array no está vacío', function() {",
+							"    pm.expect(responseData.validaciones).to.be.an('array');",
+							"    pm.expect(responseData.validaciones.length).to.be.above(0);",
+							"});",
+							"",
+							"// Guardar resultado en variable para comparación posterior",
+							"pm.environment.set('validacion_marzo_result', JSON.stringify(responseData));",
+							"",
+							"console.log('✅ Validación Marzo - Resumen:');",
+							"console.log('Total Vendedores:', responseData.resumen.total_vendedores);",
+							"console.log('Total Categorías:', responseData.resumen.total_categorias);",
+							"console.log('Total Validaciones:', responseData.resumen.total_validaciones);",
+							"console.log('Warnings:', responseData.warnings.length);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/validar/marzo?fechaInicio=2026-03-01&fechaFin=2026-03-31",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"validar",
+						"marzo"
+					],
+					"query": [
+						{
+							"key": "fechaInicio",
+							"value": "2026-03-01",
+							"type": "text"
+						},
+						{
+							"key": "fechaFin",
+							"value": "2026-03-31",
+							"type": "text"
+						}
+					]
+				},
+				"description": "Valida la integridad de todas las cuotas de marzo.\n\nVerifica:\n- Que todos los vendedores existan\n- Que todas las categorías tengan cuotas\n- Que las fechas estén correctas\n- Que no haya valores NULL en campos críticos"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Comparar CSV vs BD - De La Cruz",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const responseData = pm.response.json();",
+							"",
+							"pm.test('Status code es 200', function() {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test('Integridad >= 90%', function() {",
+							"    const integridad = parseFloat(responseData.porcentaje_integridad);",
+							"    pm.expect(integridad).to.be.above(90);",
+							"});",
+							"",
+							"if (responseData.discrepancias.length > 0) {",
+							"    console.log('⚠️ Discrepancias encontradas:');",
+							"    responseData.discrepancias.forEach(d => {",
+							"        console.log(`- ${d.categoria}: CSV=${d.cuota_csv}, BD=${d.cuota_bd}`);",
+							"    });",
+							"} else {",
+							"    console.log('✅ Sin discrepancias - CSV y BD coinciden');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"fechaInicio\": \"2026-03-01\",\n  \"cuotas\": [\n    {\n      \"codigo_vendedor\": \"0150\",\n      \"categorias\": {\n        \"0300 - CAFES\": 38090263,\n        \"1201 - GALLETAS\": 7155926,\n        \"2950 - CHOCOLATES\": 5200000,\n        \"1600 - BEBIDAS ENERGIZANTES\": 4100000,\n        \"3100 - BIZCOCHOS\": 2800000,\n        \"1200 - ABARROTES\": 3500000,\n        \"1000 - AROMATIZANTES\": 500000,\n        \"2000 - SNACKS\": 1200000,\n        \"2100 - DULCES\": 800000,\n        \"2200 - FRUTAS Y HORTALIZAS\": 600000,\n        \"2300 - BEBIDAS CALIENTES\": 750000,\n        \"2400 - BEBIDAS FRIAS\": 900000,\n        \"2500 - OTROS\": 300000\n      }\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/validar/comparar-csv",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"validar",
+						"comparar-csv"
+					]
+				},
+				"description": "Compara los datos del CSV con lo que está en la BD.\n\nComprueba:\n- Que el vendedor exista\n- Que cada categoría tenga datos\n- Que los valores coincidan exactamente"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Comparar CSV vs BD - Yama",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const responseData = pm.response.json();",
+							"pm.test('Integridad >= 90%', function() {",
+							"    const integridad = parseFloat(responseData.porcentaje_integridad);",
+							"    pm.expect(integridad).to.be.above(90);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"fechaInicio\": \"2026-03-01\",\n  \"cuotas\": [\n    {\n      \"codigo_vendedor\": \"0173\",\n      \"categorias\": {\n        \"0300 - CAFES\": 13917137,\n        \"1201 - GALLETAS\": 8251910,\n        \"2950 - CHOCOLATES\": 2500000,\n        \"1600 - BEBIDAS ENERGIZANTES\": 1800000\n      }\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/validar/comparar-csv",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"validar",
+						"comparar-csv"
+					]
+				},
+				"description": "Validar cuotas vendedor Yama (0173)"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Comparar CSV vs BD - Cuatis",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const responseData = pm.response.json();",
+							"pm.test('Integridad >= 90%', function() {",
+							"    const integridad = parseFloat(responseData.porcentaje_integridad);",
+							"    pm.expect(integridad).to.be.above(90);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"fechaInicio\": \"2026-03-01\",\n  \"cuotas\": [\n    {\n      \"codigo_vendedor\": \"0174\",\n      \"categorias\": {\n        \"0300 - CAFES\": 6700000,\n        \"1201 - GALLETAS\": 3500000,\n        \"2950 - CHOCOLATES\": 1800000\n      }\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/validar/comparar-csv",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"validar",
+						"comparar-csv"
+					]
+				},
+				"description": "Validar cuotas vendedor Cuatis (0174)"
+			},
+			"response": []
+		},
+		{
+			"name": "5. Comparar CSV vs BD - Toro Melo",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const responseData = pm.response.json();",
+							"pm.test('Integridad >= 90%', function() {",
+							"    const integridad = parseFloat(responseData.porcentaje_integridad);",
+							"    pm.expect(integridad).to.be.above(90);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"fechaInicio\": \"2026-03-01\",\n  \"cuotas\": [\n    {\n      \"codigo_vendedor\": \"0361\",\n      \"categorias\": {\n        \"0300 - CAFES\": 12438847,\n        \"1201 - GALLETAS\": 4200000,\n        \"2950 - CHOCOLATES\": 6800000,\n        \"1600 - BEBIDAS ENERGIZANTES\": 2500000\n      }\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/validar/comparar-csv",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"validar",
+						"comparar-csv"
+					]
+				},
+				"description": "Validar cuotas vendedor Toro Melo (0361)"
+			},
+			"response": []
+		},
+		{
+			"name": "6. Obtener Cuotas Vendedor Específico",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/vendedor/0150?fechaInicio=2026-03-01&fechaFin=2026-03-31",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"vendedor",
+						"0150"
+					],
+					"query": [
+						{
+							"key": "fechaInicio",
+							"value": "2026-03-01",
+							"type": "text"
+						},
+						{
+							"key": "fechaFin",
+							"value": "2026-03-31",
+							"type": "text"
+						}
+					]
+				},
+				"description": "Obtiene detalladamente los datos de cuota por categoría para un vendedor específico. Cambiar el código 0150 según sea necesario."
+			},
+			"response": []
+		},
+		{
+			"name": "7. Obtener Cuotas Todos Vendedores",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/cuota-categoria/vendedores?fechaInicio=2026-03-01&fechaFin=2026-03-31",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"cuota-categoria",
+						"vendedores"
+					],
+					"query": [
+						{
+							"key": "fechaInicio",
+							"value": "2026-03-01",
+							"type": "text"
+						},
+						{
+							"key": "fechaFin",
+							"value": "2026-03-31",
+							"type": "text"
+						}
+					]
+				},
+				"description": "Obtiene datos de cuota para todos los vendedores agrupados por categoría."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "your_jwt_token_here",
+			"type": "string"
+		}
+	]
+}
