@@ -12,7 +12,7 @@ module.exports = (sequelize) => {
             autoIncrement: true
         },
         cuota: {
-            type: DataTypes.BIGINT,
+            type: DataTypes.DECIMAL,
             allowNull: true,
             defaultValue: null,
             comment: null,

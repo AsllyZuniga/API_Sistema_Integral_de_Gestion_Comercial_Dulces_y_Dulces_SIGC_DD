@@ -109,8 +109,8 @@ const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
 		return {
 			id_categoria: row.id_categoria,
 			categoria: row.categoria,
-			cuota: round(cuota, 2),
-			acumulado: round(acumulado, 2),
+			cuota: cuota,
+			acumulado: acumulado,
 			porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
 			part: round(part, 2),
 			proyectado: round(proyectado, 2),
@@ -134,8 +134,8 @@ const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
 		detalle,
 		total: {
 			categoria: 'TOTAL X CATEGORIA',
-			cuota: round(totalCuota, 2),
-			acumulado: round(totalAcumulado, 2),
+			cuota: totalCuota,
+			acumulado: totalAcumulado,
 			porcentajeCumplimiento: round(totalPorcentajeCumplimiento, 2),
 			part: round(totalAcumulado > 0 ? 100 : 0, 2),
 			proyectado: round(totalProyectado, 2),
@@ -205,32 +205,30 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 	};
 
 	const rows = await sequelize.query(`
-		WITH acumulado_por_categoria_nombre AS (
+		WITH acumulado_por_categoria AS (
 			SELECT
-				cat.nombre,
-				cat.id_categoria,
+				it.id_categoria,
 				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
 			FROM detalle_venta dv
 			JOIN item it ON it.id_item = dv.id_item
-			JOIN categoria cat ON cat.id_categoria = it.id_categoria
 			JOIN venta v ON v.id_venta = dv.id_venta
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			  AND v.id_vendedor = :idVendedor
-			GROUP BY cat.nombre, cat.id_categoria
+			GROUP BY it.id_categoria
 		)
 		SELECT
-			apcn.id_categoria,
-			apcn.nombre AS categoria,
-			COALESCE(vqc.cuota, 0) AS cuota,
-			COALESCE(apcn.acumulado, 0) AS acumulado
-		FROM acumulado_por_categoria_nombre apcn
-		LEFT JOIN vendedor_cuota_categoria vqc ON 
-			vqc.id_vendedor = :idVendedor
-			AND vqc.id_categoria = apcn.id_categoria
-			AND vqc.fecha_inicio <= :fechaFin
-			AND vqc.fecha_fin >= :fechaInicio
-		ORDER BY apcn.nombre ASC
+			cat.id_categoria,
+			cat.nombre AS categoria,
+			vqc.cuota,
+			COALESCE(apc.acumulado, 0) AS acumulado
+		FROM vendedor_cuota_categoria vqc
+		JOIN categoria cat ON cat.id_categoria = vqc.id_categoria
+		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = vqc.id_categoria
+		WHERE vqc.id_vendedor = :idVendedor
+		  AND vqc.fecha_inicio <= :fechaFin
+		  AND vqc.fecha_fin >= :fechaInicio
+		ORDER BY cat.nombre ASC
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
@@ -362,16 +360,16 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 				return {
 					id_categoria: cat.id_categoria,
 					categoria: cat.categoria,
-					cuota: round(cuota, 2),
-					acumulado: round(acumulado, 2),
+					cuota: cuota,
+					acumulado: acumulado,
 					porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
 					proyectado: round(proyectado, 2),
 					porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
 				};
 			}),
 			total_vendedor: {
-				cuota: round(totalCuotaVendedor, 2),
-				acumulado: round(totalAcumuladoVendedor, 2),
+				cuota: totalCuotaVendedor,
+				acumulado: totalAcumuladoVendedor,
 				porcentajeCumplimiento: round(totalCuotaVendedor > 0 ? (totalAcumuladoVendedor / totalCuotaVendedor) * 100 : 0, 2),
 				proyectado: round(diasCorridos > 0 ? (totalAcumuladoVendedor / diasCorridos) * diasHabiles : 0, 2)
 			}
@@ -388,8 +386,8 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 		return {
 			id_categoria: cat.id_categoria,
 			categoria: cat.categoria,
-			cuota: round(cat.cuota, 2),
-			acumulado: round(cat.acumulado, 2),
+			cuota: cat.cuota,
+			acumulado: cat.acumulado,
 			porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
 			proyectado: round(cat.proyectado, 2),
 			porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
@@ -416,8 +414,8 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 		detalle,
 		totales_por_categoria: totalesCategoria,
 		total_general: {
-			cuota: round(totalGeneral.cuota, 2),
-			acumulado: round(totalGeneral.acumulado, 2),
+			cuota: totalGeneral.cuota,
+			acumulado: totalGeneral.acumulado,
 			porcentajeCumplimiento: round(porcentajeCumpGeneral, 2),
 			proyectado: round(totalGeneral.proyectado, 2),
 			porcentajeCumplimientoProyectado: round(porcentajeCumpProyGeneral, 2)
