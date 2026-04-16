@@ -163,22 +163,13 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			GROUP BY it.id_categoria
-		),
-		categorias_distintas AS (
-			SELECT
-				MIN(id_categoria) AS id_categoria,
-				nombre,
-				MIN(id_cuota_categoria) AS id_cuota_categoria
-			FROM categoria
-			GROUP BY nombre
 		)
 		SELECT
 			c.id_categoria,
-			c.nombre AS categoria,
-			COALESCE(cc.cuota, 0) AS cuota,
+			c.nombre,
+			0 AS cuota,
 			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM categorias_distintas c
-		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = c.id_cuota_categoria
+		FROM categoria c
 		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
 		ORDER BY c.nombre ASC
 	`, {
@@ -217,8 +208,7 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 		WITH acumulado_por_categoria_nombre AS (
 			SELECT
 				cat.nombre,
-				MIN(cat.id_categoria) AS id_categoria,
-				MIN(cat.id_cuota_categoria) AS id_cuota_categoria,
+				cat.id_categoria,
 				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
 			FROM detalle_venta dv
 			JOIN item it ON it.id_item = dv.id_item
@@ -227,15 +217,19 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			  AND v.id_vendedor = :idVendedor
-			GROUP BY cat.nombre
+			GROUP BY cat.nombre, cat.id_categoria
 		)
 		SELECT
 			apcn.id_categoria,
 			apcn.nombre AS categoria,
-			COALESCE(cc.cuota, 0) AS cuota,
+			COALESCE(vqc.cuota, 0) AS cuota,
 			COALESCE(apcn.acumulado, 0) AS acumulado
 		FROM acumulado_por_categoria_nombre apcn
-		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = apcn.id_cuota_categoria
+		LEFT JOIN vendedor_cuota_categoria vqc ON 
+			vqc.id_vendedor = :idVendedor
+			AND vqc.id_categoria = apcn.id_categoria
+			AND vqc.fecha_inicio <= :fechaFin
+			AND vqc.fecha_fin >= :fechaInicio
 		ORDER BY apcn.nombre ASC
 	`, {
 		replacements,
@@ -273,14 +267,6 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			GROUP BY v.id_vendedor, vd.codigo_vendedor, vd.nombre, it.id_categoria
-		),
-		categorias_distintas AS (
-			SELECT
-				MIN(id_categoria) AS id_categoria,
-				nombre,
-				MIN(id_cuota_categoria) AS id_cuota_categoria
-			FROM categoria
-			GROUP BY nombre
 		)
 		SELECT
 			avc.id_vendedor,
@@ -288,9 +274,9 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 			avc.vendedor,
 			c.id_categoria,
 			c.nombre AS categoria,
-			COALESCE(cc.cuota, 0) AS cuota,
+			COALESCE(vqc.cuota, 0) AS cuota,
 			COALESCE(avc.acumulado, 0) AS acumulado
-		FROM categorias_distintas c
+		FROM categoria c
 		CROSS JOIN (
 			SELECT DISTINCT id_vendedor, codigo_vendedor, vendedor
 			FROM acumulado_por_vendedor_categoria
@@ -298,7 +284,11 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 		LEFT JOIN acumulado_por_vendedor_categoria avc 
 			ON avc.id_categoria = c.id_categoria 
 			AND avc.id_vendedor = vendedores_distintos.id_vendedor
-		LEFT JOIN "cuotaCategoria" cc ON cc.id_cuota_categoria = c.id_cuota_categoria
+		LEFT JOIN vendedor_cuota_categoria vqc 
+			ON vqc.id_vendedor = vendedores_distintos.id_vendedor
+			AND vqc.id_categoria = c.id_categoria
+			AND vqc.fecha_inicio <= :fechaFin
+			AND vqc.fecha_fin >= :fechaInicio
 		ORDER BY avc.vendedor ASC, c.nombre ASC
 	`, {
 		replacements,
@@ -435,8 +425,184 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 	};
 };
 
+// ✅ VALIDACIÓN DE CUOTAS POR CATEGORÍA Y VENDEDOR
+const validateCuotasMarzo = async (fechaInicio = '2026-03-01', fechaFin = '2026-03-31') => {
+	try {
+		// Obtener todos los vendedores
+		const vendedores = await sequelize.query(`
+			SELECT v.id_vendedor, v.codigo_vendedor, v.nombre
+			FROM vendedor v
+			ORDER BY v.codigo_vendedor ASC
+		`, { type: QueryTypes.SELECT });
+
+		// Obtener todas las categorías con sus cuotas
+		const categorias = await sequelize.query(`
+			SELECT DISTINCT
+				c.id_categoria,
+				c.nombre
+			FROM categoria c
+			ORDER BY c.nombre ASC
+		`, { type: QueryTypes.SELECT });
+
+		// Validar cuotas por vendedor y categoría
+		const validaciones = [];
+		const warnings = [];
+
+		for (const vendedor of vendedores) {
+			const datosVendedor = await getCuotaCategoriaPorVendedor(vendedor.codigo_vendedor, {
+				fechaInicio,
+				fechaFin
+			});
+
+			if (!datosVendedor) {
+				warnings.push({
+					tipo: 'VENDEDOR_SIN_DATOS',
+					vendedor: vendedor.nombre,
+					codigo: vendedor.codigo_vendedor,
+					mensaje: 'Vendedor no tiene datos de venta en el período'
+				});
+				continue;
+			}
+
+			const detalleVendedor = datosVendedor.detalle || [];
+			
+			detalleVendedor.forEach(cat => {
+				const cuotaEsperada = cat.cuota;
+				const acumulado = cat.acumulado;
+				const porcentaje = cat.porcentajeCumplimiento;
+
+				validaciones.push({
+					vendedor: vendedor.nombre,
+					codigo_vendedor: vendedor.codigo_vendedor,
+					categoria: cat.categoria,
+					cuota_esperada: cuotaEsperada,
+					acumulado: acumulado,
+					porcentaje_cumplimiento: porcentaje,
+					estado: cuotaEsperada > 0 ? 'OK' : 'SIN_CUOTA'
+				});
+			});
+		}
+
+		// Verificar integridad de cuotas en BD
+		const cuotasSinFecha = await sequelize.query(`
+			SELECT vqc.id_vendedor, vqc.id_categoria, c.nombre, vqc.cuota
+			FROM vendedor_cuota_categoria vqc
+			JOIN categoria c ON c.id_categoria = vqc.id_categoria
+			WHERE vqc.fecha_inicio IS NULL OR vqc.fecha_fin IS NULL
+			LIMIT 20
+		`, { type: QueryTypes.SELECT });
+
+		if (cuotasSinFecha.length > 0) {
+			warnings.push({
+				tipo: 'CUOTAS_SIN_FECHAS',
+				cantidad: cuotasSinFecha.length,
+				mensaje: 'Existen cuotas sin fechas de inicio/fin definidas',
+				ejemplos: cuotasSinFecha.slice(0, 5)
+			});
+		}
+
+		return {
+			periodo: { fechaInicio, fechaFin },
+			resumen: {
+				total_vendedores: vendedores.length,
+				total_categorias: categorias.length,
+				total_validaciones: validaciones.length
+			},
+			validaciones,
+			warnings,
+			timestamp: new Date().toISOString()
+		};
+
+	} catch (error) {
+		return {
+			error: true,
+			mensaje: error.message,
+			stack: error.stack
+		};
+	}
+};
+
+// ✅ COMPARAR CUOTAS DEL CSV CON BD
+const compareCuotasCSVvsBD = async (datosCSV, fechaInicio = '2026-03-01') => {
+	try {
+		const discrepancias = [];
+		const coincidencias = [];
+
+		// datosCSV debe ser un array: [{ codigo_vendedor, categorias: { codigo: cuota } }]
+		for (const registro of datosCSV) {
+			const { codigo_vendedor, categorias } = registro;
+
+			// Obtener datos de BD
+			const datoBD = await getCuotaCategoriaPorVendedor(codigo_vendedor, { fechaInicio });
+
+			if (!datoBD) {
+				discrepancias.push({
+					codigo_vendedor,
+					tipo: 'VENDEDOR_NO_ENCONTRADO',
+					mensaje: `Vendedor ${codigo_vendedor} no existe en BD`
+				});
+				continue;
+			}
+
+			// Comparar cada categoría
+			const detalleCSV = Object.entries(categorias);
+			const detalleBD = datoBD.detalle || [];
+
+			detalleCSV.forEach(([codigoCategoria, cuotaCSV]) => {
+				const enBD = detalleBD.find(cat => 
+					cat.categoria.toLowerCase().includes(codigoCategoria.toLowerCase())
+				);
+
+				if (!enBD) {
+					discrepancias.push({
+						codigo_vendedor,
+						categoria: codigoCategoria,
+						cuota_csv: cuotaCSV,
+						tipo: 'CATEGORIA_NO_ENCONTRADA',
+						mensaje: `Categoría ${codigoCategoria} no tiene datos en BD para este vendedor`
+					});
+				} else if (toNumber(enBD.cuota) !== toNumber(cuotaCSV)) {
+					discrepancias.push({
+						codigo_vendedor,
+						categoria: codigoCategoria,
+						cuota_csv: cuotaCSV,
+						cuota_bd: enBD.cuota,
+						diferencia: toNumber(cuotaCSV) - toNumber(enBD.cuota),
+						mensaje: `Cuota no coincide para ${codigoCategoria}`
+					});
+				} else {
+					coincidencias.push({
+						codigo_vendedor,
+						categoria: codigoCategoria,
+						cuota: cuotaCSV,
+						estado: 'VERIFICADO'
+					});
+				}
+			});
+		}
+
+		return {
+			total_coincidencias: coincidencias.length,
+			total_discrepancias: discrepancias.length,
+			coincidencias: coincidencias.slice(0, 10),
+			discrepancias,
+			porcentaje_integridad: coincidencias.length > 0 
+				? ((coincidencias.length / (coincidencias.length + discrepancias.length)) * 100).toFixed(2) 
+				: 0
+		};
+
+	} catch (error) {
+		return {
+			error: true,
+			mensaje: error.message
+		};
+	}
+};
+
 module.exports = {
 	getCuotaCategoriaGeneral,
 	getCuotaCategoriaPorVendedor,
-	getCuotaCategoriaTodosVendedores
+	getCuotaCategoriaTodosVendedores,
+	validateCuotasMarzo,
+	compareCuotasCSVvsBD
 };
