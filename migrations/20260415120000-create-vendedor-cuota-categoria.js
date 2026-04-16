@@ -3,10 +3,10 @@
  * Vincula un vendedor con una categoría y su cuota para un período
  * 
  * Estructura:
- * - id_vendedor_cuota_categoria (PK)
+ * - id (PK)
  * - id_vendedor (FK)
  * - id_categoria (FK)
- * - cuota (BIGINT)
+ * - cuota (DECIMAL 15,2)
  * - fecha_inicio (DATE)
  * - fecha_fin (DATE)
  * 
@@ -16,7 +16,7 @@
 module.exports = {
   up: async (queryInterface, DataTypes) => {
     await queryInterface.createTable('vendedor_cuota_categoria', {
-      id_vendedor_cuota_categoria: {
+      id: {
         type: DataTypes.BIGINT,
         primaryKey: true,
         autoIncrement: true,
@@ -41,7 +41,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       cuota: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.DECIMAL(15, 2),
         allowNull: false,
         defaultValue: 0
       },
@@ -52,16 +52,6 @@ module.exports = {
       fecha_fin: {
         type: DataTypes.DATE,
         allowNull: true
-      },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
       }
     });
 

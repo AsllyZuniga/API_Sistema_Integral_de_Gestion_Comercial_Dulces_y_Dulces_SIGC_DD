@@ -12,7 +12,7 @@ module.exports = (sequelize) => {
             autoIncrement: true
         },
         cuota: {
-            type: DataTypes.DECIMAL,
+            type: DataTypes.DECIMAL(15,2),
             allowNull: true,
             defaultValue: null,
             comment: null,
