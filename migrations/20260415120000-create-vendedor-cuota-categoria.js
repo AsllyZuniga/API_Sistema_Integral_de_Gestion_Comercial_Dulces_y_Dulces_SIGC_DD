@@ -56,7 +56,7 @@ module.exports = {
     });
 
     // Crear índice único para evitar duplicados
-    await queryInterface.addIndex('vendedor_cuota_categoria', 
+    await queryInterface.addIndex('vendedor_cuota_categoria',
       ['id_vendedor', 'id_categoria', 'fecha_inicio', 'fecha_fin'],
       {
         unique: true,
