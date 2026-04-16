@@ -35,7 +35,7 @@ module.exports = sequelize => {
       }
     },
     cuota: {
-      type: DataTypes.DOUBLE,
+      type: DataTypes.DECIMAL(15,2),
       allowNull: true,
       defaultValue: null,
       comment: null,

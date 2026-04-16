@@ -38,6 +38,7 @@ const cuotaMes_model = require('./cuotaMes')(sequelize);
 const cuotaCategoria_model = require('./cuotaCategoria')(sequelize);
 const cuotaProveedor_model = require('./cuotaProveedor')(sequelize);
 const vendedorCuotaProveedor_model = require('./vendedorCuotaProveedor')(sequelize);
+const vendedorCuotaCategoria_model = require('./vendedorCuotaCategoria')(sequelize);
 const rango_dias_model = require('./rango_dias')(sequelize);
 
 // Define associations/relationships
@@ -150,6 +151,12 @@ module.exports = {
   vendedor_model,
   venta_model,
   cuotaCategoria_model,
+  cuotaDia_model,
+  cuotaSemana_model,
+  cuotaMes_model,
+  cuotaProveedor_model,
+  vendedorCuotaProveedor_model,
+  vendedorCuotaCategoria_model,
   rango_dias_model
 };
 // Cuotas relaciones
@@ -190,6 +197,7 @@ module.exports.cuotaMes_model = cuotaMes_model;
 module.exports.cuotaCategoria_model = cuotaCategoria_model;
 module.exports.cuotaProveedor_model = cuotaProveedor_model;
 module.exports.vendedorCuotaProveedor_model = vendedorCuotaProveedor_model;
+module.exports.vendedorCuotaCategoria_model = vendedorCuotaCategoria_model;
 
 // ── VendedorCuotaProveedor (tabla intermedia) ──────────────────────────
 vendedor_model.hasMany(vendedorCuotaProveedor_model, {
@@ -229,6 +237,39 @@ vendedor_model.belongsToMany(proveedor_model, {
 proveedor_model.belongsToMany(vendedor_model, {
   through: vendedorCuotaProveedor_model,
   foreignKey: 'id_proveedor',
+  otherKey: 'id_vendedor',
+  as: 'vendedoresConCuota'
+});
+
+// ── VendedorCuotaCategoria (tabla intermedia) ──────────────────────────
+vendedor_model.hasMany(vendedorCuotaCategoria_model, {
+  foreignKey: 'id_vendedor',
+  as: 'cuotasCategorias'
+});
+vendedorCuotaCategoria_model.belongsTo(vendedor_model, {
+  foreignKey: 'id_vendedor',
+  as: 'vendedor'
+});
+
+categoria_model.hasMany(vendedorCuotaCategoria_model, {
+  foreignKey: 'id_categoria',
+  as: 'cuotasVendedor'
+});
+vendedorCuotaCategoria_model.belongsTo(categoria_model, {
+  foreignKey: 'id_categoria',
+  as: 'categoria'
+});
+
+// Muchos a muchos entre vendedor y categoria a través de la tabla intermedia
+vendedor_model.belongsToMany(categoria_model, {
+  through: vendedorCuotaCategoria_model,
+  foreignKey: 'id_vendedor',
+  otherKey: 'id_categoria',
+  as: 'categoriasConCuota'
+});
+categoria_model.belongsToMany(vendedor_model, {
+  through: vendedorCuotaCategoria_model,
+  foreignKey: 'id_categoria',
   otherKey: 'id_vendedor',
   as: 'vendedoresConCuota'
 });
