@@ -622,6 +622,7 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
         ciudadGroup = 'ci.id_ciudad, TRIM(ci.nombre)';
     }
 
+    // Si hay filtro de proveedor o categoría, sumar solo ventas de esos items (igual que en productos/lineas)
     let query;
     if (normalizedFilters.proveedor || normalizedFilters.categoria) {
         if (normalizedFilters.proveedor) {
@@ -761,96 +762,6 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
     };
 };
 
-const getVentasPorCategoriaYVendedor = async (idVendedor, nombreCategoria) => {
-    const query = `
-        SELECT SUM(acumulado) AS total_acumulado
-        FROM ventas
-        WHERE nombre_categoria LIKE :nombreCategoria
-        AND id_vendedor = :idVendedor;
-    `;
-
-    const replacements = {
-        nombreCategoria: `${nombreCategoria}%`,
-        idVendedor
-    };
-
-    const [result] = await sequelize.query(query, {
-        replacements,
-        type: QueryTypes.SELECT
-    });
-
-    return result.total_acumulado || 0;
-};
-
-const getVentasPorCategoria = async (nombreCategoria) => {
-    const query = `
-        SELECT nombre_categoria, SUM(acumulado) AS total_acumulado
-        FROM ventas
-        WHERE nombre_categoria LIKE :nombreCategoria
-        GROUP BY nombre_categoria;
-    `;
-
-    const replacements = {
-        nombreCategoria: `${nombreCategoria}%`
-    };
-
-    const results = await sequelize.query(query, {
-        replacements,
-        type: QueryTypes.SELECT
-    });
-
-    return results;
-};
-
-// ====== NUEVA FUNCIÓN AÑADIDA PARA EL REPORTE SIGC ======
-const getReporteCategoriasSigc = async (idVendedor, filters = {}) => {
-    const normalizedFilters = normalizePeriodFilters(filters);
-    const replacements = { 
-        idVendedor: Number(idVendedor)
-    };
-
-    let dateWhere = '';
-    if (normalizedFilters.fechaInicio && normalizedFilters.fechaFin) {
-        dateWhere = 'AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin';
-        replacements.fechaInicio = normalizedFilters.fechaInicio;
-        replacements.fechaFin = normalizedFilters.fechaFin;
-    }
-
-    // Usamos TRIM(UPPER()) para forzar la agrupación del texto y obviar si tienen IDs diferentes.
-    // Además, incorporamos tu lógica de devoluciones/NC con signedNcDetailSubtotalSql
-    const query = `
-        SELECT 
-            MAX(it.id_categoria) AS id_categoria,
-            TRIM(UPPER(cat.nombre)) AS categoria,
-            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS acumulado
-        FROM venta v
-        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-        JOIN item it ON it.id_item = dv.id_item
-        JOIN categoria cat ON cat.id_categoria = it.id_categoria
-        WHERE v.id_vendedor = :idVendedor
-        ${dateWhere}
-        GROUP BY TRIM(UPPER(cat.nombre))
-        ORDER BY acumulado DESC
-    `;
-
-    const rows = await sequelize.query(query, {
-        replacements,
-        type: QueryTypes.SELECT
-    });
-
-    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
-
-    return {
-        rows,
-        periodo: {
-            fechaInicio: normalizedFilters.fechaInicioFormatted,
-            fechaFin: normalizedFilters.fechaFinFormatted,
-            dias_corridos: diasCorridos,
-            dias_habiles: diasHabiles
-        }
-    };
-};
-
 module.exports = {
     getCumplimientoMes,
     getCumplimientoMesFront,
@@ -858,8 +769,5 @@ module.exports = {
     getLineasPorVendedor,
     getLineaEspecificaPorVendedor,
     getCiudadesPorVendedor,
-    getProductosPorVendedor,
-    getVentasPorCategoriaYVendedor,
-    getVentasPorCategoria,
-    getReporteCategoriasSigc // Exportada aquí
+    getProductosPorVendedor
 };
