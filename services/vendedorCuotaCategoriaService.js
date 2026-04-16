@@ -43,14 +43,14 @@ async function getByCategoria(id_categoria) {
 // Crear asignación (upsert para evitar duplicados)
 async function create(data) {
     const { id_vendedor, id_categoria, cuota = 0, fecha_inicio, fecha_fin } = data;
-    
+
     // Validar que existan el vendedor y la categoría
     const vendedor = await models.vendedor_model.findByPk(id_vendedor);
     if (!vendedor) throw new Error('Vendedor no encontrado');
-    
+
     const categoria = await models.categoria_model.findByPk(id_categoria);
     if (!categoria) throw new Error('Categoría no encontrada');
-    
+
     const [row] = await models.vendedorCuotaCategoria_model.upsert(
         { id_vendedor, id_categoria, cuota, fecha_inicio, fecha_fin },
         { returning: true }

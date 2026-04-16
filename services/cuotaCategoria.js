@@ -118,8 +118,8 @@ const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
 		};
 	});
 
-	const totalCuota = detalle.reduce((acc, row) => acc + toNumber(row.cuota), 0);
-	const totalProyectado = detalle.reduce((acc, row) => acc + toNumber(row.proyectado), 0);
+	const totalCuota = detalle.reduce((acc, row) => round(acc + toNumber(row.cuota), 2), 0);
+	const totalProyectado = detalle.reduce((acc, row) => round(acc + toNumber(row.proyectado), 2), 0);
 	const totalPorcentajeCumplimiento = totalCuota > 0 ? (totalAcumulado / totalCuota) * 100 : 0;
 	const totalPorcentajeCumplimientoProyectado = totalCuota > 0 ? (totalProyectado / totalCuota) * 100 : 0;
 
@@ -251,43 +251,47 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 	};
 
 	const rows = await sequelize.query(`
-		WITH acumulado_por_vendedor_categoria AS (
+		WITH vendedores_con_cuota AS (
+			SELECT DISTINCT
+				vqc.id_vendedor,
+				v.codigo_vendedor,
+				v.nombre
+			FROM vendedor_cuota_categoria vqc
+			JOIN vendedor v ON v.id_vendedor = vqc.id_vendedor
+			WHERE vqc.fecha_inicio <= :fechaFin
+			  AND vqc.fecha_fin >= :fechaInicio
+		),
+		acumulado_por_vendedor_categoria AS (
 			SELECT
 				v.id_vendedor,
-				vd.codigo_vendedor,
-				vd.nombre AS vendedor,
 				it.id_categoria,
 				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
 			FROM detalle_venta dv
 			JOIN item it ON it.id_item = dv.id_item
 			JOIN venta v ON v.id_venta = dv.id_venta
-			JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
-			GROUP BY v.id_vendedor, vd.codigo_vendedor, vd.nombre, it.id_categoria
+			GROUP BY v.id_vendedor, it.id_categoria
 		)
 		SELECT
-			avc.id_vendedor,
-			avc.codigo_vendedor,
-			avc.vendedor,
+			vq.id_vendedor,
+			vq.codigo_vendedor,
+			vq.nombre AS vendedor,
 			c.id_categoria,
 			c.nombre AS categoria,
 			COALESCE(vqc.cuota, 0) AS cuota,
 			COALESCE(avc.acumulado, 0) AS acumulado
-		FROM categoria c
-		CROSS JOIN (
-			SELECT DISTINCT id_vendedor, codigo_vendedor, vendedor
-			FROM acumulado_por_vendedor_categoria
-		) vendedores_distintos
-		LEFT JOIN acumulado_por_vendedor_categoria avc 
-			ON avc.id_categoria = c.id_categoria 
-			AND avc.id_vendedor = vendedores_distintos.id_vendedor
+		FROM vendedores_con_cuota vq
+		CROSS JOIN categoria c
 		LEFT JOIN vendedor_cuota_categoria vqc 
-			ON vqc.id_vendedor = vendedores_distintos.id_vendedor
+			ON vqc.id_vendedor = vq.id_vendedor
 			AND vqc.id_categoria = c.id_categoria
 			AND vqc.fecha_inicio <= :fechaFin
 			AND vqc.fecha_fin >= :fechaInicio
-		ORDER BY avc.vendedor ASC, c.nombre ASC
+		LEFT JOIN acumulado_por_vendedor_categoria avc 
+			ON avc.id_vendedor = vq.id_vendedor
+			AND avc.id_categoria = c.id_categoria
+		ORDER BY vq.nombre ASC, c.nombre ASC
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
@@ -327,8 +331,8 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 	const totalPorCategoria = {};
 
 	vendedoresMap.forEach((vendedor) => {
-		const totalAcumuladoVendedor = vendedor.categorias.reduce((acc, cat) => acc + cat.acumulado, 0);
-		const totalCuotaVendedor = vendedor.categorias.reduce((acc, cat) => acc + cat.cuota, 0);
+		const totalAcumuladoVendedor = vendedor.categorias.reduce((acc, cat) => round(acc + cat.acumulado, 2), 0);
+		const totalCuotaVendedor = vendedor.categorias.reduce((acc, cat) => round(acc + cat.cuota, 2), 0);
 
 		const vendedorData = {
 			vendedor: {
@@ -353,9 +357,9 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 						proyectado: 0
 					};
 				}
-				totalPorCategoria[cat.id_categoria].cuota += cuota;
-				totalPorCategoria[cat.id_categoria].acumulado += acumulado;
-				totalPorCategoria[cat.id_categoria].proyectado += proyectado;
+				totalPorCategoria[cat.id_categoria].cuota = round(totalPorCategoria[cat.id_categoria].cuota + cuota, 2);
+				totalPorCategoria[cat.id_categoria].acumulado = round(totalPorCategoria[cat.id_categoria].acumulado + acumulado, 2);
+				totalPorCategoria[cat.id_categoria].proyectado = round(totalPorCategoria[cat.id_categoria].proyectado + proyectado, 2);
 
 				return {
 					id_categoria: cat.id_categoria,
@@ -396,10 +400,10 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 
 	// Total general
 	const totalGeneral = Object.values(totalPorCategoria).reduce((acc, cat) => ({
-		cuota: acc.cuota + cat.cuota,
-		acumulado: acc.acumulado + cat.acumulado,
-		proyectado: acc.proyectado + cat.proyectado
-	}), { cuota: 0, acumulado: 0, proyectado: 0 });
+		cuota: round(acc.cuota + cat.cuota, 2),
+		acumulado: round(acc.acumulado + cat.acumulado, 2),
+		proyectado: round(acc.proyectado + cat.proyectado, 2)
+	}), { cuota: 0, acumulado: 0, proyectado: 0 })
 
 	const porcentajeCumpGeneral = totalGeneral.cuota > 0 ? (totalGeneral.acumulado / totalGeneral.cuota) * 100 : 0;
 	const porcentajeCumpProyGeneral = totalGeneral.cuota > 0 ? (totalGeneral.proyectado / totalGeneral.cuota) * 100 : 0;
