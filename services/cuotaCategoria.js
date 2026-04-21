@@ -220,14 +220,17 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 		SELECT
 			cat.id_categoria,
 			cat.nombre AS categoria,
-			vqc.cuota,
+			COALESCE(vqc.cuota, 0) AS cuota,
 			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM vendedor_cuota_categoria vqc
-		JOIN categoria cat ON cat.id_categoria = vqc.id_categoria
-		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = vqc.id_categoria
-		WHERE vqc.id_vendedor = :idVendedor
-		  AND vqc.fecha_inicio <= :fechaFin
-		  AND vqc.fecha_fin >= :fechaInicio
+		FROM categoria cat
+		LEFT JOIN vendedor_cuota_categoria vqc 
+			ON vqc.id_categoria = cat.id_categoria
+			AND vqc.id_vendedor = :idVendedor
+			AND vqc.fecha_inicio <= :fechaFin
+			AND vqc.fecha_fin >= :fechaInicio
+		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = cat.id_categoria
+		WHERE (vqc.id_vendedor = :idVendedor AND vqc.fecha_inicio <= :fechaFin AND vqc.fecha_fin >= :fechaInicio)
+		   OR (apc.acumulado > 0)
 		ORDER BY cat.nombre ASC
 	`, {
 		replacements,
