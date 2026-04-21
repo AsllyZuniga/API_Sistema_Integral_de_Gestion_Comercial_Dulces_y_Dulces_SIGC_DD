@@ -1,0 +1,15 @@
+$kind: http-request
+url: http://localhost:3000/tipos_documento
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"codigo\": \"FAC\",\r
+
+    \  \"descripcion\": \"Factura de Venta\",\r
+
+    \  \"afecta_venta\": true\r
+
+    }\r\n"
+order: 3000

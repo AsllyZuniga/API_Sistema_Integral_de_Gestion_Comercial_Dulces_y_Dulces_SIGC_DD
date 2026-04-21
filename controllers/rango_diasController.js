@@ -1,6 +1,17 @@
 const rangoDiasService = require('../services/rango_diasService');
 
 module.exports = {
+    async getCurrentMonthHabiles(req, res) {
+        try {
+            const data = await rangoDiasService.getCurrentMonthHabiles();
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send({
+                message: error.message
+            });
+        }
+    },
+
     async list(req, res) {
         try {
             const data = await rangoDiasService.getAll();
@@ -58,5 +69,25 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async syncMonth(req, res) {
+        try {
+            const data = await rangoDiasService.syncMonth({
+                fechaCorte: req.body.fechaCorte ?? req.query.fechaCorte
+            });
+
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send({
+                message: error.message
+            });
+        }
+    },
+
+    async syncYear(req, res) {
+        return res.status(403).send({
+            message: 'Sincronización anual deshabilitada. Solo se permite sincronizar el mes en curso.'
+        });
     }
 };

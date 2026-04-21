@@ -1,0 +1,17 @@
+$kind: http-request
+name: Importar Ventas
+url: http://localhost:3000/import/ventas/upload
+method: POST
+body:
+  type: formdata
+  content:
+    - type: file
+      key: archivo
+      src:
+        - /home/felipe-rivas/Descargas/ventas sesmag Marzo.csv
+      disabled: false
+    - type: text
+      key: batchSize
+      value: "100"
+      disabled: true
+order: 1000

@@ -1,3 +1,4 @@
+
 const cumplimientoMesService = require('../services/cumplimientoMesService');
 
 const getFilters = (query) => ({
@@ -10,6 +11,51 @@ const getFilters = (query) => ({
 });
 
 module.exports = {
+    async getCiudadEspecificaPorVendedor(req, res) {
+        try {
+            const filters = getFilters(req.query);
+            filters.ciudad = req.params.idCiudad;
+            const data = await cumplimientoMesService.getCiudadesPorVendedor(req.params.codigoVendedor, filters);
+            // Solo devolver la ciudad solicitada
+            const detalle = (data.detallePorCiudad || []).filter(c => String(c.id_ciudad) === String(req.params.idCiudad));
+            return res.status(200).send({
+                codigoVendedor: req.params.codigoVendedor,
+                detallePorCiudad: detalle
+            });
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+    async listFrontMe(req, res) {
+        try {
+            const codigoVendedor = String(req.auth?.codVendedor || '').trim();
+
+            if (!codigoVendedor) {
+                return res.status(403).send({
+                    message: 'El usuario autenticado no tiene código de vendedor asociado'
+                });
+            }
+
+            const data = await cumplimientoMesService.getCumplimientoMesFront({
+                ...getFilters(req.query),
+                vendedor: codigoVendedor
+            });
+
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async listFront(req, res) {
+        try {
+            const data = await cumplimientoMesService.getCumplimientoMesFront(getFilters(req.query));
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
     async list(req, res) {
         try {
             const data = await cumplimientoMesService.getCumplimientoMes(getFilters(req.query));

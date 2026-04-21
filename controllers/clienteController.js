@@ -1,3 +1,4 @@
+const clienteProductoService = require('../services/clienteProductoService');
 const {
     cliente_model,
     ciudad_model,
@@ -6,6 +7,61 @@ const {
     tipo_negocio_model
 } = require('../models');
 module.exports = {
+    async productosPorCliente(req, res) {
+        try {
+            const data = await clienteProductoService.getProductosPorCliente();
+            res.status(200).send(data);
+        } catch (error) {
+            res.status(400).send(error);
+        }
+    },
+
+    async productosPorClientePorVendedor(req, res) {
+        try {
+            const { idVendedor } = req.params;
+            const { fechaInicio, fechaFin } = req.query;
+            console.log('ID Vendedor recibido:', idVendedor); // Log para verificar el parámetro
+
+            if (!idVendedor) {
+                return res.status(400).send({ error: 'El parámetro idVendedor es requerido.' });
+            }
+
+            const filters = { fechaInicio, fechaFin };
+            const data = await clienteProductoService.getProductosPorClientePorVendedor(idVendedor, filters);
+            res.status(200).send(data);
+        } catch (error) {
+            console.error('Error en productosPorClientePorVendedor:', error); // Log para capturar errores
+            res.status(400).send({ error: 'Ocurrió un error al procesar la solicitud.', details: error.message });
+        }
+    },
+
+    async debugProductosPorClientePorVendedor(req, res) {
+        try {
+            const { idVendedor } = req.params;
+            console.log('ID Vendedor recibido:', idVendedor); // Log para verificar el parámetro
+
+            if (!idVendedor) {
+                return res.status(400).send({ error: 'El parámetro idVendedor es requerido.' });
+            }
+
+            const data = await clienteProductoService.debugProductosPorClientePorVendedor(idVendedor);
+            res.status(200).send(data);
+        } catch (error) {
+            console.error('Error en debugProductosPorClientePorVendedor:', error); // Log para capturar errores
+            res.status(400).send({ error: 'Ocurrió un error al procesar la solicitud.', details: error.message });
+        }
+    },
+
+    async debugVentasPorVendedor(req, res) {
+        try {
+            const { idVendedor } = req.params;
+            const data = await clienteProductoService.debugVentasPorVendedor(idVendedor);
+            res.status(200).send(data);
+        } catch (error) {
+            res.status(400).send({ error: 'Ocurrió un error al procesar la solicitud.', details: error.message });
+        }
+    },
+
     list(req, res) {
         return cliente_model
             .findAll({

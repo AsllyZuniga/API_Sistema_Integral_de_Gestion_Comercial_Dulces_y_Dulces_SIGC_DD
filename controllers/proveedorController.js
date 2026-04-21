@@ -1,7 +1,7 @@
 const { proveedor_model } = require('../models');
 module.exports = {
     list(req, res) {
-        return proveedor
+        return proveedor_model
             .findAll({})
             .then((proveedor) => res.status(200).send(proveedor))
             .catch((error) => { res.status(400).send(error); });
@@ -9,7 +9,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return proveedor
+        return proveedor_model
             .findByPk(req.params.id)
             .then((proveedor) => {
                 console.log(proveedor);
@@ -24,7 +24,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return proveedor
+        return proveedor_model
             .create({
                 codigo: req.body.codigo,
                 nombre: req.body.nombre,
@@ -36,7 +36,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return proveedor
+        return proveedor_model
             .findByPk(req.params.id)
             .then(proveedor => {
                 if (!proveedor) {
