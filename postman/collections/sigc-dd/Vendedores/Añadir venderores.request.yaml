@@ -1,0 +1,15 @@
+$kind: http-request
+url: http://localhost:3000/vendedores
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"codigo\": \"V001\",\r
+
+    \  \"nombre\": \"Juan Pérez\",\r
+
+    \  \"status\": true\r
+
+    }\r\n"
+order: 3000

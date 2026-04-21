@@ -1,0 +1,4 @@
+$kind: http-request
+url: http://localhost:3000/tipos_documento
+method: GET
+order: 1000

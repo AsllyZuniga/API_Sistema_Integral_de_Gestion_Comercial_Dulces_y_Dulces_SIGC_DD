@@ -1,0 +1,600 @@
+$kind: http-example
+request:
+  url: http://localhost:3000/mes/cumplimiento?fechaInicio=2025-12-01&fechaFin=2025-12-15
+  method: GET
+  queryParams:
+    fechaInicio: 2025-12-01
+    fechaFin: 2025-12-15
+  body:
+    type: urlencoded
+    content:
+      - key: fechaInicio
+        value: 2025-12-02
+        disabled: true
+      - key: fechaFin
+        value: 2025-12-03
+        disabled: true
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    X-Powered-By: Express
+    Access-Control-Allow-Origin: "*"
+    Content-Type: application/json; charset=utf-8
+    Content-Length: "11038"
+    ETag: W/"2b1e-ZH4UYOSq72dSNVQ2PKIK+3QiCBI"
+    Date: Tue, 03 Mar 2026 05:27:46 GMT
+    Connection: keep-alive
+    Keep-Alive: timeout=5
+  body:
+    type: text
+    content: |-
+      {
+          "filtros": {
+              "fechaInicio": {
+                  "fechaInicio": "2025-12-01",
+                  "fechaFin": "2025-12-15"
+              }
+          },
+          "data": [
+              {
+                  "codVendedor": "0990",
+                  "nombre": "URBANO CASTILLO ANA DORIS",
+                  "cuotaMes": 272000000,
+                  "ventaAcum": "32218179.00",
+                  "porcCump": "11.84%",
+                  "proyeccionVenta": "35797976.67",
+                  "porcCumProy": "13.16%"
+              },
+              {
+                  "codVendedor": "0550",
+                  "nombre": "CAMPO SAMBONI FAIBER DURLEY",
+                  "cuotaMes": 272000000,
+                  "ventaAcum": "549853248.00",
+                  "porcCump": "202.15%",
+                  "proyeccionVenta": "610948053.33",
+                  "porcCumProy": "224.61%"
+              },
+              {
+                  "codVendedor": "0275",
+                  "nombre": "MU\ufffdOZ CASTILLO FRANCISCO JAVIER - 0275",
+                  "cuotaMes": 272000000,
+                  "ventaAcum": "349835936.00",
+                  "porcCump": "128.62%",
+                  "proyeccionVenta": "388706595.56",
+                  "porcCumProy": "142.91%"
+              },
+              {
+                  "codVendedor": "9999",
+                  "nombre": "DISTRIBUIDORA COMERCIAL DULCES Y DULCES SAS",
+                  "cuotaMes": 272000000,
+                  "ventaAcum": "8015340.00",
+                  "porcCump": "2.95%",
+                  "proyeccionVenta": "8905933.33",
+                  "porcCumProy": "3.27%"
+              },
+              {
+                  "codVendedor": "0265",
+                  "nombre": "SEGURA ANGULO RUBIELA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "840656188.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "934062431.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0240",
+                  "nombre": "YAGUAPAZ  LUIS ANDRES",
+                  "cuotaMes": 0,
+                  "ventaAcum": "247304157.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "274782396.67",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0241",
+                  "nombre": "CUMBALAZA LOPEZ DIANA GABRIELA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "287836174.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "319817971.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0301",
+                  "nombre": "MALLAMA DELGADO JAVIER ANDRES",
+                  "cuotaMes": 0,
+                  "ventaAcum": "446666806.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "496296451.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0560",
+                  "nombre": "ORDO\ufffdEZ ESCOBAR ANDRES FELIPE",
+                  "cuotaMes": 0,
+                  "ventaAcum": "143086418.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "158984908.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0460",
+                  "nombre": "GETIAL PANTOJA JOHN EVER",
+                  "cuotaMes": 0,
+                  "ventaAcum": "385623413.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "428470458.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0245",
+                  "nombre": "DIAZ YELA JACKELYNE",
+                  "cuotaMes": 0,
+                  "ventaAcum": "450016304.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "500018115.56",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0071",
+                  "nombre": "MALLAMA CERON DAVID ALEXANDER",
+                  "cuotaMes": 0,
+                  "ventaAcum": "484131838.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "537924264.44",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0290",
+                  "nombre": "MONCAYO ARMERO CARLOS ARTURO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "518698782.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "576331980.00",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0555",
+                  "nombre": "PASAJE NOGUERA YEFERSON ANDRES",
+                  "cuotaMes": 0,
+                  "ventaAcum": "256283912.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "284759902.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0370",
+                  "nombre": "MU\ufffdOZ CASTILLO FRANCISCO JAVIER - 0370",
+                  "cuotaMes": 0,
+                  "ventaAcum": "269923692.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "299915213.33",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0522",
+                  "nombre": "LEITON OBANDO JHUDYT JIMENA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "102959069.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "114398965.56",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0601",
+                  "nombre": "VACANTE VACANTE VACANTE - 0601",
+                  "cuotaMes": 0,
+                  "ventaAcum": "68607478.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "76230531.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0701",
+                  "nombre": "CLAROS MEDINA EYDER AMAZONAS",
+                  "cuotaMes": 0,
+                  "ventaAcum": "14619967.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "16244407.78",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0360",
+                  "nombre": "RODRIGUEZ ESTRADA SANDRA LILIANA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "206095190.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "228994655.56",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0172",
+                  "nombre": "POLO GUERRERO MARIA DEL CARMEN",
+                  "cuotaMes": 0,
+                  "ventaAcum": "43673856.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "48526506.67",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0602",
+                  "nombre": "VACANTE VACANTE VACANTE - 0602",
+                  "cuotaMes": 0,
+                  "ventaAcum": "7449821.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "8277578.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0003",
+                  "nombre": "AGUIRRE RUALES AMANDA PATRICIA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "95108915.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "105676572.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0170",
+                  "nombre": "MORALES SALCEDO KATHERINE ALEXANDRA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "382267808.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "424742008.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0002",
+                  "nombre": "MENESES GUERRERO VICTOR HUGO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "108168775.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "120187527.78",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0235",
+                  "nombre": "OLIVA GUERRERO IRENE MERCEDES",
+                  "cuotaMes": 0,
+                  "ventaAcum": "340527842.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "378364268.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0440",
+                  "nombre": "ZAMBRANO CORDOBA REYNA ZULMA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "417486188.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "463873542.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0095",
+                  "nombre": "MONTENEGRO DELVALLE DAYANA STHEFANY",
+                  "cuotaMes": 0,
+                  "ventaAcum": "221786471.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "246429412.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0210",
+                  "nombre": "CASTRO ARCOS LEIDY PAOLA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "200294219.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "222549132.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0361",
+                  "nombre": "TORO MELO MAGALY NAVELLY",
+                  "cuotaMes": 0,
+                  "ventaAcum": "240564927.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "267294363.33",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0250",
+                  "nombre": "VALENCIA APONZA MIRIAM YOLIMA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "306023708.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "340026342.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0001",
+                  "nombre": "FAJARDO RIVAS JAVIER ESTEBAN",
+                  "cuotaMes": 0,
+                  "ventaAcum": "124577363.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "138419292.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0420",
+                  "nombre": "CALVACHE  CARLOS ALBERTO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "563331169.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "625923521.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0300",
+                  "nombre": "BELALCAZAR DOMINGUEZ JULY VIVIANA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "500705578.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "556339531.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0070",
+                  "nombre": "CASTRO AZA ALBA JENY",
+                  "cuotaMes": 0,
+                  "ventaAcum": "564728059.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "627475621.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0372",
+                  "nombre": "MUNOS LOPEZ MARIO FERNANDO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "134902539.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "149891710.00",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0128",
+                  "nombre": "LASSO RUIZ MADELIN YULIANA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "42002856.80",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "46669840.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0085",
+                  "nombre": "AGUIRRE ALFONSO EDINSON JAIR",
+                  "cuotaMes": 0,
+                  "ventaAcum": "399085952.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "443428835.56",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0400",
+                  "nombre": "CORDOBA  DANIELA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "245820903.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "273134336.67",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0126",
+                  "nombre": "VACANTE VACANTE VACANTE - 0126",
+                  "cuotaMes": 0,
+                  "ventaAcum": "27440215.71",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "30489128.57",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0127",
+                  "nombre": "PAZ ROJAS DAVID STEVEN",
+                  "cuotaMes": 0,
+                  "ventaAcum": "45044209.26",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "50049121.40",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0520",
+                  "nombre": "BERNAL BETANCOURT JOSE ANGEL",
+                  "cuotaMes": 0,
+                  "ventaAcum": "87583589.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "97315098.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0086",
+                  "nombre": "OCA\ufffdA REALPE EDUARDO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "239820958.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "266467731.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0115",
+                  "nombre": "PAZOS JIMENEZ OSCAR ARMANDO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "254476917.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "282752130.00",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0190",
+                  "nombre": "VACANTE VACANTE VACANTE - 0190",
+                  "cuotaMes": 0,
+                  "ventaAcum": "12259731.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "13621923.33",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0371",
+                  "nombre": "BENAVIDES JURADO MARTHA LORENA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "223976487.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "248862763.33",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0105",
+                  "nombre": "BURBANO CRIOLLO EIDER CAMILO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "149199202.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "165776891.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0125",
+                  "nombre": "CASTRO SOLARTE SILVIO MARCOS",
+                  "cuotaMes": 0,
+                  "ventaAcum": "43133333.69",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "47925926.32",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0211",
+                  "nombre": "ROJAS BOLA\ufffdOS YAJAIRA PAHOLA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "145557303.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "161730336.67",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0129",
+                  "nombre": "OSPINA MURCIA RICARDO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "45878456.42",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "50976062.69",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0200",
+                  "nombre": "FLOREZ TOBAR JUAN CARLOS",
+                  "cuotaMes": 0,
+                  "ventaAcum": "293908327.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "326564807.78",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0444",
+                  "nombre": "CLAROS MEDINA EYDER",
+                  "cuotaMes": 0,
+                  "ventaAcum": "197692777.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "219658641.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0150",
+                  "nombre": "DE LA CRUZ MEZA LEONAR JULIAN",
+                  "cuotaMes": 0,
+                  "ventaAcum": "466962304.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "518847004.44",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0004",
+                  "nombre": "CABRERA ARTURO CHRISTIAN CAMILO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "91360907.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "101512118.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0266",
+                  "nombre": "RODRIGUEZ TAIMBU GERMAN DARIO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "465254717.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "516949685.56",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0455",
+                  "nombre": "ACOSTA  NINI YOHANNA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "39660797.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "44067552.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0521",
+                  "nombre": "CISNEROS SAITA LUCELY",
+                  "cuotaMes": 0,
+                  "ventaAcum": "119266499.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "132518332.22",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0180",
+                  "nombre": "CHACON YAMA GINNA MARCELA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "20875337.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "23194818.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0174",
+                  "nombre": "CUATIS MONTA\ufffdO GLORIA MILENA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "85507176.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "95007973.33",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0173",
+                  "nombre": "YAMA MARCILLO LILIANA",
+                  "cuotaMes": 0,
+                  "ventaAcum": "134597710.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "149553011.11",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0225",
+                  "nombre": "CORDOBA TORRES HERNAN DARIO",
+                  "cuotaMes": 0,
+                  "ventaAcum": "1186628867.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "1318476518.89",
+                  "porcCumProy": "0.00%"
+              },
+              {
+                  "codVendedor": "0445",
+                  "nombre": "ORTEGA ILES DAVID HERNEY",
+                  "cuotaMes": 0,
+                  "ventaAcum": "147494578.00",
+                  "porcCump": "0.00%",
+                  "proyeccionVenta": "163882864.44",
+                  "porcCumProy": "0.00%"
+              }
+          ],
+          "totales": {
+              "codVendedor": "TOTALES",
+              "nombre": "",
+              "cuotaMes": 1088000000,
+              "ventaAcum": "15124519438.88",
+              "porcCump": "1390.12%",
+              "proyeccionVenta": "16805021598.75",
+              "porcCumProy": "1544.58%"
+          }
+      }
+order: 1000

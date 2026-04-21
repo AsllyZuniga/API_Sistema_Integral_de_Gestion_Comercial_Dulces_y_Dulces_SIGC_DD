@@ -41,7 +41,7 @@ module.exports = (sequelize) => {
         }
     }, options);
 
-    CuotaDia.associate = function(models) {
+    CuotaDia.associate = function (models) {
         CuotaDia.belongsTo(models.usuario, {
             foreignKey: 'id_usuario',
             targetKey: 'id_usuario',

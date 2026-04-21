@@ -1,0 +1,19 @@
+$kind: http-request
+url: http://localhost:3000/prodcutos
+method: POST
+body:
+  type: json
+  content: "{\r
+
+    \  \"codigo\": \"PRD-001\",\r
+
+    \  \"descripcion\": \"Gomitas surtidas 200g\",\r
+
+    \  \"categoria_id\": 3,\r
+
+    \  \"categoria\": \"Dulcería\",\r
+
+    \  \"ventas_detalle\": 1250000\r
+
+    }\r\n"
+order: 3000

@@ -1,0 +1,4 @@
+$kind: http-request
+url: http://localhost:3000/ventas_detalle
+method: GET
+order: 1000

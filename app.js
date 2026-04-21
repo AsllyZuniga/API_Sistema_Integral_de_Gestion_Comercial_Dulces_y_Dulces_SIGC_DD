@@ -11,6 +11,8 @@ var canalRouter = require("./routes/canalRouter");
 var categoriaRouter = require("./routes/categoriaRouter");
 var clienteRouter = require("./routes/clienteRouter");
 var cuotaDiaRouter = require("./routes/cuotaDiaRouter");
+var cuotaCategoriaRouter = require("./routes/cuotaCategoriaRouter");
+var cuotaCategoriaImportRouter = require("./routes/cuotaCategoriaImportRouter");
 var cuotaMesRouter = require("./routes/cuotaMesRouter");
 var cuotaSemanaRouter = require("./routes/cuotaSemanaRouter");
 var detalle_ventaRouter = require("./routes/detalle_ventaRouter");
@@ -28,16 +30,18 @@ var vendedorRouter = require("./routes/vendedorRouter");
 var ventaRouter = require("./routes/ventaRouter");
 var rango_diasRouter = require("./routes/rango_diasRouter");
 var cumplimientoMesRouter = require("./routes/cumplimientoMesRouter");
+var cumplimientoSemanaRouter = require("./routes/cumplimientoSemanaRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
-
-
-
-
+const vendedorCuotaCategoriaRouter = require('./routes/vendedorCuotaCategoriaRouter');
+const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
+const exportRoutes = require('./routes/exportRoutes');
 
 
 var cors = require('cors');
 var app = express();
+
+startRangoDiasScheduler();
 
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
@@ -60,6 +64,17 @@ app.use(logger("dev"));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Evita respuestas 304 con datos stale en reportes de cumplimiento.
+app.use(["/mes/cumplimiento", "/semana/cumplimiento", "/cuota-categoria"], (req, res, next) => {
+  delete req.headers["if-none-match"];
+  delete req.headers["if-modified-since"];
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.set("Surrogate-Control", "no-store");
+  next();
+});
+
 app.use("/api/auth", authRouter);
 app.use("/", indexRouter);
 app.use("/barrio", barrioRouter);
@@ -67,13 +82,15 @@ app.use("/canale", canalRouter);
 app.use("/categoria", categoriaRouter);
 app.use("/cliente", clienteRouter);
 app.use("/cuota-dia", cuotaDiaRouter);
+app.use("/cuota-categoria", cuotaCategoriaRouter);
+app.use("/cuota-categoria-import", cuotaCategoriaImportRouter);
 app.use("/cuota-mes", cuotaMesRouter);
 app.use("/cuota-semana", cuotaSemanaRouter);
 app.use("/detalle_venta", detalle_ventaRouter);
 app.use("/items", itemRouter);
 app.use("/megacategoria", megacategoriaRouter);
 app.use("/obsequio", obsequioRouter);
-app.use("/proveedore", proveedorRouter);
+app.use("/proveedor", proveedorRouter);
 app.use("/roles", rolRouter);
 app.use("/subcanale", subcanalRouter);
 app.use("/subcategoria", subcategoriaRouter);
@@ -84,10 +101,12 @@ app.use("/vendedor", vendedorRouter);
 app.use("/venta", ventaRouter);
 app.use("/rango-dias", rango_diasRouter);
 app.use('/mes/cumplimiento', cumplimientoMesRouter);
+app.use('/semana/cumplimiento', cumplimientoSemanaRouter);
 app.use('/import', importRouter);
 app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
-
-
+app.use('/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
+app.use('/export', exportRoutes);
+app.use("/", exportRoutes);
 
 
 // catch 404 and forward to error handler

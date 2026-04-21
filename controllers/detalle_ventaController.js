@@ -63,15 +63,18 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
+        const { cantidad, precio_unitario, descuento } = req.body;
+        const subtotal = (cantidad * precio_unitario) - (descuento || 0);
+
         return detalle_venta_model
             .create({
                 id_venta: req.body.id_venta,
                 id_item: req.body.id_item,
                 cantidad_emp: req.body.cantidad_emp,
-                cantidad: req.body.cantidad,
-                precio_unitario: req.body.precio_unitario,
-                descuento: req.body.descuento,
-                subtotal: req.body.subtotal,
+                cantidad,
+                precio_unitario,
+                descuento,
+                subtotal,
                 costo_promedio_total: req.body.costo_promedio_total,
             })
             .then((detalle_venta) => res.status(201).send(detalle_venta))
@@ -86,15 +89,21 @@ module.exports = {
                         message: 'detalle_venta Not Found',
                     });
                 }
+
+                const cantidad = req.body.cantidad || detalle_venta.cantidad;
+                const precio_unitario = req.body.precio_unitario || detalle_venta.precio_unitario;
+                const descuento = req.body.descuento || detalle_venta.descuento;
+                const subtotal = (cantidad * precio_unitario) - (descuento || 0);
+
                 return detalle_venta
                     .update({
                         id_venta: req.body.id_venta || detalle_venta.id_venta,
                         id_item: req.body.id_item || detalle_venta.id_item,
                         cantidad_emp: req.body.cantidad_emp || detalle_venta.cantidad_emp,
-                        cantidad: req.body.cantidad || detalle_venta.cantidad,
-                        precio_unitario: req.body.precio_unitario || detalle_venta.precio_unitario,
-                        descuento: req.body.descuento || detalle_venta.descuento,
-                        subtotal: req.body.subtotal || detalle_venta.subtotal,
+                        cantidad,
+                        precio_unitario,
+                        descuento,
+                        subtotal,
                         costo_promedio_total: req.body.costo_promedio_total || detalle_venta.costo_promedio_total
                     })
                     .then(() => res.status(200).send(detalle_venta))

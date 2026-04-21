@@ -2,7 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const crypto = require('crypto');
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
+const parse = require('csv-parse/sync').parse;
+const iconv = require('iconv-lite');
 
 class ImportadorVentasOptimizado {
     constructor(sequelize, models) {
@@ -62,7 +64,8 @@ class ImportadorVentasOptimizado {
         this.archivosEnProceso = new Set();
         this.archivosImportados = new Set();
 
-        this.BATCH_INSERT_SIZE = 10000;
+        this.BATCH_INSERT_SIZE = 10000; // batch de carga general
+        this.BATCH_UPSERT_DETALLE_SIZE = 1000; // batch para upsert de detalle_venta
         this.TRANSACTION_SIZE = 5000;
         this.BULK_DISPLAY_INTERVAL = 5000;
 
@@ -121,13 +124,102 @@ class ImportadorVentasOptimizado {
     }
 
     normalizarValor(valor) {
-        if (!valor) return null;
-        valor = valor.trim();
-        if (valor === '$0,00' || valor === '0' || valor === '0,00') return 0;
-        if (valor.includes('$')) valor = valor.substring(1);
+        if (valor === undefined || valor === null) return null;
+        valor = String(valor).trim();
+        // Permitir valores negativos, por ejemplo: -$1.234,56 o -1.234,56
+        // Quitar el signo y el símbolo de peso
+        let negativo = false;
+        if (valor.startsWith('-')) {
+            negativo = true;
+            valor = valor.substring(1).trim();
+        }
+        if (valor.startsWith('$')) valor = valor.substring(1);
         valor = valor.replace(/\./g, '').replace(',', '.');
-        const numero = parseFloat(valor);
+        let numero = parseFloat(valor);
+        if (negativo) numero = -numero;
+        if (valor === '0' || valor === '0,00' || valor === '$0,00') return 0;
         return isNaN(numero) ? null : numero;
+    }
+
+    valorClave(valor) {
+        if (valor === undefined || valor === null) return 'NULL';
+        return String(valor).trim();
+    }
+
+    construirClaveVentaDetalle(ventaData, detalleData) {
+        return [
+            this.valorClave(ventaData.numero_documento),
+            this.valorClave(ventaData.fecha),
+            this.valorClave(ventaData.id_cliente),
+            this.valorClave(ventaData.id_vendedor),
+            this.valorClave(ventaData.id_tipo_documento),
+            this.valorClave(ventaData.subtotal),
+            this.valorClave(ventaData.valor_neto),
+            this.valorClave(detalleData.id_item),
+            this.valorClave(detalleData.cantidad),
+            this.valorClave(detalleData.cantidad_emp),
+            this.valorClave(detalleData.precio_unitario),
+            this.valorClave(detalleData.subtotal)
+        ].join('|');
+    }
+
+    async obtenerClavesExistentesEnDB(pares) {
+        if (!pares || pares.length === 0) return new Set();
+
+        const fechas = [...new Set(pares.map(p => p.ventaData.fecha).filter(Boolean))];
+        const documentos = [...new Set(pares.map(p => p.ventaData.numero_documento).filter(Boolean))];
+        const vendedores = [...new Set(pares.map(p => p.ventaData.id_vendedor).filter(Boolean))];
+
+        if (fechas.length === 0 || documentos.length === 0 || vendedores.length === 0) {
+            return new Set();
+        }
+
+        const rows = await this.sequelize.query(`
+            SELECT
+                v.numero_documento,
+                v.fecha,
+                v.id_cliente,
+                v.id_vendedor,
+                v.id_tipo_documento,
+                v.subtotal,
+                v.valor_neto,
+                d.id_item,
+                d.cantidad,
+                d.cantidad_emp,
+                d.precio_unitario,
+                d.subtotal AS detalle_subtotal
+            FROM venta v
+            JOIN detalle_venta d ON d.id_venta = v.id_venta
+            WHERE v.fecha IN (:fechas)
+              AND v.numero_documento IN (:documentos)
+              AND v.id_vendedor IN (:vendedores)
+        `, {
+            replacements: { fechas, documentos, vendedores },
+            type: QueryTypes.SELECT
+        });
+
+        const claves = new Set();
+        rows.forEach((r) => {
+            const ventaData = {
+                numero_documento: r.numero_documento,
+                fecha: r.fecha,
+                id_cliente: r.id_cliente,
+                id_vendedor: r.id_vendedor,
+                id_tipo_documento: r.id_tipo_documento,
+                subtotal: r.subtotal,
+                valor_neto: r.valor_neto
+            };
+            const detalleData = {
+                id_item: r.id_item,
+                cantidad: r.cantidad,
+                cantidad_emp: r.cantidad_emp,
+                precio_unitario: r.precio_unitario,
+                subtotal: r.detalle_subtotal
+            };
+            claves.add(this.construirClaveVentaDetalle(ventaData, detalleData));
+        });
+
+        return claves;
     }
 
     parsearFecha(valor) {
@@ -165,13 +257,40 @@ class ImportadorVentasOptimizado {
         return { nombre: null, consecutivo: null };
     }
 
-    parsearLinea(linea, encabezados) {
-        const valores = linea.split('\t');
+    parsearLinea(linea, encabezados, delimitador = '\t') {
+        // Manejar comillas en CSV
+        let valores;
+        if (delimitador === ',') {
+            // Separar por coma, respetando comillas
+            valores = this.parseCSVLine(linea);
+        } else {
+            valores = linea.split(delimitador);
+        }
         const registro = {};
         encabezados.forEach((encabezado, index) => {
             registro[encabezado.trim()] = valores[index] ? valores[index].trim() : '';
         });
         return registro;
+    }
+
+    // Simple CSV parser for a line (handles quoted commas)
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result;
     }
 
     validarEncabezados(encabezados) {
@@ -189,12 +308,12 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    validarArchivoTxt(rutaArchivo) {
+    validarArchivoPlano(rutaArchivo) {
         const extension = path.extname(String(rutaArchivo || '')).toLowerCase();
-
-        if (extension !== '.txt') {
-            throw new Error('El archivo seleccionado no es válido. Solo se permiten archivos con extensión .txt');
+        if (extension !== '.txt' && extension !== '.csv' && extension !== '.tsv') {
+            throw new Error('El archivo seleccionado no es válido. Solo se permiten archivos con extensión .txt, .csv o .tsv');
         }
+        return extension;
     }
 
     async obtenerHashArchivo(rutaArchivo) {
@@ -535,14 +654,25 @@ class ImportadorVentasOptimizado {
         // id_venta lo asignará procesarBatch tras el bulkCreate con returning
         const detalleData = {
             id_item: item?.id_item,
-            cantidad_emp: this.normalizarValor(fila['Cantidad emp.']) || 0,
-            cantidad: this.normalizarValor(fila['Cantidad']) || 0,
+            cantidad_emp: this.normalizarValor(fila['Cantidad emp.']),
+            cantidad: this.normalizarValor(fila['Cantidad']),
             precio_unitario: this.normalizarValor(fila['Costo promedio total']),
             costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
             descuento: this.normalizarValor(fila['Valor descuentos']),
             subtotal: this.normalizarValor(fila['Valor subtotal'])
         };
 
+        // Si es NC (Nota de Crédito), asegurarse de que los valores negativos se mantengan
+        // Puedes identificar NC por el tipo de documento o por el valor negativo en subtotal
+        // Aquí se asume que si subtotal es negativo, es NC
+        if (detalleData.subtotal < 0) {
+            // Asegurar que cantidad, valor, subtotal, etc. sean negativos si corresponde
+            if (detalleData.cantidad && detalleData.cantidad > 0) detalleData.cantidad = -Math.abs(detalleData.cantidad);
+            if (detalleData.cantidad_emp && detalleData.cantidad_emp > 0) detalleData.cantidad_emp = -Math.abs(detalleData.cantidad_emp);
+            if (detalleData.precio_unitario && detalleData.precio_unitario > 0) detalleData.precio_unitario = -Math.abs(detalleData.precio_unitario);
+            if (detalleData.costo_promedio_total && detalleData.costo_promedio_total > 0) detalleData.costo_promedio_total = -Math.abs(detalleData.costo_promedio_total);
+            if (detalleData.descuento && detalleData.descuento > 0) detalleData.descuento = -Math.abs(detalleData.descuento);
+        }
         return { ventaData, detalleData };
     }
 
@@ -551,11 +681,25 @@ class ImportadorVentasOptimizado {
         const detallesData = [];
 
         try {
+            // 1) BUCLE DE PREPARACIÓN: Recorre el batch y prepara datos
             for (const linea of filas) {
                 if (!linea || linea.trim() === '') continue;
 
                 this.estadisticas.totalLineas++;
-                const fila = this.parsearLinea(linea, encabezados);
+                let fila;
+                try {
+                    fila = this.parsearLinea(linea, encabezados);
+                } catch (err) {
+                    this.estadisticas.errores++;
+                    if (this.verbose) {
+                        console.error(`❌ Error parseando fila ${this.estadisticas.totalLineas}:`, err.message);
+                    }
+                    this.estadisticas.erroresDetallados.push({
+                        fila: this.estadisticas.totalLineas,
+                        error: err.message
+                    });
+                    continue;
+                }
 
                 try {
                     const resultado = await this.prepararDatosFila(fila, null);
@@ -583,33 +727,119 @@ class ImportadorVentasOptimizado {
                 return;
             }
 
+            // 2) AGRUPAR CABECERAS ÚNICAS: Extrae cabeceras usando numero_documento como clave
+            const mapaVentasUnicas = new Map();
+            const ventasUnicas = [];
+            for (const ventaData of ventasData) {
+                const clave = ventaData.numero_documento || `FACTURA_${Date.now()}_${Math.random()}`;
+                if (!mapaVentasUnicas.has(clave)) {
+                    mapaVentasUnicas.set(clave, ventaData);
+                    ventasUnicas.push(ventaData);
+                }
+            }
+
+            console.log(`   📋 ${ventasUnicas.length} cabeceras únicas de ${ventasData.length} detalles preparados`);
+
             const transaccion = await this.sequelize.transaction();
 
             try {
-                // Insert masivo de ventas — Postgres devuelve los IDs generados
-                const ventasCreadas = await this.venta.bulkCreate(ventasData, {
+                // 3) INSERCIÓN DE CABECERAS (UPSERT): bulkCreate con updateOnDuplicate
+                const ventasCreadas = await this.venta.bulkCreate(ventasUnicas, {
                     transaction: transaccion,
-                    returning: true
+                    returning: true,
+                    updateOnDuplicate: [
+                        'fecha', 'id_cliente', 'id_vendedor', 'id_canal', 'id_subcanal',
+                        'id_tipo_documento', 'precio_unitario_con_impuesto', 'valor_descuentos',
+                        'valor_impuestos', 'valor_neto', 'subtotal', 'margen_promedio',
+                        'impuesto_afecta_margen', 'condicion_pago', 'porcentaje_descuento', 'porcentaje_impuesto'
+                    ]
                 });
 
-                // Asignar id_venta a cada detalle según su posición
-                const detallesConId = detallesData.map((d, i) => ({
-                    ...d,
-                    id_venta: ventasCreadas[i]?.id_venta
-                }));
+                console.log(`   ✅ ${ventasCreadas.length} cabeceras procesadas (nuevas o actualizadas)`);
 
-                // Insert masivo de detalles
-                await this.detalle_venta.bulkCreate(detallesConId, {
-                    transaction: transaccion,
-                    returning: false
+                // 4) DICCIONARIO DE IDs: Consulta BD para obtener id_venta de los numero_documento
+                const numerosDocumento = [...mapaVentasUnicas.keys()].filter(k => k !== null && !k.startsWith('FACTURA_'));
+                const mapaVentas = new Map();
+
+                if (numerosDocumento.length > 0) {
+                    const ventasEnBD = await this.venta.findAll({
+                        where: { numero_documento: numerosDocumento },
+                        attributes: ['id_venta', 'numero_documento'],
+                        raw: true,
+                        transaction: transaccion
+                    });
+
+                    ventasEnBD.forEach(v => {
+                        mapaVentas.set(v.numero_documento, v.id_venta);
+                    });
+                }
+
+                // Asignar también los IDs de las ventas recién creadas
+                ventasCreadas.forEach(v => {
+                    mapaVentas.set(v.numero_documento, v.id_venta);
                 });
+
+                // 5) ASIGNAR IDs A DETALLES: Recorre TODOS los detalles sin descartar ninguno
+                const detallesConId = [];
+                for (let i = 0; i < ventasData.length; i++) {
+                    const ventaData = ventasData[i];
+                    const detalleData = detallesData[i];
+                    const clave = ventaData.numero_documento || `FACTURA_${Date.now()}_${Math.random()}`;
+                    const id_venta = mapaVentas.get(clave);
+
+                    if (!id_venta) {
+                        this.estadisticas.errores++;
+                        console.warn(`⚠️ No se encontró id_venta para ${clave}, fila omitida`);
+                        this.estadisticas.erroresDetallados.push({
+                            fila: i + 1,
+                            error: `No se encontró id_venta para numero_documento: ${clave}`
+                        });
+                        continue;
+                    }
+
+                    detallesConId.push({
+                        ...detalleData,
+                        id_venta: id_venta
+                    });
+                }
+
+                if (detallesConId.length === 0) {
+                    console.log('⚠️ No hay detalles con id_venta válido para insertar');
+                    await transaccion.commit();
+                    return;
+                }
+
+                console.log(`   📦 ${detallesConId.length} detalles preparados con id_venta asignado`);
+
+                // 6) INSERCIÓN MASIVA DE DETALLES: bulkCreate de todos los detalles
+                let detallesProcesados = 0;
+                while (detallesProcesados < detallesConId.length) {
+                    const batchDetalles = detallesConId.slice(
+                        detallesProcesados,
+                        detallesProcesados + this.BATCH_UPSERT_DETALLE_SIZE
+                    );
+
+                    await this.detalle_venta.bulkCreate(batchDetalles, {
+                        transaction: transaccion,
+                        returning: false,
+                        updateOnDuplicate: [
+                            'cantidad_emp', 'cantidad', 'precio_unitario', 'costo_promedio_total',
+                            'descuento', 'subtotal'
+                        ]
+                    });
+
+                    detallesProcesados += batchDetalles.length;
+                    console.log(`      ↪️ Detalles insertados: ${detallesProcesados}/${detallesConId.length}`);
+                }
 
                 await transaccion.commit();
 
-                this.estadisticas.exitosas += ventasCreadas.length;
+                // 7) MANTENER ESTADÍSTICAS: Sumar cantidad de detalles insertados
+                this.estadisticas.exitosas += detallesConId.length;
                 this.estadisticas.nuevasVentas += ventasCreadas.length;
 
-                console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} ventas | Total acumulado: ${this.estadisticas.totalLineas}`);
+                console.log(`   ✅ Lote confirmado: ${ventasCreadas.length} cabeceras | ${detallesConId.length} detalles | Total acumulado: ${this.estadisticas.totalLineas}`);
+
             } catch (error) {
                 await transaccion.rollback();
                 throw error;
@@ -623,55 +853,74 @@ class ImportadorVentasOptimizado {
     async importar(rutaArchivo) {
         this.estadisticas.tiempoInicio = Date.now();
         let hashArchivo = null;
-
         try {
             console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
-
-            this.validarArchivoTxt(rutaArchivo);
+            const extension = this.validarArchivoPlano(rutaArchivo);
             hashArchivo = await this.validarArchivoNoDuplicado(rutaArchivo);
-
             await this.precargaDatos();
-
-            const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
-
-            const rl = readline.createInterface({
-                input: fileStream,
-                crlfDelay: Infinity
-            });
-
-            let encabezados = [];
-            let batch = [];
-            let esEncabezado = true;
-
-            for await (const linea of rl) {
-                if (!linea || linea.trim() === '') continue;
-
-                if (esEncabezado) {
-                    encabezados = linea.split('\t').map(h => h.trim());
-                    this.validarEncabezados(encabezados);
-                    esEncabezado = false;
-                    console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
-                    continue;
+            if (extension === '.csv') {
+                // Leer el archivo como buffer para detectar y convertir encoding
+                let contenido = fs.readFileSync(rutaArchivo);
+                // Detectar si es UTF-8 o ISO-8859-1 (Latin-1)
+                // Por simplicidad, intentamos decodificar como UTF-8 y si hay caracteres inválidos, usamos Latin-1
+                let texto;
+                try {
+                    texto = contenido.toString('utf8');
+                    // Si contiene caracteres de reemplazo, probablemente no es UTF-8
+                    if (texto.includes('�')) {
+                        texto = iconv.decode(contenido, 'latin1');
+                    }
+                } catch (e) {
+                    texto = iconv.decode(contenido, 'latin1');
                 }
-
-                batch.push(linea);
-
-                if (batch.length >= this.BATCH_INSERT_SIZE) {
-                    await this.procesarBatch(batch, encabezados);
-                    batch = [];
+                const registros = parse(texto, { columns: true, skip_empty_lines: true });
+                const encabezados = Object.keys(registros[0] || {});
+                this.validarEncabezados(encabezados);
+                // Procesar en batches
+                let batch = [];
+                for (const fila of registros) {
+                    batch.push(fila);
+                    if (batch.length >= this.BATCH_INSERT_SIZE) {
+                        await this.procesarBatchCSV(batch, encabezados);
+                        batch = [];
+                    }
+                }
+                if (batch.length > 0) {
+                    await this.procesarBatchCSV(batch, encabezados);
+                }
+            } else {
+                // TXT o TSV: igual que antes
+                const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
+                let delimitador = '\t';
+                if (extension === '.tsv') delimitador = '\t';
+                const rl = readline.createInterface({
+                    input: fileStream,
+                    crlfDelay: Infinity
+                });
+                let encabezados = [];
+                let batch = [];
+                let esEncabezado = true;
+                for await (const linea of rl) {
+                    if (!linea || linea.trim() === '') continue;
+                    if (esEncabezado) {
+                        encabezados = linea.split(delimitador).map(h => h.trim());
+                        this.validarEncabezados(encabezados);
+                        esEncabezado = false;
+                        console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
+                        continue;
+                    }
+                    batch.push(linea);
+                    if (batch.length >= this.BATCH_INSERT_SIZE) {
+                        await this.procesarBatch(batch, encabezados, delimitador);
+                        batch = [];
+                    }
+                }
+                if (batch.length > 0) {
+                    await this.procesarBatch(batch, encabezados, delimitador);
                 }
             }
-
-            if (batch.length > 0) {
-                await this.procesarBatch(batch, encabezados);
-            }
-
             this.estadisticas.tiempoFin = Date.now();
-            this.archivosEnProceso.delete(hashArchivo);
-            this.archivosImportados.add(hashArchivo);
-            this.mostrarResumen();
             return this.estadisticas;
-
         } catch (error) {
             if (hashArchivo) {
                 this.archivosEnProceso.delete(hashArchivo);
@@ -680,38 +929,25 @@ class ImportadorVentasOptimizado {
             throw error;
         }
     }
-
-    mostrarResumen() {
-        const tiempoTotal = (this.estadisticas.tiempoFin - this.estadisticas.tiempoInicio) / 1000;
-        const velocidad = (this.estadisticas.exitosas / tiempoTotal).toFixed(2);
-
-        console.log(`
-╔════════════════════════════════════════════════════════╗
-║           ✅ IMPORTACIÓN COMPLETADA                    ║
-╚════════════════════════════════════════════════════════╝
-
-📊 RESULTADOS:
-   ✅ Exitosas: ${this.estadisticas.exitosas}
-   ❌ Errores: ${this.estadisticas.errores}
-   ⏱️  Tiempo total: ${tiempoTotal.toFixed(2)}s
-   ⚡ Velocidad: ${velocidad} registros/segundo
-
-🆕 NUEVOS CREADOS:
-   • Proveedores: ${this.estadisticas.nuevosProveedores}
-   • Megacategorías: ${this.estadisticas.nuevasMegacategorias}
-   • Ventas: ${this.estadisticas.nuevasVentas}
-
-📦 PRECARGAS INICIALES:
-   • Proveedores: ${this.estadisticas.maestrosPreCargados.proveedores}
-   • Megacategorías: ${this.estadisticas.maestrosPreCargados.megacategorias}
-   • Categorías: ${this.estadisticas.maestrosPreCargados.categorias}
-   • Canales: ${this.estadisticas.maestrosPreCargados.canales}
-   • Ciudades: ${this.estadisticas.maestrosPreCargados.ciudades}
-   • Clientes: ${this.estadisticas.maestrosPreCargados.clientes}
-   • Items: ${this.estadisticas.maestrosPreCargados.items}
-
-        `);
+    // Procesa un batch de objetos (no líneas) para CSV
+    async procesarBatchCSV(filas, encabezados) {
+        // Convierte cada fila (objeto) a formato esperado por prepararDatosFila
+        for (let i = 0; i < filas.length; i++) {
+            filas[i] = this.normalizarFilaCSV(filas[i], encabezados);
+        }
+        await this.procesarBatch(filas, encabezados, ',');
     }
+
+    // Normaliza los valores de una fila CSV (quita comillas, espacios, etc.)
+    normalizarFilaCSV(fila, encabezados) {
+        const obj = {};
+        for (const key of encabezados) {
+            obj[key] = typeof fila[key] === 'string' ? fila[key].trim() : fila[key];
+        }
+        return obj;
+    }
+
 }
 
+// Exporta la clase correctamente para uso con require()
 module.exports = ImportadorVentasOptimizado;
