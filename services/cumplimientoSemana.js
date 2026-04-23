@@ -435,10 +435,19 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
     let cuotaProveedorJoin = '';
     let cuotaProveedorSelect = 'NULL AS cuota_proveedor';
     if (normalizedFilters.proveedor) {
-        cuotaProveedorJoin = `LEFT JOIN vendedor_cuota_proveedor vcp ON vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :proveedor
-            LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
-            AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio`;
-        cuotaProveedorSelect = 'COALESCE(cp.cuota, 0) AS cuota_proveedor';
+        cuotaProveedorJoin = `LEFT JOIN LATERAL (
+            SELECT SUM(cuota) AS cuota_proveedor
+            FROM (
+                SELECT cp.cuota AS cuota,
+                       ROW_NUMBER() OVER (PARTITION BY EXTRACT(YEAR FROM cp.fecha_inicio), EXTRACT(MONTH FROM cp.fecha_inicio) ORDER BY cp.fecha_fin DESC) AS rn
+                FROM vendedor_cuota_proveedor vcp
+                LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
+                AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio
+                WHERE vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :proveedor
+            ) cp_ranked
+            WHERE cp_ranked.rn = 1
+        ) cp ON true`;
+        cuotaProveedorSelect = 'COALESCE(cp.cuota_proveedor, 0) AS cuota_proveedor';
         replacements.proveedor = String(normalizedFilters.proveedor);
         replacements.cuotaFechaFin = normalizedFilters.fechaFin;
         replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
@@ -463,11 +472,14 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             COALESCE(vf.total_nc, 0) AS total_nc
         FROM vendedor vd
         LEFT JOIN LATERAL (
-            SELECT cs.cuota_semana
-            FROM "cuotaSemana" cs
-            WHERE ${cuotaConditions.join(' AND ')}
-            ORDER BY cs.fecha_fin DESC NULLS LAST, cs."id_cuotaSemana" DESC
-            LIMIT 1
+            SELECT SUM(cuota) AS cuota_semana
+            FROM (
+                SELECT cs.cuota_semana AS cuota,
+                       ROW_NUMBER() OVER (PARTITION BY EXTRACT(YEAR FROM cs.fecha_inicio), EXTRACT(MONTH FROM cs.fecha_inicio) ORDER BY cs.fecha_fin DESC) AS rn
+                FROM "cuotaSemana" cs
+                WHERE ${cuotaConditions.join(' AND ')}
+            ) cs_ranked
+            WHERE cs_ranked.rn = 1
         ) cs ON true
         ${cuotaProveedorJoin}
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
