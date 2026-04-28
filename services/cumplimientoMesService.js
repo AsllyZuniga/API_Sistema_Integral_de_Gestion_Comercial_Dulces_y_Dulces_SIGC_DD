@@ -506,6 +506,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             SELECT
                 COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo,
                 COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre,
+                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS reporte_prov_con_obs,
                 MAX(pr.id_proveedor) AS id_proveedor,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
             FROM venta v
@@ -514,12 +515,13 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
             WHERE ${where.join(' AND ')}
-            GROUP BY COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA')
+            GROUP BY COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA'), COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
         )
         SELECT
             id_proveedor,
             codigo AS codigo_linea,
             nombre AS nombre_linea,
+            reporte_prov_con_obs,
             (SELECT COALESCE(cp.cuota, 0)
              FROM "vendedorCuotaProveedor" vcp
              JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
@@ -563,6 +565,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
                 idProveedor: row.id_proveedor,
                 codigoLinea: row.codigo_linea,
                 linea: `${row.codigo_linea} - ${row.nombre_linea}`,
+                reporteProvConObs: row.reporte_prov_con_obs,
                 cuotaProveedor: round(cuotaProveedor, 2),
                 cuotaVendedor: round(cuotaMesVendedor, 2),
                 ventaAcum: round(ventaAcum, 2),
