@@ -26,8 +26,8 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
     }
     const query = `
         SELECT
-            COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo_linea,
-            COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_linea,
+            COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS codigo_linea,
+            COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS nombre_linea,
             COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS reporte_prov_con_obs,
             SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
         FROM venta v
@@ -37,7 +37,7 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
         LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
         LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
         WHERE ${where.join(' AND ')}
-        GROUP BY COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA'), COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
+        GROUP BY COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
         ORDER BY venta DESC
     `;
     const detallePorLinea = await sequelize.query(query, { replacements, type: QueryTypes.SELECT });

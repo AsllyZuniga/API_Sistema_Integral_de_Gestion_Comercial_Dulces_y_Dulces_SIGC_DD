@@ -502,10 +502,10 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
     const query = `
-        WITH ventas_por_proveedor AS (
+        WITH ventas_por_linea AS (
             SELECT
-                COALESCE(TRIM(pr.codigo), 'SIN CODIGO') AS codigo,
-                COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre,
+                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS codigo_linea,
+                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS nombre_linea,
                 COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS reporte_prov_con_obs,
                 MAX(pr.id_proveedor) AS id_proveedor,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
@@ -515,26 +515,26 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
             WHERE ${where.join(' AND ')}
-            GROUP BY COALESCE(TRIM(pr.codigo), 'SIN CODIGO'), COALESCE(TRIM(pr.nombre), 'SIN LINEA'), COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
+            GROUP BY COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
         )
         SELECT
-            id_proveedor,
-            codigo AS codigo_linea,
-            nombre AS nombre_linea,
-            reporte_prov_con_obs,
+            vpl.id_proveedor,
+            vpl.codigo_linea,
+            vpl.nombre_linea,
+            vpl.reporte_prov_con_obs,
             (SELECT COALESCE(cp.cuota, 0)
              FROM "vendedorCuotaProveedor" vcp
              JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
              WHERE vcp.id_vendedor = (SELECT id_vendedor FROM vendedor WHERE codigo_vendedor = :codigoVendedor LIMIT 1)
-               AND vcp.id_proveedor = vpv.id_proveedor
+               AND vcp.id_proveedor = vpl.id_proveedor
                AND vcp.estado = true
                AND cp.fecha_inicio <= :cuotaFechaFin
                AND cp.fecha_fin >= :cuotaFechaInicio
              ORDER BY cp.fecha_fin DESC NULLS LAST, cp."id_cuotaProveedor" DESC
              LIMIT 1) AS cuota_proveedor,
-            venta_total AS venta
-        FROM ventas_por_proveedor vpv
-        ORDER BY venta_total DESC
+            vpl.venta_total AS venta
+        FROM ventas_por_linea vpl
+        ORDER BY vpl.venta_total DESC
     `;
 
     const detallePorLinea = await sequelize.query(query, {
