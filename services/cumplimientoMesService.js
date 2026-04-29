@@ -564,7 +564,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             return {
                 idProveedor: row.id_proveedor,
                 codigoLinea: row.codigo_linea,
-                linea: `${row.codigo_linea} - ${row.nombre_linea}`,
+                linea: row.reporte_prov_con_obs,
                 reporteProvConObs: row.reporte_prov_con_obs,
                 cuotaProveedor: round(cuotaProveedor, 2),
                 cuotaVendedor: round(cuotaMesVendedor, 2),
