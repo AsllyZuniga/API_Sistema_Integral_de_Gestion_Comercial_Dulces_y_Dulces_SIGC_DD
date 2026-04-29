@@ -851,14 +851,26 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    async importar(rutaArchivo) {
+    async importar(rutaArchivo, reportarProgreso) {
         this.estadisticas.tiempoInicio = Date.now();
         let hashArchivo = null;
         try {
-            console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
+            const nombreArchivo = path.basename(rutaArchivo);
+            console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${nombreArchivo}`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
+            
             const extension = this.validarArchivoPlano(rutaArchivo);
+            console.log(`✅ Validación de extensión: ${extension}`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
+            
             hashArchivo = await this.validarArchivoNoDuplicado(rutaArchivo);
+            console.log(`✅ Archivo válido (hash verificado)`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
+            
+            console.log(`📦 Precargando datos maestros...`);
             await this.precargaDatos();
+            console.log(`✅ Datos maestros precargados`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
             if (extension === '.csv') {
                 // Leer el archivo como buffer para detectar y convertir encoding
                 let contenido = fs.readFileSync(rutaArchivo);
@@ -891,6 +903,9 @@ class ImportadorVentasOptimizado {
                 }
             } else {
                 // TXT o TSV: igual que antes
+                console.log(`📖 Leyendo archivo ${extension}...`);
+                if (reportarProgreso) reportarProgreso(0, 0, 0);
+                
                 const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
                 let delimitador = '\t';
                 if (extension === '.tsv') delimitador = '\t';
@@ -901,24 +916,38 @@ class ImportadorVentasOptimizado {
                 let encabezados = [];
                 let batch = [];
                 let esEncabezado = true;
+                let lineasLeidas = 0;
+                
                 for await (const linea of rl) {
                     if (!linea || linea.trim() === '') continue;
+                    
                     if (esEncabezado) {
                         encabezados = linea.split(delimitador).map(h => h.trim());
                         this.validarEncabezados(encabezados);
                         esEncabezado = false;
                         console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
+                        if (reportarProgreso) reportarProgreso(0, 0, 0);
                         continue;
                     }
+                    
+                    lineasLeidas++;
                     batch.push(linea);
+                    
                     if (batch.length >= this.BATCH_INSERT_SIZE) {
+                        console.log(`📊 Procesando batch de ${batch.length} líneas (total leído: ${lineasLeidas})`);
                         await this.procesarBatch(batch, encabezados, delimitador);
+                        if (reportarProgreso) reportarProgreso(lineasLeidas, this.estadisticas.exitosas, this.estadisticas.errores);
                         batch = [];
                     }
                 }
+                
                 if (batch.length > 0) {
+                    console.log(`📊 Procesando batch final de ${batch.length} líneas (total leído: ${lineasLeidas})`);
                     await this.procesarBatch(batch, encabezados, delimitador);
+                    if (reportarProgreso) reportarProgreso(lineasLeidas, this.estadisticas.exitosas, this.estadisticas.errores);
                 }
+                
+                console.log(`✅ Lectura completada: ${lineasLeidas} líneas procesadas`);
             }
             this.estadisticas.tiempoFin = Date.now();
             return this.estadisticas;
