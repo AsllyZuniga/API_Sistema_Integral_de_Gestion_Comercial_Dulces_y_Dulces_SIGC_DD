@@ -53,7 +53,7 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
             const porcCumProy = cuotaSemana > 0 ? (proyeccionVenta / cuotaSemana) * 100 : 0;
             return {
                 codigoLinea: row.codigo_linea,
-                linea: `${row.codigo_linea} - ${row.nombre_linea}`,
+                linea: row.reporte_prov_con_obs,
                 reporteProvConObs: row.reporte_prov_con_obs,
                 ventaAcum: round(ventaAcum, 2),
                 porcCump: round(porcCump, 4),
