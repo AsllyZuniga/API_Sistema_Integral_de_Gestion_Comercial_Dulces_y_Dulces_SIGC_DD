@@ -58,16 +58,7 @@ const assignSupervisor = async (idVendedor, idSupervisor) => {
         return { error: 'USUARIO_NOT_SUPERVISOR' };
     }
 
-    if (
-        vendedor.id_supervisor &&
-        Number(vendedor.id_supervisor) !== Number(idSupervisor)
-    ) {
-        return {
-            error: 'VENDEDOR_ALREADY_ASSIGNED_TO_OTHER_SUPERVISOR',
-            currentSupervisorId: vendedor.id_supervisor
-        };
-    }
-
+    // Permitir cambiar el supervisor sin necesidad de quitarlo primero
     await vendedor.update({ id_supervisor: idSupervisor });
     return { data: await getById(vendedor.id_vendedor) };
 };

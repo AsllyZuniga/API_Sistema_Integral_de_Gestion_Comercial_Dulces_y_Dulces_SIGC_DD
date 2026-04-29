@@ -91,13 +91,6 @@ module.exports = {
                 return res.status(400).send({ message: 'El usuario indicado no tiene rol de supervisor' });
             }
 
-            if (resultado?.error === 'VENDEDOR_ALREADY_ASSIGNED_TO_OTHER_SUPERVISOR') {
-                return res.status(409).send({
-                    message: 'El vendedor ya está asignado a otro supervisor. Primero debe quitar el supervisor actual para reasignar.',
-                    id_supervisor_actual: resultado.currentSupervisorId
-                });
-            }
-
             return res.status(200).send(resultado.data);
         } catch (error) {
             return res.status(400).send(error);
