@@ -10,6 +10,7 @@ const path = require('path');
  */
 async function importarVentasConArchivo(req, res) {
     let archivoProcesado = null;
+    let heartbeatInterval = null;
 
     try {
         // Dar tiempo suficiente al servidor (3 horas) para archivos inmensos
@@ -48,14 +49,27 @@ async function importarVentasConArchivo(req, res) {
         const importador = new ImportadorVentasOptimizado(models.sequelize, models);
         importador.BATCH_SIZE = batchSize;
 
+        // ✅ HEARTBEAT: Mantener viva la conexión cada 5 segundos (previene timeout en hosting)
+        heartbeatInterval = setInterval(() => {
+            if (!res.headersSent || res.writableEnded === false) {
+                res.write('\n'); // Envía un newline para mantener viva la conexión
+            }
+        }, 5000);
+
+        // Logger callback para enviar logs al cliente en tiempo real
+        const loggerCallback = (mensaje) => {
+            console.log(mensaje); // Mantener en consola para debugging
+            res.write(mensaje + '\n'); // Enviar también al cliente
+        };
+
         // Callback para enviar el progreso a Postman en vivo
         const reportarProgreso = (procesados, insertados, errores) => {
             const memoriaUsada = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
             res.write(`⏳ [PROGRESO] Líneas leídas: ${procesados} | Detalles insertados: ${insertados} | Errores: ${errores} | RAM: ${memoriaUsada}MB\n`);
         };
 
-        // Ejecutar el motor de importación
-        const estadisticas = await importador.importar(archivoProcesado, reportarProgreso);
+        // Ejecutar el motor de importación con logger
+        const estadisticas = await importador.importar(archivoProcesado, reportarProgreso, loggerCallback);
 
         res.write(`\n✅ IMPORTACIÓN COMPLETADA EXITOSAMENTE\n`);
         res.write(`==================================================\n`);
@@ -78,6 +92,11 @@ async function importarVentasConArchivo(req, res) {
             fs.unlinkSync(archivoProcesado);
         }
         res.end();
+    } finally {
+        // Limpiar el heartbeat cuando termine
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+        }
     }
 }
 
