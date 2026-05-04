@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start *)",
+      "Bash(curl http://localhost:3000/health)",
+      "Bash(pkill *)",
+      "Bash(npx sequelize-cli *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git reset *)"
+    ]
+  }
+}
