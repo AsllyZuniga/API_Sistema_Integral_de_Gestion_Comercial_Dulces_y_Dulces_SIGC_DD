@@ -528,8 +528,11 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
     }
     
     if (normalizedFilters.categoria) {
-        detalleConditions.push(`CAST(it.id_categoria AS TEXT) = :categoria`);
-        replacements.categoria = String(normalizedFilters.categoria);
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            detalleConditions.push(`CAST(it.id_categoria AS TEXT) = :categoria`);
+            replacements.categoria = String(categoriaId);
+        }
     }
 
     // Construir JOIN adicional si hay filtros en detalle
@@ -538,8 +541,9 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         detalleJoins += `\n            JOIN item it ON it.id_item = dv.id_item`;
     }
 
-    const detalleWhere = detalleConditions.length > 0 ? `AND ${detalleConditions.join(' AND ')}` : '';
-    const dateWhere = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : '';
+    // Combinar TODAS las condiciones correctamente
+    const allConditions = [...dateConditions, ...detalleConditions];
+    const whereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : '';
 
     const cuotaConditions = ['cs.id_usuario = vd.id_usuario'];
     if (normalizedFilters.fechaInicio) {
@@ -591,8 +595,7 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             FROM venta v
             ${detalleJoins}
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-            ${dateWhere}
-            ${detalleWhere}
+            ${whereClause}
             GROUP BY v.id_vendedor
         )
         SELECT
