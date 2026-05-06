@@ -6,23 +6,28 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
     if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = normalizedFilters.fechaInicio;
+        replacements.fechaInicio = formatDateOnly(normalizedFilters.fechaInicio);
     }
     if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = normalizedFilters.fechaFin;
+        replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
     if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
     if (normalizedFilters.proveedor) {
-        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-        replacements.proveedor = String(normalizedFilters.proveedor);
+        where.push('(TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)');
+        const proveedorVal = String(normalizedFilters.proveedor).trim();
+        replacements.proveedorExacto = proveedorVal;
+        replacements.proveedorLike = proveedorVal + '%';
     }
     if (normalizedFilters.categoria) {
-        where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-        replacements.categoria = String(normalizedFilters.categoria);
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(categoriaId);
+        }
     }
     const query = `
         SELECT
@@ -91,21 +96,26 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
     if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = normalizedFilters.fechaInicio;
+        replacements.fechaInicio = formatDateOnly(normalizedFilters.fechaInicio);
     }
     if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = normalizedFilters.fechaFin;
+        replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
     if (normalizedFilters.proveedor || normalizedFilters.categoria) {
         const sub = [];
         if (normalizedFilters.proveedor) {
-            sub.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-            replacements.proveedor = String(normalizedFilters.proveedor);
+            sub.push('(TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)');
+            const proveedorVal = String(normalizedFilters.proveedor).trim();
+            replacements.proveedorExacto = proveedorVal;
+            replacements.proveedorLike = proveedorVal + '%';
         }
         if (normalizedFilters.categoria) {
-            sub.push('CAST(it.id_categoria AS TEXT) = :categoria');
-            replacements.categoria = String(normalizedFilters.categoria);
+            const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+            if (categoriaId) {
+                sub.push('CAST(it.id_categoria AS TEXT) = :categoria');
+                replacements.categoria = String(categoriaId);
+            }
         }
         where.push(`
             EXISTS (
@@ -167,23 +177,28 @@ async function getProductosPorVendedor(codigoVendedor, filters = {}) {
     const where = ['vd.codigo_vendedor = :codigoVendedor'];
     if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
-        replacements.fechaInicio = normalizedFilters.fechaInicio;
+        replacements.fechaInicio = formatDateOnly(normalizedFilters.fechaInicio);
     }
     if (normalizedFilters.fechaFin) {
         where.push('v.fecha <= :fechaFin');
-        replacements.fechaFin = normalizedFilters.fechaFin;
+        replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
     if (normalizedFilters.ciudad) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
     if (normalizedFilters.proveedor) {
-        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
-        replacements.proveedor = String(normalizedFilters.proveedor);
+        where.push('(TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)');
+        const proveedorVal = String(normalizedFilters.proveedor).trim();
+        replacements.proveedorExacto = proveedorVal;
+        replacements.proveedorLike = proveedorVal + '%';
     }
     if (normalizedFilters.categoria) {
-        where.push('CAST(it.id_categoria AS TEXT) = :categoria');
-        replacements.categoria = String(normalizedFilters.categoria);
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(categoriaId);
+        }
     }
     const query = `
         SELECT
@@ -253,6 +268,27 @@ async function getCuotaSemanaPorVendedor(codigoVendedor, filters = {}) {
 }
 const { QueryTypes, Op } = require('sequelize');
 const { sequelize, rango_dias_model } = require('../models');
+
+const getCategoriaIdByNombre = async (nombreCategoria) => {
+    if (!nombreCategoria) return null;
+    const nombre = String(nombreCategoria).trim();
+    const row = await sequelize.query(`
+        SELECT id_categoria
+        FROM categoria
+        WHERE TRIM(nombre) = :nombre
+        LIMIT 1
+    `, {
+        replacements: { nombre },
+        type: QueryTypes.SELECT,
+        plain: true
+    });
+    return row?.id_categoria;
+};
+
+const signedNcAmountSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)) ELSE COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0) END`;
+const signedNcSubtotalSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.subtotal, 0)) ELSE COALESCE(${alias}.subtotal, 0) END`;
+const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `CASE WHEN UPPER(TRIM(${ventaAlias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${detalleAlias}.subtotal, 0)) ELSE COALESCE(${detalleAlias}.subtotal, 0) END`;
+
 const round = (value, decimals = 2) => {
     const factor = 10 ** decimals;
     return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
@@ -283,27 +319,28 @@ const formatDateOnly = (date) => {
 
 const normalizePeriodFilters = (filters = {}) => {
     if (filters.fechaInicio && filters.fechaFin) {
+        const startDate = toDateOnly(filters.fechaInicio);
+        const endDate = toDateOnly(filters.fechaFin);
         return {
             ...filters,
-            fechaInicio: formatDateOnly(toDateOnly(filters.fechaInicio)),
-            fechaFin: formatDateOnly(toDateOnly(filters.fechaFin))
+            fechaInicio: startDate,
+            fechaFin: endDate
         };
     }
-    // Por defecto, semana actual (lunes a domingo)
     const baseDate = filters.fechaInicio
         ? toDateOnly(filters.fechaInicio)
         : (filters.fechaFin ? toDateOnly(filters.fechaFin) : new Date());
     const now = new Date(baseDate);
     const day = now.getDay();
-    const diffToMonday = (day === 0 ? -6 : 1) - day; // Lunes=1, Domingo=0
+    const diffToMonday = (day === 0 ? -6 : 1) - day;
     const monday = new Date(now);
     monday.setDate(now.getDate() + diffToMonday);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
     return {
         ...filters,
-        fechaInicio: formatDateOnly(monday),
-        fechaFin: formatDateOnly(sunday)
+        fechaInicio: monday,
+        fechaFin: sunday
     };
 };
 
@@ -339,14 +376,54 @@ const getRangoDias = async (filters = {}) => {
 
 const buildVentasFilters = (filters = {}, replacements = {}) => {
     const conditions = [];
+    
     if (filters.fechaInicio) {
         conditions.push('v.fecha >= :fechaInicio');
         replacements.fechaInicio = filters.fechaInicio;
     }
+    
     if (filters.fechaFin) {
         conditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = filters.fechaFin;
     }
+
+    if (filters.ciudad) {
+        conditions.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(filters.ciudad);
+    }
+
+    // Filtro por reporteProvConObs (en lugar de id_proveedor)
+    if (filters.proveedor) {
+        const proveedorValue = String(filters.proveedor || '').trim();
+        conditions.push(`
+            EXISTS (
+                SELECT 1
+                FROM detalle_venta dv
+                WHERE dv.id_venta = v.id_venta
+                  AND (
+                    TRIM(dv.reporte_prov_con_obs) = :proveedorExacto
+                    OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike
+                  )
+            )
+        `);
+        replacements.proveedorExacto = proveedorValue;
+        replacements.proveedorLike = `${proveedorValue}%`;
+    }
+
+    // Filtro por categoría (mantiene búsqueda en item)
+    if (filters.categoria) {
+        conditions.push(`
+            EXISTS (
+                SELECT 1
+                FROM detalle_venta dv
+                JOIN item it ON it.id_item = dv.id_item
+                WHERE dv.id_venta = v.id_venta
+                  AND CAST(it.id_categoria AS TEXT) = :categoria
+            )
+        `);
+        replacements.categoria = String(filters.categoria);
+    }
+    
     return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 };
 
@@ -421,8 +498,48 @@ const addTotalsRow = (rows, diasCorridos, diasHabiles) => {
 const getCumplimientoSemanaFront = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
-    const ventasWhere = buildVentasFilters(normalizedFilters, replacements);
     const vendedorFilter = buildVendedorFilter(normalizedFilters, replacements);
+
+    // Agregar condiciones de fecha y ciudad
+    const dateConditions = [];
+    if (normalizedFilters.fechaInicio) {
+        dateConditions.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
+    }
+    if (normalizedFilters.fechaFin) {
+        dateConditions.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = normalizedFilters.fechaFin;
+    }
+    if (normalizedFilters.ciudad) {
+        dateConditions.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(normalizedFilters.ciudad);
+    }
+
+    // Condiciones para filtros en detalle_venta
+    const detalleConditions = [];
+    if (normalizedFilters.proveedor) {
+        const proveedorValue = String(normalizedFilters.proveedor || '').trim();
+        detalleConditions.push(`(
+            TRIM(dv.reporte_prov_con_obs) = :proveedorExacto
+            OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike
+        )`);
+        replacements.proveedorExacto = proveedorValue;
+        replacements.proveedorLike = `${proveedorValue}%`;
+    }
+    
+    if (normalizedFilters.categoria) {
+        detalleConditions.push(`CAST(it.id_categoria AS TEXT) = :categoria`);
+        replacements.categoria = String(normalizedFilters.categoria);
+    }
+
+    // Construir JOIN adicional si hay filtros en detalle
+    let detalleJoins = `JOIN detalle_venta dv ON dv.id_venta = v.id_venta`;
+    if (detalleConditions.length > 0) {
+        detalleJoins += `\n            JOIN item it ON it.id_item = dv.id_item`;
+    }
+
+    const detalleWhere = detalleConditions.length > 0 ? `AND ${detalleConditions.join(' AND ')}` : '';
+    const dateWhere = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : '';
 
     const cuotaConditions = ['cs.id_usuario = vd.id_usuario'];
     if (normalizedFilters.fechaInicio) {
@@ -445,24 +562,37 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
                 FROM vendedor_cuota_proveedor vcp
                 LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
                 AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio
-                WHERE vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :proveedor
+                WHERE vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :cuotaProveedorId
             ) cp_ranked
             WHERE cp_ranked.rn = 1
         ) cp ON true`;
         cuotaProveedorSelect = 'COALESCE(cp.cuota_proveedor, 0) AS cuota_proveedor';
-        replacements.proveedor = String(normalizedFilters.proveedor);
+        replacements.cuotaProveedorId = String(normalizedFilters.proveedor);
         replacements.cuotaFechaFin = normalizedFilters.fechaFin;
         replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     }
+    
     const query = `
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.valor_neto, v.subtotal, 0) ELSE COALESCE(v.valor_neto, v.subtotal, 0) END) AS venta_acum,
-                SUM(CASE WHEN v.numero_documento LIKE 'NC%' THEN COALESCE(v.subtotal, 0) ELSE 0 END) AS total_nc
+                SUM(
+                    CASE WHEN v.numero_documento LIKE 'NC%' 
+                    THEN -ABS(COALESCE(v.valor_neto, v.subtotal, 0)) 
+                    ELSE COALESCE(v.valor_neto, v.subtotal, 0) 
+                    END
+                ) AS venta_acum,
+                SUM(
+                    CASE WHEN v.numero_documento LIKE 'NC%' 
+                    THEN COALESCE(v.subtotal, 0)
+                    ELSE 0
+                    END
+                ) AS total_nc
             FROM venta v
+            ${detalleJoins}
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-            ${ventasWhere}
+            ${dateWhere}
+            ${detalleWhere}
             GROUP BY v.id_vendedor
         )
         SELECT
