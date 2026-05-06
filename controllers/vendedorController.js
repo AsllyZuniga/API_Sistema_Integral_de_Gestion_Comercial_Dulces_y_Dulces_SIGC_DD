@@ -4,17 +4,33 @@ module.exports = {
     async getBySupervisor(req, res) {
         try {
             const data = await vendedorService.getBySupervisor(req.params.id_supervisor);
-            return res.status(200).send(data);
+            return res.status(200).json({
+                success: true,
+                data: data
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            console.error('Error al obtener vendedores por supervisor:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al obtener vendedores',
+                error: error.message
+            });
         }
     },
     async list(req, res) {
         try {
             const data = await vendedorService.getAll();
-            return res.status(200).send(data);
+            return res.status(200).json({
+                success: true,
+                data: data
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            console.error('Error al listar vendedores:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al obtener lista de vendedores',
+                error: error.message
+            });
         }
     },
 
@@ -22,29 +38,91 @@ module.exports = {
         try {
             const data = await vendedorService.getById(req.params.id);
             if (!data) {
-                return res.status(404).send({
-                    message: 'vendedor Not Found'
+                return res.status(404).json({
+                    success: false,
+                    message: 'Vendedor no encontrado'
                 });
             }
-            return res.status(200).send(data);
+            return res.status(200).json({
+                success: true,
+                data: data
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            console.error('Error al obtener vendedor:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al obtener vendedor',
+                error: error.message
+            });
         }
     },
 
     async add(req, res) {
         try {
+            // Validación básica
+            if (!req.body.nombre || req.body.nombre.trim() === '') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'El nombre del vendedor es requerido',
+                    error: 'NOMBRE_REQUERIDO'
+                });
+            }
+
             const created = await vendedorService.create({
-                codigo_vendedor: req.body.codigo_vendedor,
-                nombre: req.body.nombre,
-                id_usuario: req.body.id_usuario,
-                id_cuotaMes: req.body.id_cuotaMes,
-                id_cuotaSemana: req.body.id_cuotaSemana,
-                id_cuotaDia: req.body.id_cuotaDia
+                codigo_vendedor: req.body.codigo_vendedor?.trim() || null,
+                nombre: req.body.nombre?.trim(),
+                id_usuario: req.body.id_usuario || null,
+                id_cuotaMes: req.body.id_cuotaMes || null,
+                id_cuotaSemana: req.body.id_cuotaSemana || null,
+                id_cuotaDia: req.body.id_cuotaDia || null
             });
-            return res.status(201).send(created);
+            return res.status(201).json({
+                success: true,
+                data: created,
+                message: 'Vendedor creado exitosamente'
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            // Manejo específico de errores de Sequelize
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                const field = error.errors?.[0]?.path || 'campo desconocido';
+                const mensaje = field === 'codigo_vendedor' 
+                    ? `El código de vendedor "${req.body.codigo_vendedor}" ya existe` 
+                    : field === 'id_usuario'
+                    ? 'Este usuario ya está asignado a otro vendedor'
+                    : `Ya existe un registro con ese ${field}`;
+                
+                return res.status(400).json({
+                    success: false,
+                    message: mensaje,
+                    error: 'UNIQUE_CONSTRAINT_VIOLATION',
+                    field: field
+                });
+            }
+
+            if (error.name === 'SequelizeValidationError') {
+                const mensaje = error.errors?.map(e => e.message).join(', ') || error.message;
+                return res.status(400).json({
+                    success: false,
+                    message: mensaje,
+                    error: 'VALIDATION_ERROR'
+                });
+            }
+
+            if (error.name === 'SequelizeForeignKeyConstraintError') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Uno de los IDs referenciados (usuario, cuota) no existe',
+                    error: 'FOREIGN_KEY_ERROR',
+                    detail: error.message
+                });
+            }
+
+            console.error('Error al crear vendedor:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error interno al crear vendedor',
+                error: error.message || 'UNKNOWN_ERROR'
+            });
         }
     },
 
@@ -52,8 +130,9 @@ module.exports = {
         try {
             const existing = await vendedorService.getById(req.params.id);
             if (!existing) {
-                return res.status(404).send({
-                    message: 'vendedor Not Found'
+                return res.status(404).json({
+                    success: false,
+                    message: 'Vendedor no encontrado'
                 });
             }
 
@@ -66,9 +145,28 @@ module.exports = {
                 id_cuotaDia: req.body.id_cuotaDia ?? existing.id_cuotaDia
             });
 
-            return res.status(200).send(updated);
+            return res.status(200).json({
+                success: true,
+                data: updated,
+                message: 'Vendedor actualizado exitosamente'
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                const field = error.errors?.[0]?.path || 'campo desconocido';
+                return res.status(400).json({
+                    success: false,
+                    message: `Ya existe un registro con ese ${field}`,
+                    error: 'UNIQUE_CONSTRAINT_VIOLATION',
+                    field: field
+                });
+            }
+
+            console.error('Error al actualizar vendedor:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al actualizar vendedor',
+                error: error.message
+            });
         }
     },
 
@@ -80,20 +178,38 @@ module.exports = {
             );
 
             if (resultado?.error === 'VENDEDOR_NOT_FOUND') {
-                return res.status(404).send({ message: 'vendedor Not Found' });
+                return res.status(404).json({ 
+                    success: false,
+                    message: 'Vendedor no encontrado' 
+                });
             }
 
             if (resultado?.error === 'SUPERVISOR_NOT_FOUND') {
-                return res.status(404).send({ message: 'supervisor Not Found' });
+                return res.status(404).json({ 
+                    success: false,
+                    message: 'Supervisor no encontrado' 
+                });
             }
 
             if (resultado?.error === 'USUARIO_NOT_SUPERVISOR') {
-                return res.status(400).send({ message: 'El usuario indicado no tiene rol de supervisor' });
+                return res.status(400).json({ 
+                    success: false,
+                    message: 'El usuario indicado no tiene rol de supervisor' 
+                });
             }
 
-            return res.status(200).send(resultado.data);
+            return res.status(200).json({
+                success: true,
+                data: resultado.data,
+                message: 'Supervisor asignado exitosamente'
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            console.error('Error al asignar supervisor:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al asignar supervisor',
+                error: error.message
+            });
         }
     },
 
@@ -105,12 +221,24 @@ module.exports = {
             });
 
             if (resultado?.error === 'EMPTY_VENDEDORES_LIST') {
-                return res.status(400).send({ message: resultado.message });
+                return res.status(400).json({ 
+                    success: false,
+                    message: resultado.message 
+                });
             }
 
-            return res.status(200).send(resultado.data);
+            return res.status(200).json({
+                success: true,
+                data: resultado.data || resultado,
+                message: 'Asignación masiva de supervisores completada'
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            console.error('Error al asignar supervisores masivamente:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error en asignación masiva de supervisores',
+                error: error.message
+            });
         }
     },
 
@@ -119,12 +247,24 @@ module.exports = {
             const resultado = await vendedorService.removeSupervisor(req.params.id);
 
             if (resultado?.error === 'VENDEDOR_NOT_FOUND') {
-                return res.status(404).send({ message: 'vendedor Not Found' });
+                return res.status(404).json({ 
+                    success: false,
+                    message: 'Vendedor no encontrado' 
+                });
             }
 
-            return res.status(200).send(resultado.data);
+            return res.status(200).json({
+                success: true,
+                data: resultado.data,
+                message: 'Supervisor removido exitosamente'
+            });
         } catch (error) {
-            return res.status(400).send(error);
+            console.error('Error al remover supervisor:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al remover supervisor',
+                error: error.message
+            });
         }
     }
 };
