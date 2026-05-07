@@ -410,18 +410,21 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
         replacements.proveedorLike = `${proveedorValue}%`;
     }
 
-    // Filtro por categoría (mantiene búsqueda en item)
-    if (filters.categoria) {
+    // Filtro por categorías (múltiples)
+    if (filters.categorias && filters.categorias.length > 0) {
+        const placeholders = filters.categorias.map((_, index) => `:categoria${index}`).join(',');
         conditions.push(`
             EXISTS (
                 SELECT 1
                 FROM detalle_venta dv
                 JOIN item it ON it.id_item = dv.id_item
                 WHERE dv.id_venta = v.id_venta
-                  AND CAST(it.id_categoria AS TEXT) = :categoria
+                  AND CAST(it.id_categoria AS TEXT) IN (${placeholders})
             )
         `);
-        replacements.categoria = String(filters.categoria);
+        filters.categorias.forEach((cat, index) => {
+            replacements[`categoria${index}`] = String(cat);
+        });
     }
     
     return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
