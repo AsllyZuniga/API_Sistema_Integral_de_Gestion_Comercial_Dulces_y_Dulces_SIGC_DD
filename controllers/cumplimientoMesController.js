@@ -1,14 +1,44 @@
 
 const cumplimientoMesService = require('../services/cumplimientoMesService');
 
-const getFilters = (query) => ({
-    fechaInicio: query.fechaInicio,
-    fechaFin: query.fechaFin,
-    vendedor: query.vendedor,
-    proveedor: query.proveedor,
-    categoria: query.categoria,
-    ciudad: query.ciudad
-});
+const extractCategoryId = (categoryStr) => {
+    // Extrae el ID numérico de strings como "0001 - 1000-ACEITES VEGETALES"
+    const parts = String(categoryStr).split('-');
+    if (parts.length >= 2) {
+        // Toma el segundo elemento y extrae solo números
+        const idMatch = parts[1].match(/\d+/);
+        if (idMatch) return idMatch[0];
+    }
+    // Si no hay guion, intenta extraer números directamente
+    const match = String(categoryStr).match(/\d+/);
+    return match ? match[0] : categoryStr;
+};
+
+const getFilters = (query) => {
+    const filters = {
+        fechaInicio: query.fechaInicio,
+        fechaFin: query.fechaFin,
+        vendedor: query.vendedor,
+        proveedor: query.proveedor,
+        ciudad: query.ciudad
+    };
+    
+    // Parsear múltiples categorías (separadas por coma o como array)
+    // Soporta: IDs puros ("1,2,3") o formato descriptivo ("0001 - 1000-ACEITES VEGETALES")
+    if (query.categoria) {
+        let categoriasList = [];
+        if (Array.isArray(query.categoria)) {
+            categoriasList = query.categoria;
+        } else {
+            categoriasList = String(query.categoria).split(',');
+        }
+        filters.categorias = categoriasList
+            .map(c => extractCategoryId(c))
+            .filter(c => c);
+    }
+    
+    return filters;
+};
 
 module.exports = {
     async getCiudadEspecificaPorVendedor(req, res) {
