@@ -1,4 +1,6 @@
-const { proveedor_model } = require('../models');
+const { proveedor_model, item_model, categoria_model } = require('../models');
+const { Sequelize } = require('sequelize');
+
 module.exports = {
     list(req, res) {
         return proveedor_model
@@ -57,5 +59,88 @@ module.exports = {
                     .catch((error) => res.status(400).send(error));
             })
             .catch((error) => res.status(400).send(error));
+    },
+    getCategoriasByProveedor(req, res) {
+        const proveedorCodigo = req.params.codigo;
+
+        return proveedor_model
+            .findOne({
+                where: { codigo: proveedorCodigo }
+            })
+            .then(proveedor => {
+                if (!proveedor) {
+                    return res.status(404).send({
+                        success: false,
+                        message: 'Proveedor no encontrado'
+                    });
+                }
+
+                // Obtener todos los items del proveedor con sus categorías
+                return item_model
+                    .findAll({
+                        where: { id_proveedor: proveedor.id_proveedor },
+                        include: [{
+                            model: categoria_model,
+                            as: 'categoria',
+                            attributes: ['id_categoria', 'nombre', 'id_megacategoria'],
+                            include: [{
+                                model: require('../models').megacategoria_model,
+                                as: 'megacategoria',
+                                attributes: ['id_megacategoria', 'nombre']
+                            }]
+                        }],
+                        raw: true,
+                        subQuery: false
+                    })
+                    .then(items => {
+                        // Agrupar categorías únicas
+                        const categoriasMap = {};
+
+                        items.forEach(item => {
+                            if (item['categoria.id_categoria']) {
+                                const catId = item['categoria.id_categoria'];
+                                if (!categoriasMap[catId]) {
+                                    categoriasMap[catId] = {
+                                        id_categoria: item['categoria.id_categoria'],
+                                        nombre: item['categoria.nombre'],
+                                        id_megacategoria: item['categoria.id_megacategoria'],
+                                        megacategoria: {
+                                            id_megacategoria: item['megacategoria.id_megacategoria'],
+                                            nombre: item['megacategoria.nombre']
+                                        },
+                                        cantidad_items: 0
+                                    };
+                                }
+                                categoriasMap[catId].cantidad_items++;
+                            }
+                        });
+
+                        const categorias = Object.values(categoriasMap);
+
+                        return res.status(200).send({
+                            success: true,
+                            proveedor: {
+                                id_proveedor: proveedor.id_proveedor,
+                                nombre: proveedor.nombre,
+                                codigo: proveedor.codigo
+                            },
+                            total_categorias: categorias.length,
+                            total_items: items.length,
+                            categorias: categorias
+                        });
+                    })
+                    .catch((error) => {
+                        res.status(400).send({
+                            success: false,
+                            error: error.message
+                        });
+                    });
+            })
+            .catch((error) => {
+                res.status(400).send({
+                    success: false,
+                    error: error.message
+                });
+            });
     }
 };
