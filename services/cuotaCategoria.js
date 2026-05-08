@@ -163,13 +163,23 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 			WHERE v.fecha >= :fechaInicio
 			  AND v.fecha <= :fechaFin
 			GROUP BY it.id_categoria
+		),
+		cuota_por_categoria AS (
+			SELECT
+				id_categoria,
+				SUM(cuota) AS cuota
+			FROM vendedor_cuota_categoria
+			WHERE fecha_inicio <= :fechaFin
+			  AND fecha_fin >= :fechaInicio
+			GROUP BY id_categoria
 		)
 		SELECT
 			c.id_categoria,
-			c.nombre,
-			0 AS cuota,
+			c.nombre AS categoria,
+			COALESCE(cpc.cuota, 0) AS cuota,
 			COALESCE(apc.acumulado, 0) AS acumulado
 		FROM categoria c
+		LEFT JOIN cuota_por_categoria cpc ON cpc.id_categoria = c.id_categoria
 		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
 		ORDER BY c.nombre ASC
 	`, {
