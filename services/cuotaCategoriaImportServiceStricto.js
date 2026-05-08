@@ -316,10 +316,11 @@ class CuotaCategoriaImportServiceStricto {
 
             // 2. SI VALIDACIÓN OK, PROCEDER CON IMPORTACIÓN
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const delimitador = this.detectarDelimitador(contenido);
             const registros = parse(contenido, {
                 columns: true,
                 skip_empty_lines: true,
-                delimiter: ';'
+                delimiter: delimitador
             });
 
             const registrosNormalizados = registros.map(row => {
