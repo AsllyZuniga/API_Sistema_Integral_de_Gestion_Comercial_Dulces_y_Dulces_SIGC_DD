@@ -5,6 +5,7 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
 router.get('/front/me', requireAuthJWT, cumplimientoMesController.listFrontMe);
 router.get('/front', cumplimientoMesController.listFront);
+router.get('/lineas', cumplimientoMesController.getLineas);
 router.get('/', cumplimientoMesController.list);
 router.get('/vendedor/:codigoVendedor', cumplimientoMesController.getByVendedor);
 router.get('/vendedor/:codigoVendedor/linea/:codigoLinea', cumplimientoMesController.getLineaEspecificaPorVendedor);

@@ -161,5 +161,14 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async getLineas(req, res) {
+        try {
+            const data = await cumplimientoMesService.getLineasGeneral(getFilters(req.query));
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };

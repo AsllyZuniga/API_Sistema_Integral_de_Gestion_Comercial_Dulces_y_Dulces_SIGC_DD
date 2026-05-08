@@ -906,6 +906,103 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
     };
 };
 
+const getLineasGeneral = async (filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
+    const replacements = {};
+    const where = [];
+
+    if (normalizedFilters.fechaInicio) {
+        where.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
+    }
+
+    if (normalizedFilters.fechaFin) {
+        where.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = normalizedFilters.fechaFin;
+    }
+
+    if (normalizedFilters.ciudad) {
+        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(normalizedFilters.ciudad);
+    }
+
+    if (normalizedFilters.proveedor) {
+        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
+        replacements.proveedor = String(normalizedFilters.proveedor);
+    }
+
+    replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
+    replacements.cuotaFechaFin = normalizedFilters.fechaFin;
+
+    const query = `
+        WITH ventas_por_linea AS (
+            SELECT
+                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS codigo_linea,
+                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS nombre_linea,
+                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS reporte_prov_con_obs,
+                MAX(pr.id_proveedor) AS id_proveedor,
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
+            FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item it ON it.id_item = dv.id_item
+            LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            WHERE ${where.length > 0 ? where.join(' AND ') : '1=1'}
+            GROUP BY COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
+        )
+        SELECT
+            vpl.id_proveedor,
+            vpl.codigo_linea,
+            vpl.nombre_linea,
+            vpl.reporte_prov_con_obs,
+            (SELECT COALESCE(SUM(cp.cuota), 0)
+             FROM "vendedorCuotaProveedor" vcp
+             JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+             WHERE vcp.id_proveedor = vpl.id_proveedor
+               AND vcp.estado = true
+               AND cp.fecha_inicio <= :cuotaFechaFin
+               AND cp.fecha_fin >= :cuotaFechaInicio
+            ) AS cuota_proveedor_total,
+            vpl.venta_total AS venta
+        FROM ventas_por_linea vpl
+        ORDER BY vpl.venta_total DESC
+    `;
+
+    const detallePorLinea = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
+
+    return {
+        periodo: {
+            fechaInicio: normalizedFilters.fechaInicioFormatted,
+            fechaFin: normalizedFilters.fechaFinFormatted
+        },
+        detallePorLinea: detallePorLinea.map((row) => {
+            const ventaAcum = toNumber(row.venta);
+            const cuotaProveedor = toNumber(row.cuota_proveedor_total);
+            const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
+            const porcCump = cuotaProveedor > 0 ? (ventaAcum / cuotaProveedor) * 100 : 0;
+            const porcCumProy = cuotaProveedor > 0 ? (proyeccionVenta / cuotaProveedor) * 100 : 0;
+
+            return {
+                idProveedor: row.id_proveedor,
+                codigoLinea: row.codigo_linea,
+                linea: row.reporte_prov_con_obs,
+                reporteProvConObs: row.reporte_prov_con_obs,
+                cuotaProveedorTotal: round(cuotaProveedor, 2),
+                ventaAcum: round(ventaAcum, 2),
+                porcCump: round(porcCump, 4),
+                proyeccionVenta: round(proyeccionVenta, 2),
+                porcCumProy: round(porcCumProy, 4)
+            };
+        })
+    };
+};
+
 module.exports = {
     getCumplimientoMes,
     getCumplimientoMesFront,
@@ -913,5 +1010,6 @@ module.exports = {
     getLineasPorVendedor,
     getLineaEspecificaPorVendedor,
     getCiudadesPorVendedor,
-    getProductosPorVendedor
+    getProductosPorVendedor,
+    getLineasGeneral
 };
