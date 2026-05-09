@@ -7,7 +7,16 @@
       "Bash(npx sequelize-cli *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(curl -s \"http://localhost:3000/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES&ciudad=75\")",
+      "Bash(curl -s \"http://localhost:3000/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES\")",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES\")",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES\" -i)",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30\")",
+      "Bash(curl -s \"http://localhost:3000/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30\")",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30\" -i)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(d\\); console.log\\('scripts:', JSON.stringify\\(p.scripts, null, 2\\)\\); console.log\\('main:', p.main\\);\")"
     ]
   }
 }

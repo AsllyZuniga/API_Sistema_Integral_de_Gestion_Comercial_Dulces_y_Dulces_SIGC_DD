@@ -598,32 +598,34 @@ const getCumplimientoMesFront = async (filters = {}) => {
 const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
-    const where = ['vd.codigo_vendedor = :codigoVendedor'];
+
+    // Filtros que aplican SOLO al subquery de ventas (no afectan qué proveedores aparecen)
+    const ventasWhere = ['vd.codigo_vendedor = :codigoVendedor'];
 
     if (normalizedFilters.fechaInicio) {
-        where.push('v.fecha >= :fechaInicio');
+        ventasWhere.push('v.fecha >= :fechaInicio');
         replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
 
     if (normalizedFilters.fechaFin) {
-        where.push('v.fecha <= :fechaFin');
+        ventasWhere.push('v.fecha <= :fechaFin');
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
     if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        ventasWhere.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
 
     if (normalizedFilters.proveedor) {
-        where.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
+        ventasWhere.push('CAST(it.id_proveedor AS TEXT) = :proveedor');
         replacements.proveedor = String(normalizedFilters.proveedor);
     }
 
     if (normalizedFilters.categoria) {
         const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
         if (categoriaId) {
-            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            ventasWhere.push('CAST(it.id_categoria AS TEXT) = :categoria');
             replacements.categoria = String(categoriaId);
         }
     }
@@ -631,13 +633,50 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
+    // Query base desde cuotas: incluye todos los proveedores con cuota aunque no tengan ventas.
+    // JOIN por código numérico del proveedor extraído del prefijo de reporte_prov_con_obs ("020 - ARCOR" → "020").
+    // Para proveedores sin código numérico, fallback por nombre normalizado.
     const query = `
-        WITH ventas_por_linea AS (
+        WITH cuotas_vendedor AS (
             SELECT
-                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS codigo_linea,
-                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS nombre_linea,
+                vcp.id_proveedor,
+                COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_proveedor,
+                TRIM(COALESCE(pr.codigo, '')) AS codigo_proveedor,
+                UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'),
+                    '\\s+', ' ', 'g'
+                ))) AS nombre_norm,
+                cp.cuota AS cuota_proveedor
+            FROM "vendedorCuotaProveedor" vcp
+            JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+            JOIN vendedor vd ON vd.id_vendedor = vcp.id_vendedor
+            LEFT JOIN proveedor pr ON pr.id_proveedor = vcp.id_proveedor
+            WHERE vd.codigo_vendedor = :codigoVendedor
+              AND vcp.estado = true
+              AND cp.fecha_inicio <= :cuotaFechaFin
+              AND cp.fecha_fin >= :cuotaFechaInicio
+        ),
+        cuotas_deduplicadas AS (
+            SELECT DISTINCT ON (nombre_norm)
+                id_proveedor,
+                nombre_proveedor,
+                codigo_proveedor,
+                nombre_norm,
+                cuota_proveedor
+            FROM cuotas_vendedor
+            ORDER BY nombre_norm, cuota_proveedor DESC
+        ),
+        ventas_por_proveedor AS (
+            SELECT
+                TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1)) AS codigo_reporte,
+                UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')),
+                        '[^a-zA-Z0-9 ]', ' ', 'g'
+                    ),
+                    '\\s+', ' ', 'g'
+                ))) AS nombre_norm,
                 COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS reporte_prov_con_obs,
-                MAX(pr.id_proveedor) AS id_proveedor,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
             FROM venta v
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
@@ -645,27 +684,22 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-            WHERE ${where.join(' AND ')}
-            GROUP BY COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
+            WHERE ${ventasWhere.join(' AND ')}
+            GROUP BY codigo_reporte, nombre_norm,
+                     COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
         )
         SELECT
-            vpl.id_proveedor,
-            vpl.codigo_linea,
-            vpl.nombre_linea,
-            vpl.reporte_prov_con_obs,
-            (SELECT COALESCE(cp.cuota, 0)
-             FROM "vendedorCuotaProveedor" vcp
-             JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
-             WHERE vcp.id_vendedor = (SELECT id_vendedor FROM vendedor WHERE codigo_vendedor = :codigoVendedor LIMIT 1)
-               AND vcp.id_proveedor = vpl.id_proveedor
-               AND vcp.estado = true
-               AND cp.fecha_inicio <= :cuotaFechaFin
-               AND cp.fecha_fin >= :cuotaFechaInicio
-             ORDER BY cp.fecha_fin DESC NULLS LAST, cp."id_cuotaProveedor" DESC
-             LIMIT 1) AS cuota_proveedor,
-            vpl.venta_total AS venta
-        FROM ventas_por_linea vpl
-        ORDER BY vpl.venta_total DESC
+            cq.id_proveedor,
+            COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
+            COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS nombre_linea,
+            COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS reporte_prov_con_obs,
+            cq.cuota_proveedor,
+            COALESCE(vp.venta_total, 0) AS venta
+        FROM cuotas_deduplicadas cq
+        LEFT JOIN ventas_por_proveedor vp
+            ON (cq.codigo_proveedor != '' AND vp.codigo_reporte = cq.codigo_proveedor)
+            OR (cq.codigo_proveedor = '' AND vp.nombre_norm = cq.nombre_norm)
+        ORDER BY COALESCE(vp.venta_total, 0) DESC
     `;
 
     const detallePorLinea = await sequelize.query(query, {

@@ -1,6 +1,7 @@
 const { QueryTypes, Op } = require('sequelize');
 const { sequelize, rango_dias_model } = require('../models');
 const { getResumenPeriodoLaboral } = require('../utils/calendarioLaboralColombia');
+const { getCategoriaIdFromProveedor } = require('./mapeoProveedorCategoria');
 
 const toNumber = (value) => Number(value || 0);
 
@@ -152,40 +153,101 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 		fechaFin: period.fechaFin
 	};
 
-	const rows = await sequelize.query(`
-		WITH acumulado_por_categoria AS (
-			SELECT
-				it.id_categoria,
-				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
-			FROM detalle_venta dv
-			JOIN item it ON it.id_item = dv.id_item
-			JOIN venta v ON v.id_venta = dv.id_venta
-			WHERE v.fecha >= :fechaInicio
-			  AND v.fecha <= :fechaFin
-			GROUP BY it.id_categoria
-		),
-		cuota_por_categoria AS (
-			SELECT
-				id_categoria,
-				SUM(cuota) AS cuota
-			FROM vendedor_cuota_categoria
-			WHERE fecha_inicio <= :fechaFin
-			  AND fecha_fin >= :fechaInicio
-			GROUP BY id_categoria
-		)
+	// Obtener acumulado de VENTAS por categoría
+	const acumuladoPorCategoria = await sequelize.query(`
 		SELECT
-			c.id_categoria,
-			c.nombre AS categoria,
-			COALESCE(cpc.cuota, 0) AS cuota,
-			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM categoria c
-		LEFT JOIN cuota_por_categoria cpc ON cpc.id_categoria = c.id_categoria
-		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = c.id_categoria
-		ORDER BY c.nombre ASC
+			it.id_categoria,
+			SUM(COALESCE(dv.subtotal, 0)) AS acumulado
+		FROM detalle_venta dv
+		JOIN item it ON it.id_item = dv.id_item
+		JOIN venta v ON v.id_venta = dv.id_venta
+		WHERE v.fecha >= :fechaInicio
+		  AND v.fecha <= :fechaFin
+		GROUP BY it.id_categoria
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
 	});
+
+	// Obtener CUOTAS de PROVEEDOR (fuente de verdad correcta)
+	const cuotasPorProveedor = await sequelize.query(`
+		SELECT
+			p.nombre AS proveedor,
+			SUM(cp.cuota) AS cuota_total
+		FROM "vendedorCuotaProveedor" vcp
+		JOIN proveedor p ON p.id_proveedor = vcp.id_proveedor
+		JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+		WHERE cp.fecha_fin >= :fechaInicio
+		  AND cp.fecha_inicio <= :fechaFin
+		GROUP BY p.nombre
+		ORDER BY p.nombre
+	`, {
+		replacements,
+		type: QueryTypes.SELECT
+	});
+
+	// Mapear a categorías
+	const cuotasPorCategoria = new Map();
+	
+	// Inicializar con acumulados
+	acumuladoPorCategoria.forEach((acc) => {
+		cuotasPorCategoria.set(acc.id_categoria, {
+			id_categoria: acc.id_categoria,
+			cuota: 0,
+			acumulado: toNumber(acc.acumulado)
+		});
+	});
+
+	// Agregar cuotas
+	cuotasPorProveedor.forEach((cuota) => {
+		const idCategoria = getCategoriaIdFromProveedor(cuota.proveedor);
+		if (idCategoria) {
+			if (!cuotasPorCategoria.has(idCategoria)) {
+				cuotasPorCategoria.set(idCategoria, {
+					id_categoria: idCategoria,
+					cuota: 0,
+					acumulado: 0
+				});
+			}
+			const item = cuotasPorCategoria.get(idCategoria);
+			item.cuota = toNumber(item.cuota) + toNumber(cuota.cuota_total);
+		}
+	});
+
+	// Obtener nombres de categorías
+	const todasLasCategorias = await sequelize.query(`
+		SELECT id_categoria, nombre FROM categoria
+	`, {
+		type: QueryTypes.SELECT
+	});
+
+	// Construir array final
+	const rows = Array.from(cuotasPorCategoria.values()).map((item) => {
+		const categoria = todasLasCategorias.find(c => c.id_categoria === item.id_categoria);
+		return {
+			id_categoria: item.id_categoria,
+			categoria: categoria?.nombre || `Categoría ${item.id_categoria}`,
+			cuota: item.cuota,
+			acumulado: item.acumulado
+		};
+	});
+
+	// Agregar categorías con acumulado pero sin cuota
+	todasLasCategorias.forEach((cat) => {
+		if (!cuotasPorCategoria.has(cat.id_categoria)) {
+			const acum = acumuladoPorCategoria.find(a => a.id_categoria === cat.id_categoria);
+			if (acum && toNumber(acum.acumulado) > 0) {
+				rows.push({
+					id_categoria: cat.id_categoria,
+					categoria: cat.nombre,
+					cuota: 0,
+					acumulado: toNumber(acum.acumulado)
+				});
+			}
+		}
+	});
+
+	rows.sort((a, b) => a.categoria.localeCompare(b.categoria));
 
 	return buildCuotaCategoriaPayload(rows, period);
 };
@@ -214,38 +276,108 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 		idVendedor: vendedor.id_vendedor
 	};
 
-	const rows = await sequelize.query(`
-		WITH acumulado_por_categoria AS (
-			SELECT
-				it.id_categoria,
-				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
-			FROM detalle_venta dv
-			JOIN item it ON it.id_item = dv.id_item
-			JOIN venta v ON v.id_venta = dv.id_venta
-			WHERE v.fecha >= :fechaInicio
-			  AND v.fecha <= :fechaFin
-			  AND v.id_vendedor = :idVendedor
-			GROUP BY it.id_categoria
-		)
+	// Obtener datos de VENTAS por categoría
+	const acumuladoPorCategoria = await sequelize.query(`
 		SELECT
-			cat.id_categoria,
-			cat.nombre AS categoria,
-			COALESCE(vqc.cuota, 0) AS cuota,
-			COALESCE(apc.acumulado, 0) AS acumulado
-		FROM categoria cat
-		LEFT JOIN vendedor_cuota_categoria vqc 
-			ON vqc.id_categoria = cat.id_categoria
-			AND vqc.id_vendedor = :idVendedor
-			AND vqc.fecha_inicio <= :fechaFin
-			AND vqc.fecha_fin >= :fechaInicio
-		LEFT JOIN acumulado_por_categoria apc ON apc.id_categoria = cat.id_categoria
-		WHERE (vqc.id_vendedor = :idVendedor AND vqc.fecha_inicio <= :fechaFin AND vqc.fecha_fin >= :fechaInicio)
-		   OR (apc.acumulado > 0)
-		ORDER BY cat.nombre ASC
+			it.id_categoria,
+			SUM(COALESCE(dv.subtotal, 0)) AS acumulado
+		FROM detalle_venta dv
+		JOIN item it ON it.id_item = dv.id_item
+		JOIN venta v ON v.id_venta = dv.id_venta
+		WHERE v.fecha >= :fechaInicio
+		  AND v.fecha <= :fechaFin
+		  AND v.id_vendedor = :idVendedor
+		GROUP BY it.id_categoria
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
 	});
+
+	// Obtener CUOTAS de PROVEEDOR (fuente de verdad correcta)
+	const cuotasPorProveedor = await sequelize.query(`
+		SELECT
+			p.nombre AS proveedor,
+			MAX(cp.cuota) AS cuota_max,
+			cp.fecha_inicio,
+			cp.fecha_fin
+		FROM "vendedorCuotaProveedor" vcp
+		JOIN proveedor p ON p.id_proveedor = vcp.id_proveedor
+		JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+		WHERE vcp.id_vendedor = :idVendedor
+		  AND cp.fecha_fin >= :fechaInicio
+		  AND cp.fecha_inicio <= :fechaFin
+		GROUP BY p.nombre, cp.fecha_inicio, cp.fecha_fin
+		ORDER BY p.nombre
+	`, {
+		replacements,
+		type: QueryTypes.SELECT
+	});
+
+	// Obtener todas las categorías para referencia
+	const todasLasCategorias = await sequelize.query(`
+		SELECT id_categoria, nombre
+		FROM categoria
+		ORDER BY nombre
+	`, {
+		type: QueryTypes.SELECT
+	});
+
+	// Mapear cuotas de proveedor a categorías
+	const cuotasPorCategoria = new Map();
+	
+	// Inicializar con acumulados
+	acumuladoPorCategoria.forEach((acc) => {
+		cuotasPorCategoria.set(acc.id_categoria, {
+			id_categoria: acc.id_categoria,
+			cuota: 0,
+			acumulado: toNumber(acc.acumulado)
+		});
+	});
+
+	// Agregar cuotas mapeadas
+	cuotasPorProveedor.forEach((cuota) => {
+		const idCategoria = getCategoriaIdFromProveedor(cuota.proveedor);
+		if (idCategoria) {
+			if (!cuotasPorCategoria.has(idCategoria)) {
+				cuotasPorCategoria.set(idCategoria, {
+					id_categoria: idCategoria,
+					cuota: 0,
+					acumulado: 0
+				});
+			}
+			const item = cuotasPorCategoria.get(idCategoria);
+			item.cuota = toNumber(item.cuota) + toNumber(cuota.cuota_max);
+		}
+	});
+
+	// Construir array de filas con nombres de categoría
+	const rows = Array.from(cuotasPorCategoria.values()).map((item) => {
+		const categoria = todasLasCategorias.find(c => c.id_categoria === item.id_categoria);
+		return {
+			id_categoria: item.id_categoria,
+			categoria: categoria?.nombre || `Categoría ${item.id_categoria}`,
+			cuota: item.cuota,
+			acumulado: item.acumulado
+		};
+	});
+
+	// Asegurar que todas las categorías estén incluidas si tienen acumulado
+	todasLasCategorias.forEach((cat) => {
+		if (!cuotasPorCategoria.has(cat.id_categoria)) {
+			const acum = acumuladoPorCategoria.find(a => a.id_categoria === cat.id_categoria);
+			if (acum && toNumber(acum.acumulado) > 0) {
+				rows.push({
+					id_categoria: cat.id_categoria,
+					categoria: cat.nombre,
+					cuota: 0,
+					acumulado: toNumber(acum.acumulado)
+				});
+			}
+		}
+	});
+
+	// Ordenar por nombre
+	rows.sort((a, b) => a.categoria.localeCompare(b.categoria));
 
 	return buildCuotaCategoriaPayload(rows, period, {
 		vendedor: {
@@ -263,108 +395,135 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 		fechaFin: period.fechaFin
 	};
 
-	const rows = await sequelize.query(`
-		WITH vendedores_con_cuota AS (
-			SELECT DISTINCT
-				vqc.id_vendedor,
-				v.codigo_vendedor,
-				v.nombre
-			FROM vendedor_cuota_categoria vqc
-			JOIN vendedor v ON v.id_vendedor = vqc.id_vendedor
-			WHERE vqc.fecha_inicio <= :fechaFin
-			  AND vqc.fecha_fin >= :fechaInicio
-		),
-		acumulado_por_vendedor_categoria AS (
-			SELECT
-				v.id_vendedor,
-				it.id_categoria,
-				SUM(COALESCE(dv.subtotal, 0)) AS acumulado
-			FROM detalle_venta dv
-			JOIN item it ON it.id_item = dv.id_item
-			JOIN venta v ON v.id_venta = dv.id_venta
-			WHERE v.fecha >= :fechaInicio
-			  AND v.fecha <= :fechaFin
-			GROUP BY v.id_vendedor, it.id_categoria
+	// Obtener vendedores que tienen cuotas de PROVEEDOR
+	const vendedoresConCuota = await sequelize.query(`
+		SELECT DISTINCT
+			vcp.id_vendedor,
+			v.codigo_vendedor,
+			v.nombre
+		FROM "vendedorCuotaProveedor" vcp
+		JOIN vendedor v ON v.id_vendedor = vcp.id_vendedor
+		WHERE EXISTS (
+			SELECT 1 FROM "cuotaProveedor" cp
+			WHERE cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+			AND cp.fecha_fin >= :fechaInicio
+			AND cp.fecha_inicio <= :fechaFin
 		)
-		SELECT
-			vq.id_vendedor,
-			vq.codigo_vendedor,
-			vq.nombre AS vendedor,
-			c.id_categoria,
-			c.nombre AS categoria,
-			COALESCE(vqc.cuota, 0) AS cuota,
-			COALESCE(avc.acumulado, 0) AS acumulado
-		FROM vendedores_con_cuota vq
-		CROSS JOIN categoria c
-		LEFT JOIN vendedor_cuota_categoria vqc 
-			ON vqc.id_vendedor = vq.id_vendedor
-			AND vqc.id_categoria = c.id_categoria
-			AND vqc.fecha_inicio <= :fechaFin
-			AND vqc.fecha_fin >= :fechaInicio
-		LEFT JOIN acumulado_por_vendedor_categoria avc 
-			ON avc.id_vendedor = vq.id_vendedor
-			AND avc.id_categoria = c.id_categoria
-		ORDER BY vq.nombre ASC, c.nombre ASC
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
 	});
 
+	// Obtener acumulados por vendedor y categoría
+	const acumuladoPorVendedorCategoria = await sequelize.query(`
+		SELECT
+			v.id_vendedor,
+			it.id_categoria,
+			SUM(COALESCE(dv.subtotal, 0)) AS acumulado
+		FROM detalle_venta dv
+		JOIN item it ON it.id_item = dv.id_item
+		JOIN venta v ON v.id_venta = dv.id_venta
+		WHERE v.fecha >= :fechaInicio
+		  AND v.fecha <= :fechaFin
+		GROUP BY v.id_vendedor, it.id_categoria
+	`, {
+		replacements,
+		type: QueryTypes.SELECT
+	});
+
+	// Obtener cuotas de PROVEEDOR para todos los vendedores
+	const cuotasPorVendedorProveedor = await sequelize.query(`
+		SELECT
+			vcp.id_vendedor,
+			p.nombre AS proveedor,
+			MAX(cp.cuota) AS cuota
+		FROM "vendedorCuotaProveedor" vcp
+		JOIN proveedor p ON p.id_proveedor = vcp.id_proveedor
+		JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+		WHERE cp.fecha_fin >= :fechaInicio
+		  AND cp.fecha_inicio <= :fechaFin
+		GROUP BY vcp.id_vendedor, p.nombre
+		ORDER BY vcp.id_vendedor, p.nombre
+	`, {
+		replacements,
+		type: QueryTypes.SELECT
+	});
+
+	// Obtener todas las categorías
+	const todasLasCategorias = await sequelize.query(`
+		SELECT id_categoria, nombre FROM categoria ORDER BY nombre
+	`, {
+		type: QueryTypes.SELECT
+	});
+
 	const { diasCorridos, diasHabiles } = await getRangoDias(period.fechaInicio, period.fechaFin);
 
-	// Agrupar por vendedor
+	// Procesar datos en memoria
 	const vendedoresMap = new Map();
-	const categoriasSet = new Set();
+	const totalPorCategoria = {};
 
-	rows.forEach((row) => {
-		const vendedorKey = row.id_vendedor;
-		const categoriaKey = row.id_categoria;
+	// Para cada vendedor
+	vendedoresConCuota.forEach((vendedor) => {
+		const vendedorKey = vendedor.id_vendedor;
 
-		categoriasSet.add(categoriaKey);
-
+		// Inicializar mapa de vendedor
 		if (!vendedoresMap.has(vendedorKey)) {
 			vendedoresMap.set(vendedorKey, {
-				id_vendedor: row.id_vendedor,
-				codigo_vendedor: row.codigo_vendedor,
-				nombre_vendedor: row.vendedor,
-				categorias: []
+				id_vendedor: vendedor.id_vendedor,
+				codigo_vendedor: vendedor.codigo_vendedor,
+				nombre_vendedor: vendedor.nombre,
+				cuotasPorCategoria: new Map() // id_categoria -> cuota
 			});
 		}
 
-		vendedoresMap.get(vendedorKey).categorias.push({
-			id_categoria: row.id_categoria,
-			categoria: row.categoria,
-			cuota: toNumber(row.cuota),
-			acumulado: toNumber(row.acumulado)
+		// Agregar cuotas mapeadas para este vendedor
+		const cuotasVendedor = cuotasPorVendedorProveedor.filter(c => c.id_vendedor === vendedorKey);
+		cuotasVendedor.forEach((cuota) => {
+			const idCategoria = getCategoriaIdFromProveedor(cuota.proveedor);
+			if (idCategoria) {
+				const vendedorData = vendedoresMap.get(vendedorKey);
+				const cuotaActual = vendedorData.cuotasPorCategoria.get(idCategoria) || 0;
+				vendedorData.cuotasPorCategoria.set(idCategoria, toNumber(cuotaActual) + toNumber(cuota.cuota));
+			}
 		});
 	});
 
-	// Construir respuesta con totales por categoría y por vendedor
+	// Construir respuesta final
 	const detalle = [];
-	const totalPorCategoria = {};
+	const categoriasProcessadas = new Set();
 
 	vendedoresMap.forEach((vendedor) => {
-		const totalAcumuladoVendedor = vendedor.categorias.reduce((acc, cat) => round(acc + cat.acumulado, 2), 0);
-		const totalCuotaVendedor = vendedor.categorias.reduce((acc, cat) => round(acc + cat.cuota, 2), 0);
+		const categorias = [];
 
-		const vendedorData = {
-			vendedor: {
-				id_vendedor: vendedor.id_vendedor,
-				codigo_vendedor: vendedor.codigo_vendedor,
-				nombre: vendedor.nombre_vendedor
-			},
-			categorias: vendedor.categorias.map((cat) => {
-				const cuota = cat.cuota;
-				const acumulado = cat.acumulado;
+		// Agregar todas las categorías
+		todasLasCategorias.forEach((cat) => {
+			const cuota = toNumber(vendedor.cuotasPorCategoria.get(cat.id_categoria) || 0);
+			const acumulados = acumuladoPorVendedorCategoria.filter(
+				a => a.id_vendedor === vendedor.id_vendedor && a.id_categoria === cat.id_categoria
+			);
+			const acumulado = acumulados.length > 0 ? toNumber(acumulados[0].acumulado) : 0;
+
+			if (cuota > 0 || acumulado > 0) {
 				const porcentajeCumplimiento = cuota > 0 ? (acumulado / cuota) * 100 : 0;
 				const proyectado = diasCorridos > 0 ? (acumulado / diasCorridos) * diasHabiles : 0;
 				const porcentajeCumplimientoProyectado = cuota > 0 ? (proyectado / cuota) * 100 : 0;
 
+				categorias.push({
+					id_categoria: cat.id_categoria,
+					categoria: cat.nombre,
+					cuota: cuota,
+					acumulado: acumulado,
+					porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
+					proyectado: round(proyectado, 2),
+					porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
+				});
+
 				// Acumular totales por categoría
+				categoriasProcessadas.add(cat.id_categoria);
 				if (!totalPorCategoria[cat.id_categoria]) {
 					totalPorCategoria[cat.id_categoria] = {
 						id_categoria: cat.id_categoria,
-						categoria: cat.categoria,
+						categoria: cat.nombre,
 						cuota: 0,
 						acumulado: 0,
 						proyectado: 0
@@ -373,53 +532,53 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 				totalPorCategoria[cat.id_categoria].cuota = round(totalPorCategoria[cat.id_categoria].cuota + cuota, 2);
 				totalPorCategoria[cat.id_categoria].acumulado = round(totalPorCategoria[cat.id_categoria].acumulado + acumulado, 2);
 				totalPorCategoria[cat.id_categoria].proyectado = round(totalPorCategoria[cat.id_categoria].proyectado + proyectado, 2);
-
-				return {
-					id_categoria: cat.id_categoria,
-					categoria: cat.categoria,
-					cuota: cuota,
-					acumulado: acumulado,
-					porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
-					proyectado: round(proyectado, 2),
-					porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
-				};
-			}),
-			total_vendedor: {
-				cuota: totalCuotaVendedor,
-				acumulado: totalAcumuladoVendedor,
-				porcentajeCumplimiento: round(totalCuotaVendedor > 0 ? (totalAcumuladoVendedor / totalCuotaVendedor) * 100 : 0, 2),
-				proyectado: round(diasCorridos > 0 ? (totalAcumuladoVendedor / diasCorridos) * diasHabiles : 0, 2)
 			}
-		};
+		});
 
-		detalle.push(vendedorData);
+		const totalCuotaVendedor = categorias.reduce((acc, cat) => round(acc + cat.cuota, 2), 0);
+		const totalAcumuladoVendedor = categorias.reduce((acc, cat) => round(acc + cat.acumulado, 2), 0);
+		const totalProyectadoVendedor = categorias.reduce((acc, cat) => round(acc + cat.proyectado, 2), 0);
+
+		if (categorias.length > 0) {
+			detalle.push({
+				vendedor: {
+					id_vendedor: vendedor.id_vendedor,
+					codigo_vendedor: vendedor.codigo_vendedor,
+					nombre: vendedor.nombre_vendedor
+				},
+				categorias: categorias,
+				total_vendedor: {
+					cuota: totalCuotaVendedor,
+					acumulado: totalAcumuladoVendedor,
+					porcentajeCumplimiento: totalCuotaVendedor > 0 ? (totalAcumuladoVendedor / totalCuotaVendedor) * 100 : 0,
+					proyectado: totalProyectadoVendedor,
+					porcentajeCumplimientoProyectado: totalCuotaVendedor > 0 ? (totalProyectadoVendedor / totalCuotaVendedor) * 100 : 0
+				}
+			});
+		}
 	});
 
-	// Construir totales por categoría
-	const totalesCategoria = Object.values(totalPorCategoria).map((cat) => {
-		const porcentajeCumplimiento = cat.cuota > 0 ? (cat.acumulado / cat.cuota) * 100 : 0;
-		const porcentajeCumplimientoProyectado = cat.cuota > 0 ? (cat.proyectado / cat.cuota) * 100 : 0;
+	// Procesar totales por categoría
+	const totalPorCategoriaArray = Object.values(totalPorCategoria).map((cat) => {
+		const cuota = toNumber(cat.cuota);
+		const acumulado = toNumber(cat.acumulado);
+		const proyectado = toNumber(cat.proyectado);
 
 		return {
 			id_categoria: cat.id_categoria,
 			categoria: cat.categoria,
-			cuota: cat.cuota,
-			acumulado: cat.acumulado,
-			porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
-			proyectado: round(cat.proyectado, 2),
-			porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
+			cuota: cuota,
+			acumulado: acumulado,
+			porcentajeCumplimiento: cuota > 0 ? (acumulado / cuota) * 100 : 0,
+			proyectado: proyectado,
+			porcentajeCumplimientoProyectado: cuota > 0 ? (proyectado / cuota) * 100 : 0
 		};
 	});
 
-	// Total general
-	const totalGeneral = Object.values(totalPorCategoria).reduce((acc, cat) => ({
-		cuota: round(acc.cuota + cat.cuota, 2),
-		acumulado: round(acc.acumulado + cat.acumulado, 2),
-		proyectado: round(acc.proyectado + cat.proyectado, 2)
-	}), { cuota: 0, acumulado: 0, proyectado: 0 })
-
-	const porcentajeCumpGeneral = totalGeneral.cuota > 0 ? (totalGeneral.acumulado / totalGeneral.cuota) * 100 : 0;
-	const porcentajeCumpProyGeneral = totalGeneral.cuota > 0 ? (totalGeneral.proyectado / totalGeneral.cuota) * 100 : 0;
+	// Totales generales
+	const totalGeneralCuota = totalPorCategoriaArray.reduce((acc, cat) => round(acc + cat.cuota, 2), 0);
+	const totalGeneralAcumulado = totalPorCategoriaArray.reduce((acc, cat) => round(acc + cat.acumulado, 2), 0);
+	const totalGeneralProyectado = totalPorCategoriaArray.reduce((acc, cat) => round(acc + cat.proyectado, 2), 0);
 
 	return {
 		periodo: {
@@ -429,13 +588,13 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 			dias_habiles: diasHabiles
 		},
 		detalle,
-		totales_por_categoria: totalesCategoria,
-		total_general: {
-			cuota: totalGeneral.cuota,
-			acumulado: totalGeneral.acumulado,
-			porcentajeCumplimiento: round(porcentajeCumpGeneral, 2),
-			proyectado: round(totalGeneral.proyectado, 2),
-			porcentajeCumplimientoProyectado: round(porcentajeCumpProyGeneral, 2)
+		totalPorCategoria: totalPorCategoriaArray,
+		totalGeneral: {
+			cuota: totalGeneralCuota,
+			acumulado: totalGeneralAcumulado,
+			porcentajeCumplimiento: totalGeneralCuota > 0 ? (totalGeneralAcumulado / totalGeneralCuota) * 100 : 0,
+			proyectado: totalGeneralProyectado,
+			porcentajeCumplimientoProyectado: totalGeneralCuota > 0 ? (totalGeneralProyectado / totalGeneralCuota) * 100 : 0
 		}
 	};
 };
