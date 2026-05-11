@@ -688,6 +688,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
             GROUP BY codigo_reporte, nombre_norm,
                      COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
         )
+        -- Cuotas con sus ventas (LEFT JOIN: cuota sin venta = venta 0)
         SELECT
             cq.id_proveedor,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
@@ -699,7 +700,22 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         LEFT JOIN ventas_por_proveedor vp
             ON (cq.codigo_proveedor != '' AND vp.codigo_reporte = cq.codigo_proveedor)
             OR (cq.codigo_proveedor = '' AND vp.nombre_norm = cq.nombre_norm)
-        ORDER BY COALESCE(vp.venta_total, 0) DESC
+        UNION ALL
+        -- Ventas sin cuota asignada (proveedor no está en vendedorCuotaProveedor)
+        SELECT
+            NULL AS id_proveedor,
+            vp.reporte_prov_con_obs AS codigo_linea,
+            vp.reporte_prov_con_obs AS nombre_linea,
+            vp.reporte_prov_con_obs AS reporte_prov_con_obs,
+            0 AS cuota_proveedor,
+            vp.venta_total AS venta
+        FROM ventas_por_proveedor vp
+        WHERE NOT EXISTS (
+            SELECT 1 FROM cuotas_deduplicadas cq
+            WHERE (cq.codigo_proveedor != '' AND vp.codigo_reporte = cq.codigo_proveedor)
+               OR (cq.codigo_proveedor = '' AND vp.nombre_norm = cq.nombre_norm)
+        )
+        ORDER BY venta DESC
     `;
 
     const detallePorLinea = await sequelize.query(query, {
