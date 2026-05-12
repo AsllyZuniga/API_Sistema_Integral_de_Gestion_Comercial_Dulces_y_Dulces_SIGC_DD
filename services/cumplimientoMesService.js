@@ -455,7 +455,7 @@ const getCumplimientoMes = async (filters = {}) => {
         ) cg ON true
         ${cuotaProveedorJoin}
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cg.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        WHERE (COALESCE(cg.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
@@ -571,7 +571,7 @@ const getCumplimientoMesFront = async (filters = {}) => {
             LIMIT 1
         ) cv ON true
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        WHERE (COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
