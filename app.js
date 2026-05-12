@@ -34,6 +34,7 @@ var cumplimientoSemanaRouter = require("./routes/cumplimientoSemanaRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const vendedorCuotaCategoriaRouter = require('./routes/vendedorCuotaCategoriaRouter');
+const adminVentasRouter = require('./routes/adminVentasRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 const exportRoutes = require('./routes/exportRoutes');
 
@@ -105,6 +106,7 @@ app.use('/semana/cumplimiento', cumplimientoSemanaRouter);
 app.use('/import', importRouter);
 app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 app.use('/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
+app.use('/admin', adminVentasRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
 
