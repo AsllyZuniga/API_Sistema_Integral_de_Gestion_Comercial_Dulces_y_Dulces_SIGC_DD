@@ -393,6 +393,8 @@ async function importFromBuffer(fileContent, options = {}) {
 		}
 
 		let vendedor = vendedorByCode.get(codigo);
+
+		try {
 		if (!vendedor) {
 			vendedor = await models.vendedor_model.create({
 				codigo_vendedor: codigo,
@@ -404,6 +406,13 @@ async function importFromBuffer(fileContent, options = {}) {
 		} else if (Number(vendedor.id_usuario) !== Number(idUsuarioFromCodigo)) {
 			await vendedor.update({ id_usuario: idUsuarioFromCodigo });
 			vendedor.id_usuario = idUsuarioFromCodigo;
+		}
+		} catch (vendedorError) {
+			summary.errores.push({
+				codigo_vendedor: codigo,
+				motivo: `Error al crear/actualizar vendedor: ${vendedorError.message}`
+			});
+			continue;
 		}
 
 		summary.rows_processed += 1;
