@@ -174,6 +174,10 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 
 	const idsCategorias = cuotasPorCategoria.map(r => Number(r.id_categoria));
 
+	const categoriasPlaceholders = idsCategorias.map((_, i) => `:cat${i}`).join(',');
+	const categoriasReplacements = {};
+	idsCategorias.forEach((id, i) => { categoriasReplacements[`cat${i}`] = id; });
+
 	const acumuladoPorCategoria = await sequelize.query(`
 		SELECT
 			it.id_categoria,
@@ -183,10 +187,10 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 		JOIN venta v ON v.id_venta = dv.id_venta
 		WHERE v.fecha >= :fechaInicio
 		  AND v.fecha <= :fechaFin
-		  AND it.id_categoria = ANY(:idsCategorias)
+		  AND it.id_categoria IN (${categoriasPlaceholders})
 		GROUP BY it.id_categoria
 	`, {
-		replacements: { ...replacements, idsCategorias },
+		replacements: { ...replacements, ...categoriasReplacements },
 		type: QueryTypes.SELECT
 	});
 
