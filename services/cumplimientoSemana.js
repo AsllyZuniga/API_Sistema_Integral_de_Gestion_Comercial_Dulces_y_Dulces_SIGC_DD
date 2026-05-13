@@ -16,13 +16,19 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
-    if (normalizedFilters.proveedor) {
-        where.push('(TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)');
-        const proveedorVal = String(normalizedFilters.proveedor).trim();
-        replacements.proveedorExacto = proveedorVal;
-        replacements.proveedorLike = proveedorVal + '%';
+    const proveedoresLinSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+
+    if (proveedoresLinSem) {
+        const provCond = buildProveedorCondition(proveedoresLinSem, replacements, 'dv');
+        where.push(`(${provCond})`);
     }
-    if (normalizedFilters.categoria) {
+    if (normalizedFilters.categorias && normalizedFilters.categorias.length > 0) {
+        const placeholders = normalizedFilters.categorias.map((_, i) => `:semLinCat${i}`).join(',');
+        where.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        normalizedFilters.categorias.forEach((cat, i) => { replacements[`semLinCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
         const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
         if (categoriaId) {
             where.push('CAST(it.id_categoria AS TEXT) = :categoria');
@@ -102,15 +108,25 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.proveedor || normalizedFilters.categoria) {
+    const proveedoresCiudSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+
+    const categoriasCiudSem = normalizedFilters.categorias && normalizedFilters.categorias.length > 0
+        ? normalizedFilters.categorias
+        : null;
+
+    if (proveedoresCiudSem || categoriasCiudSem || normalizedFilters.categoria) {
         const sub = [];
-        if (normalizedFilters.proveedor) {
-            sub.push('(TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)');
-            const proveedorVal = String(normalizedFilters.proveedor).trim();
-            replacements.proveedorExacto = proveedorVal;
-            replacements.proveedorLike = proveedorVal + '%';
+        if (proveedoresCiudSem) {
+            const provCond = buildProveedorCondition(proveedoresCiudSem, replacements, 'dv');
+            sub.push(`(${provCond})`);
         }
-        if (normalizedFilters.categoria) {
+        if (categoriasCiudSem) {
+            const placeholders = categoriasCiudSem.map((_, i) => `:semCiudCat${i}`).join(',');
+            sub.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+            categoriasCiudSem.forEach((cat, i) => { replacements[`semCiudCat${i}`] = String(cat); });
+        } else if (normalizedFilters.categoria) {
             const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
             if (categoriaId) {
                 sub.push('CAST(it.id_categoria AS TEXT) = :categoria');
@@ -187,13 +203,19 @@ async function getProductosPorVendedor(codigoVendedor, filters = {}) {
         where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
-    if (normalizedFilters.proveedor) {
-        where.push('(TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)');
-        const proveedorVal = String(normalizedFilters.proveedor).trim();
-        replacements.proveedorExacto = proveedorVal;
-        replacements.proveedorLike = proveedorVal + '%';
+    const proveedoresProdSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+
+    if (proveedoresProdSem) {
+        const provCond = buildProveedorCondition(proveedoresProdSem, replacements, 'dv');
+        where.push(`(${provCond})`);
     }
-    if (normalizedFilters.categoria) {
+    if (normalizedFilters.categorias && normalizedFilters.categorias.length > 0) {
+        const placeholders = normalizedFilters.categorias.map((_, i) => `:semProdCat${i}`).join(',');
+        where.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        normalizedFilters.categorias.forEach((cat, i) => { replacements[`semProdCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
         const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
         if (categoriaId) {
             where.push('CAST(it.id_categoria AS TEXT) = :categoria');
@@ -374,14 +396,24 @@ const getRangoDias = async (filters = {}) => {
     };
 };
 
+const buildProveedorCondition = (proveedores, replacements, detalleAlias = 'dv') => {
+    if (!proveedores || proveedores.length === 0) return null;
+    const clauses = proveedores.map((p, i) => {
+        replacements[`semProvExacto${i}`] = p;
+        replacements[`semProvLike${i}`] = `${p}%`;
+        return `(TRIM(${detalleAlias}.reporte_prov_con_obs) = :semProvExacto${i} OR TRIM(${detalleAlias}.reporte_prov_con_obs) LIKE :semProvLike${i})`;
+    });
+    return clauses.join(' OR ');
+};
+
 const buildVentasFilters = (filters = {}, replacements = {}) => {
     const conditions = [];
-    
+
     if (filters.fechaInicio) {
         conditions.push('v.fecha >= :fechaInicio');
         replacements.fechaInicio = filters.fechaInicio;
     }
-    
+
     if (filters.fechaFin) {
         conditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = filters.fechaFin;
@@ -392,27 +424,24 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
         replacements.ciudad = String(filters.ciudad);
     }
 
-    // Filtro por reporteProvConObs (en lugar de id_proveedor)
-    if (filters.proveedor) {
-        const proveedorValue = String(filters.proveedor || '').trim();
+    const proveedores = filters.proveedores && filters.proveedores.length > 0
+        ? filters.proveedores
+        : (filters.proveedor ? [String(filters.proveedor).trim()] : null);
+
+    if (proveedores) {
+        const provCond = buildProveedorCondition(proveedores, replacements);
         conditions.push(`
             EXISTS (
                 SELECT 1
                 FROM detalle_venta dv
                 WHERE dv.id_venta = v.id_venta
-                  AND (
-                    TRIM(dv.reporte_prov_con_obs) = :proveedorExacto
-                    OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike
-                  )
+                  AND (${provCond})
             )
         `);
-        replacements.proveedorExacto = proveedorValue;
-        replacements.proveedorLike = `${proveedorValue}%`;
     }
 
-    // Filtro por categorías (múltiples)
     if (filters.categorias && filters.categorias.length > 0) {
-        const placeholders = filters.categorias.map((_, index) => `:categoria${index}`).join(',');
+        const placeholders = filters.categorias.map((_, index) => `:semCat${index}`).join(',');
         conditions.push(`
             EXISTS (
                 SELECT 1
@@ -423,10 +452,10 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
             )
         `);
         filters.categorias.forEach((cat, index) => {
-            replacements[`categoria${index}`] = String(cat);
+            replacements[`semCat${index}`] = String(cat);
         });
     }
-    
+
     return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 };
 
@@ -518,19 +547,21 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
 
-    // Condiciones para filtros en detalle_venta
+    const proveedoresFront = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+
     const detalleConditions = [];
-    if (normalizedFilters.proveedor) {
-        const proveedorValue = String(normalizedFilters.proveedor || '').trim();
-        detalleConditions.push(`(
-            TRIM(dv.reporte_prov_con_obs) = :proveedorExacto
-            OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike
-        )`);
-        replacements.proveedorExacto = proveedorValue;
-        replacements.proveedorLike = `${proveedorValue}%`;
+    if (proveedoresFront) {
+        const provCond = buildProveedorCondition(proveedoresFront, replacements);
+        detalleConditions.push(`(${provCond})`);
     }
-    
-    if (normalizedFilters.categoria) {
+
+    if (normalizedFilters.categorias && normalizedFilters.categorias.length > 0) {
+        const placeholders = normalizedFilters.categorias.map((_, i) => `:semFrontCat${i}`).join(',');
+        detalleConditions.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        normalizedFilters.categorias.forEach((cat, i) => { replacements[`semFrontCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
         const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
         if (categoriaId) {
             detalleConditions.push(`CAST(it.id_categoria AS TEXT) = :categoria`);
@@ -538,13 +569,11 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         }
     }
 
-    // Construir JOIN adicional si hay filtros en detalle
     let detalleJoins = `JOIN detalle_venta dv ON dv.id_venta = v.id_venta`;
     if (detalleConditions.length > 0) {
         detalleJoins += `\n            JOIN item it ON it.id_item = dv.id_item`;
     }
 
-    // Combinar TODAS las condiciones correctamente
     const allConditions = [...dateConditions, ...detalleConditions];
     const whereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : '';
 
@@ -558,26 +587,8 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         replacements.cuotaFechaFin = normalizedFilters.fechaFin;
     }
 
-    let cuotaProveedorJoin = '';
-    let cuotaProveedorSelect = 'NULL AS cuota_proveedor';
-    if (normalizedFilters.proveedor) {
-        cuotaProveedorJoin = `LEFT JOIN LATERAL (
-            SELECT SUM(cuota) AS cuota_proveedor
-            FROM (
-                SELECT cp.cuota AS cuota,
-                       ROW_NUMBER() OVER (PARTITION BY EXTRACT(YEAR FROM cp.fecha_inicio), EXTRACT(MONTH FROM cp.fecha_inicio) ORDER BY cp.fecha_fin DESC) AS rn
-                FROM vendedor_cuota_proveedor vcp
-                LEFT JOIN "cuotaProveedor" cp ON cp.id_cuotaProveedor = vcp.id_cuotaProveedor
-                AND cp.fecha_inicio <= :cuotaFechaFin AND cp.fecha_fin >= :cuotaFechaInicio
-                WHERE vcp.id_vendedor = vd.id_vendedor AND vcp.id_proveedor = :cuotaProveedorId
-            ) cp_ranked
-            WHERE cp_ranked.rn = 1
-        ) cp ON true`;
-        cuotaProveedorSelect = 'COALESCE(cp.cuota_proveedor, 0) AS cuota_proveedor';
-        replacements.cuotaProveedorId = String(normalizedFilters.proveedor);
-        replacements.cuotaFechaFin = normalizedFilters.fechaFin;
-        replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
-    }
+    const cuotaProveedorJoin = '';
+    const cuotaProveedorSelect = 'NULL AS cuota_proveedor';
     
     const query = `
         WITH ventas_filtradas AS (
