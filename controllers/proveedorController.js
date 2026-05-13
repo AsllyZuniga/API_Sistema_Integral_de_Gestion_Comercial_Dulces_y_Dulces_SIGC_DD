@@ -64,21 +64,23 @@ module.exports = {
         const proveedorCodigo = req.params.codigo;
 
         return proveedor_model
-            .findOne({
+            .findAll({
                 where: { codigo: proveedorCodigo }
             })
-            .then(proveedor => {
-                if (!proveedor) {
+            .then(proveedores => {
+                if (!proveedores || proveedores.length === 0) {
                     return res.status(404).send({
                         success: false,
                         message: 'Proveedor no encontrado'
                     });
                 }
 
-                // Obtener todos los items del proveedor con sus categorías
+                const proveedor = proveedores[0];
+                const idsProveedores = proveedores.map(p => p.id_proveedor);
+
                 return item_model
                     .findAll({
-                        where: { id_proveedor: proveedor.id_proveedor },
+                        where: { id_proveedor: idsProveedores },
                         include: [{
                             model: categoria_model,
                             as: 'categoria',
