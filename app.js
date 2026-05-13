@@ -1,3 +1,4 @@
+require('dotenv').config();
 var createError = require("http-errors");
 var express = require("express");
 var path = require("path");
@@ -112,6 +113,15 @@ app.use('/admin', adminVentasRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
 
+
+app.get('/health', (req, res) => {
+  const pkg = require('./package.json');
+  res.json({
+    status: 'OK',
+    version_code: pkg.version,
+    version_name: pkg.config?.version_name || process.env.VERSION_NAME || 'unknown'
+  });
+});
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
