@@ -181,6 +181,9 @@ async function importarCuotasConArchivo(req, res) {
     let archivoProcesado = null;
 
     try {
+        req.setTimeout(30 * 60 * 1000);
+        res.setTimeout(30 * 60 * 1000);
+
         if (!req.file) {
             return res.status(400).json({
                 error: 'Archivo requerido',
@@ -190,6 +193,7 @@ async function importarCuotasConArchivo(req, res) {
 
         const extension = path.extname(req.file.originalname || '').toLowerCase();
         if (extension !== '.csv') {
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 error: 'Tipo de archivo inválido',
                 mensaje: 'Para este endpoint solo se permiten archivos .csv'
@@ -214,6 +218,7 @@ async function importarCuotasConArchivo(req, res) {
             fs.unlinkSync(archivoProcesado);
         }
 
+        if (res.headersSent) return;
         return res.status(200).json({
             mensaje: 'Importación de cuotas completada exitosamente',
             archivo: nombreArchivo,
@@ -221,12 +226,15 @@ async function importarCuotasConArchivo(req, res) {
             resumen: resultado
         });
     } catch (error) {
+        console.error('Error en importarCuotasConArchivo:', error);
         if (archivoProcesado && fs.existsSync(archivoProcesado)) {
             fs.unlinkSync(archivoProcesado);
         }
+        if (res.headersSent) return;
         return res.status(500).json({
             error: 'Error en la importación de cuotas',
-            mensaje: error.message
+            mensaje: error.message,
+            detalle: error.stack?.split('\n')[1]?.trim()
         });
     }
 }
