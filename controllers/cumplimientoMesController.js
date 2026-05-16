@@ -170,5 +170,14 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async getCiudadesGlobal(req, res) {
+        try {
+            const data = await cumplimientoMesService.getCumplimientoPorCiudadGlobal(getFilters(req.query));
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };

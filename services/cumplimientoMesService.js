@@ -1079,6 +1079,125 @@ const getLineasGeneral = async (filters = {}) => {
     };
 };
 
+// Cumplimiento por ciudad GLOBAL (todos los vendedores)
+const getCumplimientoPorCiudadGlobal = async (filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
+    const replacements = {};
+    const where = [];
+
+    if (normalizedFilters.fechaInicio) {
+        where.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = normalizedFilters.fechaInicio;
+    }
+
+    if (normalizedFilters.fechaFin) {
+        where.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = normalizedFilters.fechaFin;
+    }
+
+    // Construir WHERE clause de ventas
+    const whereCondition = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+
+    // Query para obtener ventas por ciudad (de todos los vendedores)
+    const queryVentas = `
+        SELECT
+            COALESCE(c.id_ciudad, 0) AS id_ciudad,
+            COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
+        FROM venta v
+        LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+        LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
+        ${whereCondition}
+        GROUP BY COALESCE(c.id_ciudad, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+        ORDER BY venta DESC
+    `;
+
+    const ventasPorCiudad = await sequelize.query(queryVentas, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    // Query para obtener cuotas por ciudad (suma de cuotas de todos los vendedores en esa ciudad)
+    const queryCuotas = `
+        SELECT
+            COALESCE(c.id_ciudad, 0) AS id_ciudad,
+            COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+            SUM(cm.cuota_mes) AS cuota_total
+        FROM "cuotaMes" cm
+        JOIN vendedor vd ON vd.id_usuario = cm.id_usuario
+        LEFT JOIN venta v ON v.id_vendedor = vd.id_vendedor
+        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+        LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
+        WHERE cm.fecha_inicio <= :cuotaFechaFin
+          AND cm.fecha_fin >= :cuotaFechaInicio
+        GROUP BY COALESCE(c.id_ciudad, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+    `;
+
+    replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
+    replacements.cuotaFechaFin = normalizedFilters.fechaFin;
+
+    const cuotasPorCiudad = await sequelize.query(queryCuotas, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    // Crear mapa de cuotas por ciudad_id para acceso rápido
+    const cuotasMap = {};
+    cuotasPorCiudad.forEach(row => {
+        cuotasMap[row.id_ciudad] = toNumber(row.cuota_total);
+    });
+
+    // Calcular cuota total general
+    const cuotaTotal = cuotasPorCiudad.reduce((sum, row) => sum + toNumber(row.cuota_total), 0);
+
+    const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
+
+    // Enriquecer datos con cumplimiento
+    const detallePorCiudad = ventasPorCiudad.map((row) => {
+        const ventaAcum = toNumber(row.venta);
+        const cuotaCiudad = cuotasMap[row.id_ciudad] || 0;
+        const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
+        const porcCumpCiudad = cuotaCiudad > 0 ? (ventaAcum / cuotaCiudad) * 100 : 0;
+        const porcCumpGlobal = cuotaTotal > 0 ? (ventaAcum / cuotaTotal) * 100 : 0;
+        const porcCumProyGlobal = cuotaTotal > 0 ? (proyeccionVenta / cuotaTotal) * 100 : 0;
+
+        return {
+            id_ciudad: row.id_ciudad,
+            ciudad: row.ciudad,
+            ventaAcum: round(ventaAcum, 2),
+            cuotaCiudad: round(cuotaCiudad, 2),
+            porcCumpCiudad: round(porcCumpCiudad, 4),
+            porcCumpGlobal: round(porcCumpGlobal, 4),
+            proyeccionVenta: round(proyeccionVenta, 2),
+            porcCumProyGlobal: round(porcCumProyGlobal, 4)
+        };
+    });
+
+    // Agregar fila de totales
+    const totalVenta = ventasPorCiudad.reduce((sum, row) => sum + toNumber(row.venta), 0);
+    const proyeccionTotal = diasCorridos > 0 ? (totalVenta / diasCorridos) * diasHabiles : 0;
+    const porcCumpTotal = cuotaTotal > 0 ? (totalVenta / cuotaTotal) * 100 : 0;
+    const porcCumProyTotal = cuotaTotal > 0 ? (proyeccionTotal / cuotaTotal) * 100 : 0;
+
+    return {
+        periodo: {
+            fechaInicio: normalizedFilters.fechaInicioFormatted,
+            fechaFin: normalizedFilters.fechaFinFormatted
+        },
+        resumen: {
+            cuotaTotal: round(cuotaTotal, 2),
+            ventaTotal: round(totalVenta, 2),
+            porcCumplimiento: round(porcCumpTotal, 4),
+            proyeccionTotal: round(proyeccionTotal, 2),
+            porcCumplimientoProyectado: round(porcCumProyTotal, 4),
+            diasCorridos,
+            diasHabiles
+        },
+        detallePorCiudad
+    };
+};
+
 module.exports = {
     getCumplimientoMes,
     getCumplimientoMesFront,
@@ -1087,5 +1206,6 @@ module.exports = {
     getLineaEspecificaPorVendedor,
     getCiudadesPorVendedor,
     getProductosPorVendedor,
-    getLineasGeneral
+    getLineasGeneral,
+    getCumplimientoPorCiudadGlobal
 };
