@@ -1,5 +1,5 @@
 const { QueryTypes, Op } = require('sequelize');
-const { sequelize, rango_dias_model } = require('../models');
+const { sequelize, rango_dias_model, cuotaCategoria_model } = require('../models');
 const { getResumenPeriodoLaboral } = require('../utils/calendarioLaboralColombia');
 
 const toNumber = (value) => Number(value || 0);
@@ -617,10 +617,41 @@ const compareCuotasCSVvsBD = async (datosCSV, fechaInicio = '2026-03-01') => {
 	}
 };
 
+const deleteById = async (id) => {
+	const row = await cuotaCategoria_model.findByPk(id);
+	if (!row) throw new Error('Cuota de categoría no encontrada');
+	return await row.destroy();
+};
+
+const deleteByDateRange = async (fechaInicio, fechaFin) => {
+	if (!fechaInicio || !fechaFin) {
+		throw new Error('Se requieren fechaInicio y fechaFin (YYYY-MM-DD)');
+	}
+	
+	const { Op } = require('sequelize');
+	
+	// Convertir a ISO format para comparación correcta con BD
+	const inicioISO = `${fechaInicio}T00:00:00.000Z`;
+	const finISO = `${fechaFin}T23:59:59.999Z`;
+	
+	const deletedCount = await cuotaCategoria_model.destroy({
+		where: {
+			[Op.and]: [
+				{ fecha_inicio: { [Op.gte]: inicioISO } },
+				{ fecha_fin: { [Op.lte]: finISO } }
+			]
+		}
+	});
+	
+	return { deletedCount, message: `${deletedCount} cuotas de categoría eliminadas` };
+};
+
 module.exports = {
 	getCuotaCategoriaGeneral,
 	getCuotaCategoriaPorVendedor,
 	getCuotaCategoriaTodosVendedores,
 	validateCuotasMarzo,
-	compareCuotasCSVvsBD
+	compareCuotasCSVvsBD,
+	deleteById,
+	deleteByDateRange
 };

@@ -9,7 +9,7 @@ const sequelize = new Sequelize(
     port: Number(process.env.DB_PORT) || 5432,
     dialect: process.env.DB_DIALECT || 'postgres',
     dialectOptions: {
-      ssl: process.env.DB_SSL === 'false' ? false : {
+      ssl: {
         require: true,
         rejectUnauthorized: false
       }
