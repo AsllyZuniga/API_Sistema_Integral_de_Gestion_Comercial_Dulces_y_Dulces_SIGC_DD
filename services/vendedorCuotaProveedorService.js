@@ -61,11 +61,68 @@ async function updateById(id, data) {
     return await row.update(data);
 }
 
+// Eliminar por id
+async function deleteById(id) {
+    const row = await models.vendedorCuotaProveedor_model.findByPk(id);
+    if (!row) throw new Error('Asignación de cuota de proveedor no encontrada');
+    return await row.destroy();
+}
+
+// Eliminar por rango de fechas
+async function deleteByDateRange(fechaInicio, fechaFin) {
+    if (!fechaInicio || !fechaFin) {
+        throw new Error('Se requieren fechaInicio y fechaFin (YYYY-MM-DD)');
+    }
+    
+    const { Op } = require('sequelize');
+    
+    // Convertir a ISO format para comparación correcta con BD
+    const inicioISO = `${fechaInicio}T00:00:00.000Z`;
+    const finISO = `${fechaFin}T23:59:59.999Z`;
+    
+    // Primero encontrar los IDs que cumplen con el rango de fechas
+    const recordsToDelete = await models.vendedorCuotaProveedor_model.findAll({
+        where: {},
+        include: [
+            {
+                model: models.cuotaProveedor_model,
+                as: 'cuotaProveedor',
+                where: {
+                    [Op.and]: [
+                        { fecha_inicio: { [Op.gte]: inicioISO } },
+                        { fecha_fin: { [Op.lte]: finISO } }
+                    ]
+                },
+                required: true
+            }
+        ],
+        raw: true,
+        attributes: ['id_vendedor_cuota_proveedor']
+    });
+    
+    if (recordsToDelete.length === 0) {
+        return { deletedCount: 0, message: '0 asignaciones de cuota de proveedor eliminadas' };
+    }
+    
+    const idsToDelete = recordsToDelete.map(r => r.id_vendedor_cuota_proveedor);
+    
+    // Luego eliminar por los IDs encontrados
+    const deletedCount = await models.vendedorCuotaProveedor_model.destroy({
+        where: {
+            id_vendedor_cuota_proveedor: { [Op.in]: idsToDelete }
+        }
+    });
+    
+    return { deletedCount, message: `${deletedCount} asignaciones de cuota de proveedor eliminadas` };
+}
+
 module.exports = {
     getAll,
     getById,
     getByVendedor,
     getByProveedor,
     create,
-    updateById
+    updateById,
+    deleteById,
+    deleteByDateRange
 };

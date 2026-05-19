@@ -60,6 +60,25 @@ async function updateById(req, res) {
     }
 }
 
+async function deleteById(req, res) {
+    try {
+        const result = await service.deleteById(req.params.id);
+        res.json({ success: true, message: 'Asignación de cuota de proveedor eliminada correctamente' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+async function deleteByDateRange(req, res) {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const result = await service.deleteByDateRange(fechaInicio, fechaFin);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+}
+
 function uploadCSV(req, res) {
     uploadMiddleware(req, res, async (err) => {
         if (err) return res.status(400).json({ error: err.message });
@@ -77,4 +96,4 @@ function uploadCSV(req, res) {
     });
 }
 
-module.exports = { getAll, getById, getByVendedor, getByProveedor, create, updateById, uploadCSV };
+module.exports = { getAll, getById, getByVendedor, getByProveedor, create, updateById, deleteById, deleteByDateRange, uploadCSV };
