@@ -120,7 +120,7 @@ const getBySupervisor = async (id_supervisor) => {
 /**
  * Obtiene vendedores con clientes e items de forma optimizada
  * Soporta carga diferida (lazy loading) por nivel
- * @param {object} options - { vendedoresPage, vendedoresLimit, clientesPage, clientesLimit, itemsPage, itemsLimit }
+ * @param {object} options - { vendedoresPage, vendedoresLimit, clientesPage, clientesLimit, itemsPage, itemsLimit, id_supervisor }
  */
 const getVendedoresConClientesItems = async (options = {}) => {
     const {
@@ -129,7 +129,8 @@ const getVendedoresConClientesItems = async (options = {}) => {
         clientesPage = 1,
         clientesLimit = 5,
         itemsPage = 1,
-        itemsLimit = 10
+        itemsLimit = 10,
+        id_supervisor = null
     } = options;
 
     const {
@@ -144,6 +145,7 @@ const getVendedoresConClientesItems = async (options = {}) => {
 
     // 1. Obtener vendedores paginados (sin las relaciones complejas aún)
     const { count: totalVendedores, rows: vendedores } = await vendedor_model.findAndCountAll({
+        where: id_supervisor ? { id_supervisor } : undefined,
         offset,
         limit: vendedoresLimit,
         attributes: ['id_vendedor', 'codigo_vendedor', 'nombre']

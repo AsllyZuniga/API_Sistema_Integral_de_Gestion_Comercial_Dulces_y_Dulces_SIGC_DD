@@ -1,5 +1,7 @@
 const vendedorService = require('../services/vendedorService');
 
+const SUPERVISOR_ROL_ID = 2;
+
 module.exports = {
     async getBySupervisor(req, res) {
         try {
@@ -298,6 +300,62 @@ module.exports = {
             });
         } catch (error) {
             console.error('Error al obtener vendedores con clientes e items:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al obtener vendedores con clientes e items',
+                error: error.message
+            });
+        }
+    },
+    /**
+     * Obtiene vendedores asignados a un supervisor con clientes e items (lazy loading)
+     * GET /vendedor/supervisor/con-items-comprados?vendedoresPage=1&vendedoresLimit=10&clientesPage=1&clientesLimit=5&itemsPage=1&itemsLimit=10
+     */
+    async getConClientesItemsSupervisor(req, res) {
+        try {
+            const idRol = req.auth?.rol ?? req.auth?.idRol ?? req.auth?.rol?.idRol;
+
+            if (String(idRol) !== String(SUPERVISOR_ROL_ID)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acceso restringido a supervisores'
+                });
+            }
+
+            const idSupervisor = req.auth?.idUsuario;
+
+            if (!idSupervisor) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se pudo identificar el supervisor en el token',
+                    error: 'SUPERVISOR_NO_IDENTIFICADO'
+                });
+            }
+
+            const vendedoresPage = Math.max(parseInt(req.query.vendedoresPage) || 1, 1);
+            const vendedoresLimit = Math.max(Math.min(parseInt(req.query.vendedoresLimit) || 10, 100), 1);
+            const clientesPage = Math.max(parseInt(req.query.clientesPage) || 1, 1);
+            const clientesLimit = Math.max(Math.min(parseInt(req.query.clientesLimit) || 5, 50), 1);
+            const itemsPage = Math.max(parseInt(req.query.itemsPage) || 1, 1);
+            const itemsLimit = Math.max(Math.min(parseInt(req.query.itemsLimit) || 10, 100), 1);
+
+            const resultado = await vendedorService.getVendedoresConClientesItems({
+                vendedoresPage,
+                vendedoresLimit,
+                clientesPage,
+                clientesLimit,
+                itemsPage,
+                itemsLimit,
+                id_supervisor: idSupervisor
+            });
+
+            return res.status(200).json({
+                success: true,
+                data: resultado,
+                message: 'Datos de vendedores, clientes e items obtenidos exitosamente'
+            });
+        } catch (error) {
+            console.error('Error al obtener vendedores con clientes e items por supervisor:', error);
             return res.status(500).json({
                 success: false,
                 message: 'Error al obtener vendedores con clientes e items',
