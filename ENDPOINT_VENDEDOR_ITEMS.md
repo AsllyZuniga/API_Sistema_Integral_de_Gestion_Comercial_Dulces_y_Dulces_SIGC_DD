@@ -8,7 +8,10 @@ Este endpoint trae una lista de **vendedores** con todos sus **clientes asociado
 
 ```
 GET /vendedor/con-items-comprados
+GET /vendedor/supervisor/con-items-comprados
 ```
+
+> La ruta `/vendedor/supervisor/con-items-comprados` requiere **Authorization: Bearer <token>** y solo devuelve los vendedores asignados al supervisor autenticado.
 
 ## ⚙️ Parámetros de Query (Todos Opcionales)
 
@@ -26,6 +29,12 @@ GET /vendedor/con-items-comprados
 ### Ejemplo 1: Uso Básico (valores por defecto)
 ```bash
 curl -X GET "http://localhost:3000/vendedor/con-items-comprados"
+```
+
+### Ejemplo 1B: Supervisor (solo vendedores asignados)
+```bash
+curl -X GET "http://localhost:3000/vendedor/supervisor/con-items-comprados?vendedoresLimit=10&clientesLimit=5&itemsLimit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### Ejemplo 2: Con Paginación Personalizada
