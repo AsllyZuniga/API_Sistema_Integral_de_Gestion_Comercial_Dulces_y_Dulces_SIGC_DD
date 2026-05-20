@@ -1,6 +1,10 @@
 var express = require('express');
 var router = express.Router();
 const vendedorController = require('../controllers').vendedorController;
+
+// Rutas específicas deben ir ANTES de rutas parametrizadas
+router.get('/con-items-comprados', vendedorController.getConClientesItems);
+
 router.get('/', vendedorController.list);
 router.get('/supervisor/:id_supervisor', vendedorController.getBySupervisor);
 router.get('/:id', vendedorController.getById);

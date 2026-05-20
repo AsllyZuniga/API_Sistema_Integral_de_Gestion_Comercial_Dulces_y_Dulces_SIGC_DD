@@ -266,5 +266,43 @@ module.exports = {
                 error: error.message
             });
         }
+    },
+
+    /**
+     * Obtiene vendedores con clientes e items de forma optimizada con lazy loading
+     * GET /vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=10&clientesPage=1&clientesLimit=5&itemsPage=1&itemsLimit=10
+     */
+    async getConClientesItems(req, res) {
+        try {
+            // Parsear parámetros de paginación
+            const vendedoresPage = Math.max(parseInt(req.query.vendedoresPage) || 1, 1);
+            const vendedoresLimit = Math.max(Math.min(parseInt(req.query.vendedoresLimit) || 10, 100), 1);
+            const clientesPage = Math.max(parseInt(req.query.clientesPage) || 1, 1);
+            const clientesLimit = Math.max(Math.min(parseInt(req.query.clientesLimit) || 5, 50), 1);
+            const itemsPage = Math.max(parseInt(req.query.itemsPage) || 1, 1);
+            const itemsLimit = Math.max(Math.min(parseInt(req.query.itemsLimit) || 10, 100), 1);
+
+            const resultado = await vendedorService.getVendedoresConClientesItems({
+                vendedoresPage,
+                vendedoresLimit,
+                clientesPage,
+                clientesLimit,
+                itemsPage,
+                itemsLimit
+            });
+
+            return res.status(200).json({
+                success: true,
+                data: resultado,
+                message: 'Datos de vendedores, clientes e items obtenidos exitosamente'
+            });
+        } catch (error) {
+            console.error('Error al obtener vendedores con clientes e items:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al obtener vendedores con clientes e items',
+                error: error.message
+            });
+        }
     }
 };
