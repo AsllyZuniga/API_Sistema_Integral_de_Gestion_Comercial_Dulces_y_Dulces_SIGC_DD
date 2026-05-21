@@ -2,9 +2,10 @@ var express = require('express');
 var router = express.Router();
 const vendedorController = require('../controllers').vendedorController;
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
+const { requireAdmin } = require('../middlewares/requireAdmin');
 
 // Rutas específicas deben ir ANTES de rutas parametrizadas
-router.get('/con-items-comprados', vendedorController.getConClientesItems);
+router.get('/con-items-comprados', requireAdmin, vendedorController.getConClientesItems);
 router.get('/supervisor/con-items-comprados', requireAuthJWT, vendedorController.getConClientesItemsSupervisor);
 
 router.get('/', vendedorController.list);

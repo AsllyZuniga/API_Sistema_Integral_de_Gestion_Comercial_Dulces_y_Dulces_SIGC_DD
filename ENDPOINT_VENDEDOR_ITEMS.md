@@ -11,6 +11,7 @@ GET /vendedor/con-items-comprados
 GET /vendedor/supervisor/con-items-comprados
 ```
 
+> La ruta `/vendedor/con-items-comprados` requiere **Authorization: Bearer <token>** de **admin**.
 > La ruta `/vendedor/supervisor/con-items-comprados` requiere **Authorization: Bearer <token>** y solo devuelve los vendedores asignados al supervisor autenticado.
 
 ## ⚙️ Parámetros de Query (Todos Opcionales)
@@ -23,12 +24,19 @@ GET /vendedor/supervisor/con-items-comprados
 | `clientesLimit` | `integer` | `5` | `50` | Items por página de clientes |
 | `itemsPage` | `integer` | `1` | - | Página de items por cliente |
 | `itemsLimit` | `integer` | `10` | `100` | Items por página de items |
+| `fechaInicio` | `string (YYYY-MM-DD)` | - | - | Fecha inicial para filtrar ventas |
+| `fechaFin` | `string (YYYY-MM-DD)` | - | - | Fecha final para filtrar ventas |
 
 ## 📥 Ejemplos de Llamadas
 
 ### Ejemplo 1: Uso Básico (valores por defecto)
 ```bash
 curl -X GET "http://localhost:3000/vendedor/con-items-comprados"
+```
+
+### Ejemplo 1B: Con rango de fechas
+```bash
+curl -X GET "http://localhost:3000/vendedor/con-items-comprados?fechaInicio=2026-05-01&fechaFin=2026-05-31"
 ```
 
 ### Ejemplo 1B: Supervisor (solo vendedores asignados)

@@ -981,20 +981,20 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
 const getLineasGeneral = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
-    const where = [];
+    const ventasWhere = [];
 
     if (normalizedFilters.fechaInicio) {
-        where.push('v.fecha >= :fechaInicio');
+        ventasWhere.push('v.fecha >= :fechaInicio');
         replacements.fechaInicio = normalizedFilters.fechaInicio;
     }
 
     if (normalizedFilters.fechaFin) {
-        where.push('v.fecha <= :fechaFin');
+        ventasWhere.push('v.fecha <= :fechaFin');
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
     if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        ventasWhere.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
 
@@ -1003,46 +1003,67 @@ const getLineasGeneral = async (filters = {}) => {
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
 
     if (proveedoresGeneral) {
-        const provCond = buildProveedorCondition(proveedoresGeneral, replacements);
-        where.push(`(${provCond})`);
+        const provCond = buildProveedorCondition(proveedoresGeneral, replacements, 'dv');
+        ventasWhere.push(`(${provCond})`);
     }
 
     replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
+    const ventasWhereClause = ventasWhere.length > 0 ? `WHERE ${ventasWhere.join(' AND ')}` : '';
+
     const query = `
-        WITH ventas_por_linea AS (
+        WITH cuotas_agregadas AS (
+            -- Obtener TODOS los proveedores con cuota (PIVOT: agregar todas las cuotas)
             SELECT
-                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS codigo_linea,
-                COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS nombre_linea,
+                vcp.id_proveedor,
+                COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_proveedor,
+                COALESCE(TRIM(pr.codigo), '') AS codigo_proveedor,
+                UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'),
+                    '\\s+', ' ', 'g'
+                ))) AS nombre_norm,
+                SUM(cp.cuota) AS suma_cuota
+            FROM "vendedorCuotaProveedor" vcp
+            JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+            LEFT JOIN proveedor pr ON pr.id_proveedor = vcp.id_proveedor
+            WHERE vcp.estado = true
+              AND cp.fecha_inicio <= :cuotaFechaFin
+              AND cp.fecha_fin >= :cuotaFechaInicio
+            GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), COALESCE(TRIM(pr.codigo), '')
+        ),
+        ventas_por_proveedor AS (
+            -- Agregar ventas por proveedor (normalizado)
+            SELECT
+                UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '[^a-zA-Z0-9 ]', ' ', 'g'),
+                    '\\s+', ' ', 'g'
+                ))) AS nombre_norm,
                 COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS reporte_prov_con_obs,
-                MAX(pr.id_proveedor) AS id_proveedor,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
             FROM venta v
-            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-            WHERE ${where.length > 0 ? where.join(' AND ') : '1=1'}
-            GROUP BY COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
+            ${ventasWhereClause}
+            GROUP BY UPPER(TRIM(REGEXP_REPLACE(
+                REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '[^a-zA-Z0-9 ]', ' ', 'g'),
+                '\\s+', ' ', 'g'
+            ))), COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA'))
         )
+        -- CUOTAS (izquierda) + VENTAS (derecha) = Todos los proveedores con cuota
         SELECT
-            vpl.id_proveedor,
-            vpl.codigo_linea,
-            vpl.nombre_linea,
-            vpl.reporte_prov_con_obs,
-            (SELECT COALESCE(SUM(cp.cuota), 0)
-             FROM "vendedorCuotaProveedor" vcp
-             JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
-             WHERE vcp.id_proveedor = vpl.id_proveedor
-               AND vcp.estado = true
-               AND cp.fecha_inicio <= :cuotaFechaFin
-               AND cp.fecha_fin >= :cuotaFechaInicio
-            ) AS cuota_proveedor_total,
-            vpl.venta_total AS venta
-        FROM ventas_por_linea vpl
-        ORDER BY vpl.venta_total DESC
+            ca.id_proveedor,
+            ca.nombre_proveedor AS codigo_linea,
+            ca.nombre_proveedor AS nombre_linea,
+            COALESCE(vp.reporte_prov_con_obs, ca.nombre_proveedor) AS reporte_prov_con_obs,
+            ca.suma_cuota AS cuota_proveedor_total,
+            COALESCE(vp.venta_total, 0) AS venta
+        FROM cuotas_agregadas ca
+        LEFT JOIN ventas_por_proveedor vp
+            ON ca.nombre_norm = vp.nombre_norm
+        ORDER BY COALESCE(vp.venta_total, 0) DESC, ca.suma_cuota DESC
     `;
 
     const detallePorLinea = await sequelize.query(query, {

@@ -37,5 +37,6 @@
       "Bash(curl -s 'http://localhost:3000/cliente' -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3Nzg5MzgzMzAsImV4cCI6MTc3ODk4MTUzMH0.0l8Q-B5JFtHMb_4lHz6NAws8jHNIPXgBt5BCE09_NRI\")",
       "Bash(curl -s 'http://localhost:3000/ciudad')"
     ]
-  }
+  },
+  "prefersReducedMotion": false
 }
