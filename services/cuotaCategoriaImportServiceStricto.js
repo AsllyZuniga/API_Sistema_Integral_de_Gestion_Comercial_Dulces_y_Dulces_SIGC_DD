@@ -371,6 +371,7 @@ class CuotaCategoriaImportServiceStricto {
             let actualizadas = 0;
             let reemplazadas = 0;
             const erroresEjecucion = [];
+            let transactionCommitted = false;
 
             try {
                 // PASO 1: Eliminar cuotas existentes para este período
@@ -434,7 +435,9 @@ class CuotaCategoriaImportServiceStricto {
                     }
                 }
 
+                // Commit de la transacción
                 await transaccion.commit();
+                transactionCommitted = true;
 
                 console.log(`\n✅ IMPORTACIÓN COMPLETADA:`);
                 console.log(`   • ${procesadas} combinaciones vendedor-categoría procesadas`);
@@ -444,7 +447,7 @@ class CuotaCategoriaImportServiceStricto {
                     console.log(`   • ℹ️  ${duplicadosEnBD.length} categorías duplicadas en BD (se usaron IDs menores)`);
                 }
 
-                return {
+                const respuesta = {
                     exitosa: true,
                     procesadas,
                     actualizadas,
@@ -455,8 +458,17 @@ class CuotaCategoriaImportServiceStricto {
                     mensaje: `Se importaron ${actualizadas} cuotas exitosamente. Las cuotas anteriores del período fueron reemplazadas.${duplicadosEnBD.length > 0 ? ` Nota: Se detectaron ${duplicadosEnBD.length} categorías duplicadas en BD (se usaron IDs menores). Ejecuta 'node fix_duplicates.js' para limpiar.` : ''}`
                 };
 
+                return respuesta;
+
             } catch (error) {
-                await transaccion.rollback();
+                // Solo hacer rollback si la transacción no fue commitida
+                if (!transactionCommitted && transaccion.finished === false) {
+                    try {
+                        await transaccion.rollback();
+                    } catch (rollbackErr) {
+                        console.error('Error en rollback:', rollbackErr.message);
+                    }
+                }
                 throw error;
             }
 
