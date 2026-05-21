@@ -1,6 +1,35 @@
 const vendedorService = require('../services/vendedorService');
 
 const SUPERVISOR_ROL_ID = 2;
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const parseFechaParam = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const normalizado = String(value).trim();
+    if (!DATE_REGEX.test(normalizado)) return null;
+    return normalizado;
+};
+
+const resolveFechaRange = (query) => {
+    const fechaInicio = parseFechaParam(query.fechaInicio);
+    const fechaFin = parseFechaParam(query.fechaFin);
+
+    if ((query.fechaInicio && !fechaInicio) || (query.fechaFin && !fechaFin)) {
+        return {
+            error: 'Formato inválido de fecha. Use YYYY-MM-DD.',
+            code: 'FECHA_INVALIDA'
+        };
+    }
+
+    if (fechaInicio && fechaFin && fechaInicio > fechaFin) {
+        return {
+            error: 'El rango de fechas es inválido (fechaInicio mayor que fechaFin).',
+            code: 'RANGO_FECHAS_INVALIDO'
+        };
+    }
+
+    return { fechaInicio, fechaFin };
+};
 
 module.exports = {
     async getBySupervisor(req, res) {
@@ -276,6 +305,15 @@ module.exports = {
      */
     async getConClientesItems(req, res) {
         try {
+            const { fechaInicio, fechaFin, error, code } = resolveFechaRange(req.query);
+            if (error) {
+                return res.status(400).json({
+                    success: false,
+                    message: error,
+                    error: code
+                });
+            }
+
             // Parsear parámetros de paginación
             const vendedoresPage = Math.max(parseInt(req.query.vendedoresPage) || 1, 1);
             const vendedoresLimit = Math.max(Math.min(parseInt(req.query.vendedoresLimit) || 10, 100), 1);
@@ -290,7 +328,9 @@ module.exports = {
                 clientesPage,
                 clientesLimit,
                 itemsPage,
-                itemsLimit
+                itemsLimit,
+                fechaInicio,
+                fechaFin
             });
 
             return res.status(200).json({
@@ -332,6 +372,15 @@ module.exports = {
                 });
             }
 
+            const { fechaInicio, fechaFin, error, code } = resolveFechaRange(req.query);
+            if (error) {
+                return res.status(400).json({
+                    success: false,
+                    message: error,
+                    error: code
+                });
+            }
+
             const vendedoresPage = Math.max(parseInt(req.query.vendedoresPage) || 1, 1);
             const vendedoresLimit = Math.max(Math.min(parseInt(req.query.vendedoresLimit) || 10, 100), 1);
             const clientesPage = Math.max(parseInt(req.query.clientesPage) || 1, 1);
@@ -346,7 +395,9 @@ module.exports = {
                 clientesLimit,
                 itemsPage,
                 itemsLimit,
-                id_supervisor: idSupervisor
+                id_supervisor: idSupervisor,
+                fechaInicio,
+                fechaFin
             });
 
             return res.status(200).json({
