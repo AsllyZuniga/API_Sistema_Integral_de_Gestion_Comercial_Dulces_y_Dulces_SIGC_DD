@@ -324,6 +324,7 @@ class CuotaCategoriaImportServiceStricto {
 
             // Extraer fechas del reporte de validación
             const { fechaInicio, fechaFin } = validacion;
+            const duplicadosEnBD = Number(validacion.duplicadosEnBD ?? 0);
 
             // 2. SI VALIDACIÓN OK, PROCEDER CON IMPORTACIÓN
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
@@ -443,8 +444,8 @@ class CuotaCategoriaImportServiceStricto {
                 console.log(`   • ${procesadas} combinaciones vendedor-categoría procesadas`);
                 console.log(`   • ${actualizadas} registros insertados`);
                 console.log(`   • Período: ${fechaInicio} a ${fechaFin}`);
-                if (duplicadosEnBD.length > 0) {
-                    console.log(`   • ℹ️  ${duplicadosEnBD.length} categorías duplicadas en BD (se usaron IDs menores)`);
+                if (duplicadosEnBD > 0) {
+                    console.log(`   • ℹ️  ${duplicadosEnBD} categorías duplicadas en BD (se usaron IDs menores)`);
                 }
 
                 const respuesta = {
@@ -452,10 +453,10 @@ class CuotaCategoriaImportServiceStricto {
                     procesadas,
                     actualizadas,
                     reemplazadas,
-                    duplicadosEnBD: duplicadosEnBD.length,
+                    duplicadosEnBD,
                     errores: erroresEjecucion,
                     validacion,
-                    mensaje: `Se importaron ${actualizadas} cuotas exitosamente. Las cuotas anteriores del período fueron reemplazadas.${duplicadosEnBD.length > 0 ? ` Nota: Se detectaron ${duplicadosEnBD.length} categorías duplicadas en BD (se usaron IDs menores). Ejecuta 'node fix_duplicates.js' para limpiar.` : ''}`
+                    mensaje: `Se importaron ${actualizadas} cuotas exitosamente. Las cuotas anteriores del período fueron reemplazadas.${duplicadosEnBD > 0 ? ` Nota: Se detectaron ${duplicadosEnBD} categorías duplicadas en BD (se usaron IDs menores). Ejecuta 'node fix_duplicates.js' para limpiar.` : ''}`
                 };
 
                 return respuesta;
