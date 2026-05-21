@@ -152,17 +152,24 @@ class CuotaCategoriaImportServiceStricto {
                         nombre: nombreTrim,
                         ids: [existente.id_categoria, c.id_categoria]
                     });
+                    // ✅ USAR EL ID MENOR (más reciente o correcto)
+                    if (c.id_categoria < existente.id_categoria) {
+                        mapCategoriasPorNombre.set(nombreTrim, c);
+                    }
                 } else {
                     mapCategoriasPorNombre.set(nombreTrim, c);
                 }
             });
 
             if (duplicadosEnBD.length > 0) {
-                console.error('\n❌ ERROR: Base de datos contiene categorías DUPLICADAS:\n');
-                duplicadosEnBD.forEach(dup => {
-                    console.error(`   "${dup.nombre}" → IDs: ${dup.ids.join(', ')}`);
+                console.warn(`\n⚠️  ADVERTENCIA: Base de datos contiene ${duplicadosEnBD.length} categorías DUPLICADAS (se usarán los IDs menores):`);
+                duplicadosEnBD.slice(0, 10).forEach(dup => {
+                    console.warn(`   "${dup.nombre}" → IDs: ${dup.ids.join(', ')} (usando ID: ${Math.min(...dup.ids)})`);
                 });
-                throw new Error(`Base de datos corrupta: ${duplicadosEnBD.length} categorías duplicadas encontradas. Ejecuta 'fix_duplicates.js' primero.`);
+                if (duplicadosEnBD.length > 10) {
+                    console.warn(`   ... y ${duplicadosEnBD.length - 10} más`);
+                }
+                console.warn(`\n💡 Tip: Ejecuta 'node fix_duplicates.js' para limpiar duplicados después\n`);
             }
 
             const mapVendedoresPorCodigo = new Map(
@@ -181,6 +188,7 @@ class CuotaCategoriaImportServiceStricto {
                 categoriasValidas: new Set(),
                 categoriasNoEncontradas: [],
                 detallesPorVendedor: [],
+                duplicadosEnBD: duplicadosEnBD.length,
                 esValido: true
             };
 
@@ -261,6 +269,9 @@ class CuotaCategoriaImportServiceStricto {
                 console.log(`   • ${reporte.vendedoresValidos.length} vendedores válidos`);
                 console.log(`   • ${reporte.categoriasValidas.length} categorías válidas`);
                 console.log(`   • Período: ${fechaInicio} a ${fechaFin}`);
+                if (duplicadosEnBD.length > 0) {
+                    console.log(`   • ⚠️  ${duplicadosEnBD.length} categorías duplicadas detectadas (se usarán IDs menores)`);
+                }
             } else {
                 console.log(`\n❌ VALIDACIÓN FALLIDA - Se encontraron errores:`);
                 if (reporte.vendedoresNoEncontrados.length > 0) {
@@ -358,9 +369,27 @@ class CuotaCategoriaImportServiceStricto {
             const transaccion = await sequelize.transaction();
             let procesadas = 0;
             let actualizadas = 0;
+            let reemplazadas = 0;
             const erroresEjecucion = [];
 
             try {
+                // PASO 1: Eliminar cuotas existentes para este período
+                console.log(`\n🗑️  Eliminando cuotas anteriores del período ${fechaInicio} a ${fechaFin}...`);
+                await sequelize.query(`
+                    DELETE FROM vendedor_cuota_categoria
+                    WHERE fecha_inicio = :fechaInicio
+                      AND fecha_fin = :fechaFin
+                `, {
+                    replacements: {
+                        fechaInicio: fechaInicio,
+                        fechaFin: fechaFin
+                    },
+                    transaction: transaccion
+                });
+                console.log(`✅ Cuotas anteriores eliminadas`);
+
+                // PASO 2: Insertar nuevas cuotas
+                console.log(`\n📥 Insertando nuevas cuotas...`);
                 for (const row of registrosNormalizados) {
                     const codigoVendedor = row[codigoVendedorCol];
                     const vendedor = mapVendedoresPorCodigo.get(codigoVendedor);
@@ -375,13 +404,11 @@ class CuotaCategoriaImportServiceStricto {
                         if (cuota <= 0) continue;
 
                         try {
-                            // Guardar cuota ESPECÍFICA por vendedor + categoría + período
+                            // Insertar directamente (sin ON CONFLICT)
                             await sequelize.query(`
                                 INSERT INTO vendedor_cuota_categoria 
                                 (id_vendedor, id_categoria, cuota, fecha_inicio, fecha_fin)
                                 VALUES (:idVendedor, :idCategoria, :cuota, :fechaInicio, :fechaFin)
-                                ON CONFLICT (id_vendedor, id_categoria, fecha_inicio, fecha_fin)
-                                DO UPDATE SET cuota = EXCLUDED.cuota
                             `, {
                                 replacements: {
                                     idVendedor: vendedor.id_vendedor,
@@ -400,6 +427,7 @@ class CuotaCategoriaImportServiceStricto {
                             erroresEjecucion.push({
                                 vendedor: codigoVendedor,
                                 categoria: nombreCategoria,
+                                cuota: cuota,
                                 error: err.message
                             });
                         }
@@ -410,15 +438,21 @@ class CuotaCategoriaImportServiceStricto {
 
                 console.log(`\n✅ IMPORTACIÓN COMPLETADA:`);
                 console.log(`   • ${procesadas} combinaciones vendedor-categoría procesadas`);
-                console.log(`   • ${actualizadas} registros actualizados`);
+                console.log(`   • ${actualizadas} registros insertados`);
+                console.log(`   • Período: ${fechaInicio} a ${fechaFin}`);
+                if (duplicadosEnBD.length > 0) {
+                    console.log(`   • ℹ️  ${duplicadosEnBD.length} categorías duplicadas en BD (se usaron IDs menores)`);
+                }
 
                 return {
                     exitosa: true,
                     procesadas,
                     actualizadas,
+                    reemplazadas,
+                    duplicadosEnBD: duplicadosEnBD.length,
                     errores: erroresEjecucion,
                     validacion,
-                    mensaje: `Se importaron ${actualizadas} cuotas exitosamente`
+                    mensaje: `Se importaron ${actualizadas} cuotas exitosamente. Las cuotas anteriores del período fueron reemplazadas.${duplicadosEnBD.length > 0 ? ` Nota: Se detectaron ${duplicadosEnBD.length} categorías duplicadas en BD (se usaron IDs menores). Ejecuta 'node fix_duplicates.js' para limpiar.` : ''}`
                 };
 
             } catch (error) {
