@@ -51,4 +51,29 @@ router.get('/vendedor/:codigoVendedor', cuotaCategoriaController.byVendedor);
 router.get('/validar/marzo', cuotaCategoriaValidadorController.validateCuotasMarzo);
 router.post('/validar/comparar-csv', cuotaCategoriaValidadorController.compareCuotasConCSV);
 
+/**
+ * DELETE /cuota-categoria/:id
+ * Elimina una cuota de categoría por ID
+ * 
+ * Parámetros:
+ * - id: ID de la cuota de categoría a eliminar
+ * 
+ * Ejemplo:
+ * DELETE /cuota-categoria/123
+ */
+router.delete('/:id', cuotaCategoriaController.deleteById);
+
+/**
+ * DELETE /cuota-categoria/rango?fechaInicio=2026-05-01&fechaFin=2026-05-31
+ * Elimina todas las cuotas de categoría en el rango de fechas especificado
+ * 
+ * Parámetros query:
+ * - fechaInicio: Fecha de inicio (YYYY-MM-DD)
+ * - fechaFin: Fecha de fin (YYYY-MM-DD)
+ * 
+ * Ejemplo:
+ * DELETE /cuota-categoria/rango?fechaInicio=2026-05-01&fechaFin=2026-05-31
+ */
+router.delete('/rango/por-fechas', cuotaCategoriaController.deleteByDateRange);
+
 module.exports = router;

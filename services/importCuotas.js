@@ -192,6 +192,32 @@ function resolveYear(weekColumns, optionsYear) {
 	return currentYear;
 }
 
+/**
+ * Detecta el mes más frecuente en las columnas de semana
+ * Usa el mes que aparece más veces, para manejar CSVs con múltiples meses
+ */
+function detectMostFrequentMonth(weekColumns) {
+	if (!weekColumns.length) return null;
+
+	const monthCounts = new Map();
+	for (const weekCol of weekColumns) {
+		const count = monthCounts.get(weekCol.monthIndex) || 0;
+		monthCounts.set(weekCol.monthIndex, count + 1);
+	}
+
+	let mostFrequent = null;
+	let maxCount = 0;
+
+	for (const [monthIndex, count] of monthCounts) {
+		if (count > maxCount) {
+			maxCount = count;
+			mostFrequent = monthIndex;
+		}
+	}
+
+	return mostFrequent;
+}
+
 async function upsertCuotaDia(payload, transaction) {
 	const existing = await models.cuotaDia_model.findOne({
 		where: {
@@ -284,7 +310,29 @@ async function importFromBuffer(fileContent, options = {}) {
 
 	const year = resolveYear(weekColumns, options.year);
 
-	const mainMonth = weekColumns[0].monthIndex;
+	// Permitir override del mes si se proporciona en options
+	// Si no se proporciona, detectar el mes más frecuente en las columnas
+	let mainMonth = options.mes !== undefined ? null : detectMostFrequentMonth(weekColumns);
+	
+	if (options.mes !== undefined) {
+		if (typeof options.mes === 'string') {
+			mainMonth = resolveMonthIndex(options.mes);
+			if (mainMonth === null) {
+				throw new Error(`Mes inválido: "${options.mes}". Usa nombres en español (ej: "abril", "marzo")`);
+			}
+		} else if (typeof options.mes === 'number') {
+			mainMonth = options.mes;
+			if (!Number.isInteger(mainMonth) || mainMonth < 0 || mainMonth > 11) {
+				throw new Error(`Mes debe ser un número entre 0 (enero) y 11 (diciembre)`);
+			}
+		}
+	}
+
+	// Fallback si no hay mes detectado
+	if (mainMonth === null) {
+		mainMonth = weekColumns[0].monthIndex;
+	}
+
 	const monthStart = formatDate(year, mainMonth, 1);
 	const monthEnd = formatDate(year, mainMonth, getLastDayOfMonth(year, mainMonth));
 
@@ -345,6 +393,8 @@ async function importFromBuffer(fileContent, options = {}) {
 		}
 
 		let vendedor = vendedorByCode.get(codigo);
+
+		try {
 		if (!vendedor) {
 			vendedor = await models.vendedor_model.create({
 				codigo_vendedor: codigo,
@@ -356,6 +406,13 @@ async function importFromBuffer(fileContent, options = {}) {
 		} else if (Number(vendedor.id_usuario) !== Number(idUsuarioFromCodigo)) {
 			await vendedor.update({ id_usuario: idUsuarioFromCodigo });
 			vendedor.id_usuario = idUsuarioFromCodigo;
+		}
+		} catch (vendedorError) {
+			summary.errores.push({
+				codigo_vendedor: codigo,
+				motivo: `Error al crear/actualizar vendedor: ${vendedorError.message}`
+			});
+			continue;
 		}
 
 		summary.rows_processed += 1;

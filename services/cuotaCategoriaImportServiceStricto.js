@@ -24,16 +24,32 @@ class CuotaCategoriaImportServiceStricto {
      * Extrae automáticamente fechas del CSV (columnas fecha_inicio y fecha_fin)
      * Retorna reporte detallado de validación
      */
+    // Detectar el delimitador del CSV
+    detectarDelimitador(contenido) {
+        const primeraLinea = contenido.split('\n')[0];
+        const delimitadores = [';', ',', '\t', '|'];
+        
+        for (const delim of delimitadores) {
+            if (primeraLinea.includes(delim)) {
+                return delim;
+            }
+        }
+        return ';'; // Por defecto
+    }
+
     async validarDatos(rutaArchivo) {
         try {
             console.log(`\n🔍 VALIDANDO DATOS: ${path.basename(rutaArchivo)}`);
 
             // 1. Leer y parsear archivo
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const delimitador = this.detectarDelimitador(contenido);
+            console.log(`📋 Delimitador detectado: "${delimitador}"`);
+
             const registros = parse(contenido, {
                 columns: true,
                 skip_empty_lines: true,
-                delimiter: ';' // Usar ; como delimitador
+                delimiter: delimitador
             });
 
             if (!registros || registros.length === 0) {
@@ -52,26 +68,45 @@ class CuotaCategoriaImportServiceStricto {
 
             // 3. Extraer cabeceras
             const cabeceras = Object.keys(registrosNormalizados[0]).map(col => col.trim());
+            console.log(`📊 Columnas encontradas: ${cabeceras.join(', ')}`);
             
-            // Validar que tenga columnas de fecha
-            const tieneColumnaFechaInicio = cabeceras.some(col => col.toLowerCase() === 'fecha_inicio');
-            const tieneColumnaFechaFin = cabeceras.some(col => col.toLowerCase() === 'fecha_fin');
+            // Buscar columnas de fecha (flexibles con mayúsculas/minúsculas)
+            const colFechaInicio = cabeceras.find(col => 
+                col.toLowerCase().replace(/[_\s]/g, '') === 'fechainicio'
+            );
+            const colFechaFin = cabeceras.find(col => 
+                col.toLowerCase().replace(/[_\s]/g, '') === 'fechafin'
+            );
 
-            if (!tieneColumnaFechaInicio || !tieneColumnaFechaFin) {
-                throw new Error('El CSV DEBE tener columnas "fecha_inicio" y "fecha_fin". Estas columnas no se encontraron.');
+            if (!colFechaInicio || !colFechaFin) {
+                throw new Error(
+                    `No se encontraron columnas de fecha.\n` +
+                    `Esperadas: "fecha_inicio" y "fecha_fin"\n` +
+                    `Columnas encontradas: ${cabeceras.join(', ')}\n` +
+                    `💡 Tip: Las fechas pueden ir al principio o al final del CSV`
+                );
             }
 
             // 4. Extraer fechas del CSV (del primer registro)
-            const fechaInicio = registrosNormalizados[0]['fecha_inicio'];
-            const fechaFin = registrosNormalizados[0]['fecha_fin'];
+            const fechaInicio = registrosNormalizados[0][colFechaInicio];
+            const fechaFin = registrosNormalizados[0][colFechaFin];
 
-            // Validar formato de fechas
-            const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
-            if (!regexFecha.test(fechaInicio) || !regexFecha.test(fechaFin)) {
-                throw new Error(`Formato de fecha inválido. Esperado YYYY-MM-DD. Recibido: inicio="${fechaInicio}", fin="${fechaFin}"`);
+            // Validar que las fechas existan
+            if (!fechaInicio || !fechaFin) {
+                throw new Error(`Las fechas en el CSV están vacías. Valor inicio: "${fechaInicio}", fin: "${fechaFin}"`);
             }
 
-            console.log(`📅 Fechas extraídas automáticamente del CSV: ${fechaInicio} a ${fechaFin}`);
+            // Validar formato de fechas (flexibles: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD)
+            const regexFecha = /^\d{1,4}[-\/]\d{1,2}[-\/]\d{1,4}$/;
+            if (!regexFecha.test(fechaInicio) || !regexFecha.test(fechaFin)) {
+                throw new Error(
+                    `Formato de fecha inválido.\n` +
+                    `Soportados: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY\n` +
+                    `Recibido: inicio="${fechaInicio}", fin="${fechaFin}"`
+                );
+            }
+
+            console.log(`📅 Fechas encontradas en columnas "${colFechaInicio}" y "${colFechaFin}": ${fechaInicio} a ${fechaFin}`);
             
             // 5. Identificar columnas de código/nombre de vendedor
             const codigoVendedorCol = cabeceras.find(col => col.toLowerCase().includes('codigo'));
@@ -117,17 +152,24 @@ class CuotaCategoriaImportServiceStricto {
                         nombre: nombreTrim,
                         ids: [existente.id_categoria, c.id_categoria]
                     });
+                    // ✅ USAR EL ID MENOR (más reciente o correcto)
+                    if (c.id_categoria < existente.id_categoria) {
+                        mapCategoriasPorNombre.set(nombreTrim, c);
+                    }
                 } else {
                     mapCategoriasPorNombre.set(nombreTrim, c);
                 }
             });
 
             if (duplicadosEnBD.length > 0) {
-                console.error('\n❌ ERROR: Base de datos contiene categorías DUPLICADAS:\n');
-                duplicadosEnBD.forEach(dup => {
-                    console.error(`   "${dup.nombre}" → IDs: ${dup.ids.join(', ')}`);
+                console.warn(`\n⚠️  ADVERTENCIA: Base de datos contiene ${duplicadosEnBD.length} categorías DUPLICADAS (se usarán los IDs menores):`);
+                duplicadosEnBD.slice(0, 10).forEach(dup => {
+                    console.warn(`   "${dup.nombre}" → IDs: ${dup.ids.join(', ')} (usando ID: ${Math.min(...dup.ids)})`);
                 });
-                throw new Error(`Base de datos corrupta: ${duplicadosEnBD.length} categorías duplicadas encontradas. Ejecuta 'fix_duplicates.js' primero.`);
+                if (duplicadosEnBD.length > 10) {
+                    console.warn(`   ... y ${duplicadosEnBD.length - 10} más`);
+                }
+                console.warn(`\n💡 Tip: Ejecuta 'node fix_duplicates.js' para limpiar duplicados después\n`);
             }
 
             const mapVendedoresPorCodigo = new Map(
@@ -146,6 +188,7 @@ class CuotaCategoriaImportServiceStricto {
                 categoriasValidas: new Set(),
                 categoriasNoEncontradas: [],
                 detallesPorVendedor: [],
+                duplicadosEnBD: duplicadosEnBD.length,
                 esValido: true
             };
 
@@ -226,6 +269,9 @@ class CuotaCategoriaImportServiceStricto {
                 console.log(`   • ${reporte.vendedoresValidos.length} vendedores válidos`);
                 console.log(`   • ${reporte.categoriasValidas.length} categorías válidas`);
                 console.log(`   • Período: ${fechaInicio} a ${fechaFin}`);
+                if (duplicadosEnBD.length > 0) {
+                    console.log(`   • ⚠️  ${duplicadosEnBD.length} categorías duplicadas detectadas (se usarán IDs menores)`);
+                }
             } else {
                 console.log(`\n❌ VALIDACIÓN FALLIDA - Se encontraron errores:`);
                 if (reporte.vendedoresNoEncontrados.length > 0) {
@@ -278,13 +324,15 @@ class CuotaCategoriaImportServiceStricto {
 
             // Extraer fechas del reporte de validación
             const { fechaInicio, fechaFin } = validacion;
+            const duplicadosEnBD = Number(validacion.duplicadosEnBD ?? 0);
 
             // 2. SI VALIDACIÓN OK, PROCEDER CON IMPORTACIÓN
             const contenido = fs.readFileSync(rutaArchivo, 'utf-8');
+            const delimitador = this.detectarDelimitador(contenido);
             const registros = parse(contenido, {
                 columns: true,
                 skip_empty_lines: true,
-                delimiter: ';'
+                delimiter: delimitador
             });
 
             const registrosNormalizados = registros.map(row => {
@@ -322,9 +370,28 @@ class CuotaCategoriaImportServiceStricto {
             const transaccion = await sequelize.transaction();
             let procesadas = 0;
             let actualizadas = 0;
+            let reemplazadas = 0;
             const erroresEjecucion = [];
+            let transactionCommitted = false;
 
             try {
+                // PASO 1: Eliminar cuotas existentes para este período
+                console.log(`\n🗑️  Eliminando cuotas anteriores del período ${fechaInicio} a ${fechaFin}...`);
+                await sequelize.query(`
+                    DELETE FROM vendedor_cuota_categoria
+                    WHERE fecha_inicio = :fechaInicio
+                      AND fecha_fin = :fechaFin
+                `, {
+                    replacements: {
+                        fechaInicio: fechaInicio,
+                        fechaFin: fechaFin
+                    },
+                    transaction: transaccion
+                });
+                console.log(`✅ Cuotas anteriores eliminadas`);
+
+                // PASO 2: Insertar nuevas cuotas
+                console.log(`\n📥 Insertando nuevas cuotas...`);
                 for (const row of registrosNormalizados) {
                     const codigoVendedor = row[codigoVendedorCol];
                     const vendedor = mapVendedoresPorCodigo.get(codigoVendedor);
@@ -339,13 +406,11 @@ class CuotaCategoriaImportServiceStricto {
                         if (cuota <= 0) continue;
 
                         try {
-                            // Guardar cuota ESPECÍFICA por vendedor + categoría + período
+                            // Insertar directamente (sin ON CONFLICT)
                             await sequelize.query(`
                                 INSERT INTO vendedor_cuota_categoria 
                                 (id_vendedor, id_categoria, cuota, fecha_inicio, fecha_fin)
                                 VALUES (:idVendedor, :idCategoria, :cuota, :fechaInicio, :fechaFin)
-                                ON CONFLICT (id_vendedor, id_categoria, fecha_inicio, fecha_fin)
-                                DO UPDATE SET cuota = EXCLUDED.cuota
                             `, {
                                 replacements: {
                                     idVendedor: vendedor.id_vendedor,
@@ -364,29 +429,47 @@ class CuotaCategoriaImportServiceStricto {
                             erroresEjecucion.push({
                                 vendedor: codigoVendedor,
                                 categoria: nombreCategoria,
+                                cuota: cuota,
                                 error: err.message
                             });
                         }
                     }
                 }
 
+                // Commit de la transacción
                 await transaccion.commit();
+                transactionCommitted = true;
 
                 console.log(`\n✅ IMPORTACIÓN COMPLETADA:`);
                 console.log(`   • ${procesadas} combinaciones vendedor-categoría procesadas`);
-                console.log(`   • ${actualizadas} registros actualizados`);
+                console.log(`   • ${actualizadas} registros insertados`);
+                console.log(`   • Período: ${fechaInicio} a ${fechaFin}`);
+                if (duplicadosEnBD > 0) {
+                    console.log(`   • ℹ️  ${duplicadosEnBD} categorías duplicadas en BD (se usaron IDs menores)`);
+                }
 
-                return {
+                const respuesta = {
                     exitosa: true,
                     procesadas,
                     actualizadas,
+                    reemplazadas,
+                    duplicadosEnBD,
                     errores: erroresEjecucion,
                     validacion,
-                    mensaje: `Se importaron ${actualizadas} cuotas exitosamente`
+                    mensaje: `Se importaron ${actualizadas} cuotas exitosamente. Las cuotas anteriores del período fueron reemplazadas.${duplicadosEnBD > 0 ? ` Nota: Se detectaron ${duplicadosEnBD} categorías duplicadas en BD (se usaron IDs menores). Ejecuta 'node fix_duplicates.js' para limpiar.` : ''}`
                 };
 
+                return respuesta;
+
             } catch (error) {
-                await transaccion.rollback();
+                // Solo hacer rollback si la transacción no fue commitida
+                if (!transactionCommitted && transaccion.finished === false) {
+                    try {
+                        await transaccion.rollback();
+                    } catch (rollbackErr) {
+                        console.error('Error en rollback:', rollbackErr.message);
+                    }
+                }
                 throw error;
             }
 

@@ -2,84 +2,84 @@ const { sequelize } = require('./models');
 
 (async () => {
   try {
-    console.log('\n🔧 REPARANDO TODAS LAS REFERENCIAS A CATEGORÍAS DUPLICADAS...\n');
+    console.log('\n🔧 REPARANDO TODOS LOS DUPLICADOS DE CATEGORÍAS...\n');
     
-    // Mapeo de IDs viejos → IDs nuevos correctos
-    const mapeoIdsAntiguosANuevos = {
-      699: 747,  // 0300 - 1000-CAFES
-      698: 781,  // 0700 - 1000-CULINARIOS
-      647: 744,  // 1201 - 1000-GALLETAS
-      649: 779,  // 1500 - 1000-LACTEOS CULINARIOS
-      702: 779,  // 1500 - 1000-LACTEOS CULINARIOS
-      721: 782,  // 1750 - 1000-MODIFICADOR DE LECHE
-      622: 768,  // 2950 - 2500-CHOCOLATES
-      729: 768   // 2950 - 2500-CHOCOLATES
-    };
+    // 1. Encontrar todos los duplicados
+    const duplicados = await sequelize.query(`
+      SELECT 
+        TRIM(nombre) as nombre,
+        COUNT(*) as cantidad,
+        ARRAY_AGG(id_categoria ORDER BY id_categoria) as ids
+      FROM categoria
+      GROUP BY TRIM(nombre)
+      HAVING COUNT(*) > 1
+      ORDER BY cantidad DESC
+    `, { type: sequelize.QueryTypes.SELECT });
+
+    if (duplicados.length === 0) {
+      console.log('✅ No hay duplicados para reparar\n');
+      process.exit(0);
+    }
+
+    console.log(`📊 PROCESANDO ${duplicados.length} GRUPOS DUPLICADOS\n`);
     
-    // Actualizar todas las tablas que referencian categoria
-    const tablas = ['subcategoria', 'item', 'detalle_venta'];
+    let totalActualizaciones = 0;
+    let totalEliminados = 0;
     
-    for (const tabla of tablas) {
-      console.log(`📋 Actualizando referencias en ${tabla}...\n`);
+    // 2. Para cada grupo, mantener el ID más bajo como canonical
+    for (const dup of duplicados) {
+      const [idCanonical, ...idsDuplicados] = dup.ids;
+      console.log(`\n"${dup.nombre}"`);
+      console.log(`   Canonical ID: ${idCanonical}`);
+      console.log(`   Eliminar IDs: ${idsDuplicados.join(', ')}`);
       
-      for (const [idAntiguo, idNuevo] of Object.entries(mapeoIdsAntiguosANuevos)) {
-        try {
-          // Obtener nombre de la categoría
-          const catAntigua = await sequelize.query(`
-            SELECT nombre FROM categoria WHERE id_categoria = ${idAntiguo}
-          `, { type: sequelize.QueryTypes.SELECT });
-          
-          if (catAntigua.length === 0) continue;
-          
-          const nombre = catAntigua[0].nombre;
-          
-          // Contar referencias
-          const refs = await sequelize.query(`
-            SELECT COUNT(*) as total FROM ${tabla} 
-            WHERE id_categoria = ${idAntiguo}
-          `, { type: sequelize.QueryTypes.SELECT });
-          
-          const cantidad = refs[0].total;
-          
-          if (cantidad > 0) {
-            // Actualizar referencias
-            await sequelize.query(`
-              UPDATE ${tabla} 
-              SET id_categoria = ${idNuevo}
-              WHERE id_categoria = ${idAntiguo}
-            `);
+      // Redirigir todas las referencias
+      const tablas = [
+        'subcategoria',
+        '"cuotaCategoria"',
+        'item',
+        'cuotaProveedor'
+      ];
+      
+      for (const tabla of tablas) {
+        for (const idDuplicado of idsDuplicados) {
+          try {
+            const result = await sequelize.query(
+              `UPDATE ${tabla} SET id_categoria = :canonical WHERE id_categoria = :duplicado`,
+              {
+                replacements: { canonical: idCanonical, duplicado: idDuplicado },
+                type: sequelize.QueryTypes.UPDATE
+              }
+            );
             
-            console.log(`  ✅ ID ${idAntiguo} → ${idNuevo} (${nombre}): ${cantidad} registros actualizados`);
+            const actualizado = result[1] && result[1].rowCount ? result[1].rowCount : 0;
+            if (actualizado > 0) {
+              console.log(`   ✅ ${tabla}: ${actualizado} referencias actualizadas`);
+              totalActualizaciones += actualizado;
+            }
+          } catch(e) {
+            // Tabla no existe o sin columna, ignorar silenciosamente
           }
-        } catch(e) {
-          console.log(`  ⚠️  ID ${idAntiguo}: ${e.message.split('\n')[0]}`);
         }
       }
+      
+      // Eliminar IDs duplicados
+      for (const idDuplicado of idsDuplicados) {
+        await sequelize.query(
+          `DELETE FROM categoria WHERE id_categoria = :id`,
+          {
+            replacements: { id: idDuplicado },
+            type: sequelize.QueryTypes.DELETE
+          }
+        );
+        totalEliminados++;
+      }
     }
-    
-    console.log('\n✅ TODAS LAS REFERENCIAS ACTUALIZADAS\n');
-    
-    // Ahora eliminar los IDs viejos
-    const idsAEliminar = [699, 698, 647, 649, 702, 721, 622, 729];
-    
-    console.log('🗑️  Eliminando categorías duplicadas viejas...\n');
-    
-    const resultado = await sequelize.query(`
-      DELETE FROM categoria
-      WHERE id_categoria IN (${idsAEliminar.join(',')})
-    `);
-    
-    console.log(`✅ SE ELIMINARON ${resultado[1].affectedRows || idsAEliminar.length} CATEGORÍAS DUPLICADAS VIEJAS`);
-    
-    // Verificar
-    const despues = await sequelize.query(`
-      SELECT COUNT(*) as total FROM categoria
-      WHERE id_categoria IN (${idsAEliminar.join(',')})
-    `, { type: sequelize.QueryTypes.SELECT });
-    
-    if (despues[0].total === 0) {
-      console.log('✅ Verificación OK: Todos los duplicados fueron eliminados correctamente\n');
-    }
+
+    console.log(`\n✅ REPARACIÓN COMPLETADA:`);
+    console.log(`   • ${totalActualizaciones} referencias actualizadas en otras tablas`);
+    console.log(`   • ${totalEliminados} registros duplicados eliminados`);
+    console.log(`   • ${duplicados.length} grupos consolidados\n`);
     
     process.exit(0);
   } catch(e) {

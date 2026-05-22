@@ -136,23 +136,31 @@ function getProveedorAliasCandidates(value) {
 
     const aliases = new Set([raw]);
 
+    // Mapeo explícito de alias
     const aliasMap = {
         ALICORP: ['ALICORP ALIMENTOS'],
-        UPFIELD: ['TONING'],
         'SAN JORGE': ['SAN JORGE VELAS Y VELONES'],
         'LA CORUNA': ['LA CORU A'],
         JOHNSON: ['JOHNSON Y JOHNSON'],
-        OSA: ['LAB OSA']
+        OSA: ['LAB OSA'],
+        COFARMA: ['LAB COFARMA'],
+        KELLOGGS: ['KELLOGG']
     };
 
     if (aliasMap[raw]) {
-        aliasMap[raw].forEach(a => aliases.add(a));
+        aliasMap[raw].forEach(a => aliases.add(normalizeProveedorName(a)));
     }
 
     // Variantes comunes de encabezados de cuotas vs. catálogo proveedor
     if (raw === 'REY') aliases.add('EL REY');
-    if (raw === 'COFARMA') aliases.add('LAB COFARMA');
-    if (raw === 'KELLOGGS') aliases.add('KELLOGG');
+    if (raw === 'COFARMA') {
+        aliases.add('LAB COFARMA');
+        aliases.add('LAB. COFARMA');
+    }
+    if (raw === 'KELLOGGS') {
+        aliases.add('KELLOGG');
+        aliases.add(raw.slice(0, -1)); // KELLOGG sin la S
+    }
     if (raw === 'HALEON') aliases.add('HALEON');
 
     // Intentar singular/plural simple (KELLOGGS <-> KELLOGG)
@@ -513,6 +521,14 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                     const cuotaCreada = cuotasCreadasChunk[idx];
                     if (!cuotaCreada) continue;
 
+                    // Validar que todos los campos requeridos estén presentes
+                    if (!q._meta.id_vendedor || !q._meta.id_proveedor || !cuotaCreada.id_cuotaProveedor) {
+                        resumen.errores.push({
+                            motivo: `Datos incompletos para asignación: vendedor=${q._meta.id_vendedor}, proveedor=${q._meta.id_proveedor}, cuota=${cuotaCreada.id_cuotaProveedor}`
+                        });
+                        continue;
+                    }
+
                     const key = `${q._meta.id_vendedor}|${q._meta.id_proveedor}`;
                     const asignacion = {
                         id_vendedor: q._meta.id_vendedor,
@@ -539,17 +555,45 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
     resumen.cuotas_creadas = asignacionesBulk.length;
 
     // 4. Bulk upsert de asignaciones por lotes
+    // Primero intenta bulk insert, si falla intenta uno por uno
     if (asignacionesBulk.length > 0) {
         const chunks = chunkArray(asignacionesBulk, ASIGNACIONES_BULK_CHUNK_SIZE);
+        let successCount = 0;
+        let skipCount = 0;
+
         for (const chunk of chunks) {
             try {
-                await models.vendedorCuotaProveedor_model.bulkCreate(
-                    chunk,
-                    { updateOnDuplicate: ['id_cuotaProveedor', 'estado'] }
-                );
-            } catch (err) {
-                resumen.errores.push({ motivo: `Error en bulkCreate de asignaciones: ${err.message}` });
+                // Intenta insert masivo primero
+                await models.vendedorCuotaProveedor_model.bulkCreate(chunk, {
+                    ignoreDuplicates: true,
+                    validate: false
+                });
+                successCount += chunk.length;
+            } catch (bulkErr) {
+                // Si falla bulk, intenta uno por uno
+                console.warn(`⚠️  BulkCreate falló, intentando inserción individual: ${bulkErr.message}`);
+                for (const asignacion of chunk) {
+                    try {
+                        await models.vendedorCuotaProveedor_model.create(asignacion, {
+                            ignoreDuplicates: true,
+                            validate: false
+                        }).catch(() => {
+                            // Ignorar duplicados silenciosamente
+                            skipCount++;
+                        });
+                        successCount++;
+                    } catch (rowErr) {
+                        skipCount++;
+                        // Log pero continúa
+                        console.warn(`⚠️  No se pudo crear asignación: vendedor=${asignacion.id_vendedor}, proveedor=${asignacion.id_proveedor}`);
+                    }
+                }
             }
+        }
+
+        resumen.cuotas_creadas = successCount;
+        if (skipCount > 0) {
+            resumen.cuotas_omitidas += skipCount;
         }
     }
 

@@ -38,7 +38,7 @@ module.exports = (sequelize) => {
             allowNull: true
         }
     }, {
-        tableName: 'vendedorCuotaCategoria',
+        tableName: 'vendedor_cuota_categoria',
         schema: 'public',
         timestamps: false,
         indexes: [

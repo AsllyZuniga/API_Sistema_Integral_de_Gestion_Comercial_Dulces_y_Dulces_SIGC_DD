@@ -1,14 +1,44 @@
 
 const cumplimientoMesService = require('../services/cumplimientoMesService');
 
-const getFilters = (query) => ({
-    fechaInicio: query.fechaInicio,
-    fechaFin: query.fechaFin,
-    vendedor: query.vendedor,
-    proveedor: query.proveedor,
-    categoria: query.categoria,
-    ciudad: query.ciudad
-});
+const extractCategoryId = (categoryStr) => {
+    // Extrae el ID numérico de strings como "0001 - 1000-ACEITES VEGETALES"
+    const parts = String(categoryStr).split('-');
+    if (parts.length >= 2) {
+        // Toma el segundo elemento y extrae solo números
+        const idMatch = parts[1].match(/\d+/);
+        if (idMatch) return idMatch[0];
+    }
+    // Si no hay guion, intenta extraer números directamente
+    const match = String(categoryStr).match(/\d+/);
+    return match ? match[0] : categoryStr;
+};
+
+const getFilters = (query) => {
+    const filters = {
+        fechaInicio: query.fechaInicio,
+        fechaFin: query.fechaFin,
+        vendedor: query.vendedor,
+        ciudad: query.ciudad
+    };
+
+    if (query.proveedor) {
+        const list = Array.isArray(query.proveedor)
+            ? query.proveedor
+            : String(query.proveedor).split(',');
+        filters.proveedores = list.map(p => p.trim()).filter(Boolean);
+        filters.proveedor = filters.proveedores[0];
+    }
+
+    if (query.categoria) {
+        const list = Array.isArray(query.categoria)
+            ? query.categoria
+            : String(query.categoria).split(',');
+        filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
+    }
+
+    return filters;
+};
 
 module.exports = {
     async getCiudadEspecificaPorVendedor(req, res) {
@@ -127,6 +157,24 @@ module.exports = {
     async getProductosPorVendedor(req, res) {
         try {
             const data = await cumplimientoMesService.getProductosPorVendedor(req.params.codigoVendedor, getFilters(req.query));
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async getLineas(req, res) {
+        try {
+            const data = await cumplimientoMesService.getLineasGeneral(getFilters(req.query));
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    async getCiudadesGlobal(req, res) {
+        try {
+            const data = await cumplimientoMesService.getCumplimientoPorCiudadGlobal(getFilters(req.query));
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);

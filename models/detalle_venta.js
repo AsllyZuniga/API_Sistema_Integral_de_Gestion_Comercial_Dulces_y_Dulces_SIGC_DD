@@ -91,6 +91,15 @@ module.exports = sequelize => {
       primaryKey: false,
       field: "costo_promedio_total",
       autoIncrement: false
+    },
+    reporte_prov_con_obs: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Reporte proveedor con observación (del TSV REPORTE PROV CON OBS)',
+      primaryKey: false,
+      field: "reporte_prov_con_obs",
+      autoIncrement: false
     }
   };
   const options = {
