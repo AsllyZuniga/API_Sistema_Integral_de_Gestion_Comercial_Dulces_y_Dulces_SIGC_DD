@@ -659,7 +659,8 @@ class ImportadorVentasOptimizado {
             precio_unitario: this.normalizarValor(fila['Costo promedio total']),
             costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
             descuento: this.normalizarValor(fila['Valor descuentos']),
-            subtotal: this.normalizarValor(fila['Valor subtotal'])
+            subtotal: this.normalizarValor(fila['Valor subtotal']),
+            reporte_prov_con_obs: fila['REPORTE PROV CON OBS']?.trim() || null
         };
 
         // Si es NC (Nota de Crédito), asegurarse de que los valores negativos se mantengan
@@ -850,14 +851,33 @@ class ImportadorVentasOptimizado {
         }
     }
 
-    async importar(rutaArchivo) {
+    async importar(rutaArchivo, reportarProgreso, loggerCallback) {
         this.estadisticas.tiempoInicio = Date.now();
         let hashArchivo = null;
+        
+        // Logger local que usa loggerCallback si existe, sino console.log
+        const log = (mensaje) => {
+            console.log(mensaje);
+            if (loggerCallback) loggerCallback(mensaje);
+        };
+        
         try {
-            console.log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${path.basename(rutaArchivo)}`);
+            const nombreArchivo = path.basename(rutaArchivo);
+            log(`\n🚀 INICIANDO IMPORT OPTIMIZADO: ${nombreArchivo}`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
+            
             const extension = this.validarArchivoPlano(rutaArchivo);
+            log(`✅ Validación de extensión: ${extension}`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
+            
             hashArchivo = await this.validarArchivoNoDuplicado(rutaArchivo);
+            log(`✅ Archivo válido (hash verificado)`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
+            
+            log(`📦 Precargando datos maestros...`);
             await this.precargaDatos();
+            log(`✅ Datos maestros precargados`);
+            if (reportarProgreso) reportarProgreso(0, 0, 0);
             if (extension === '.csv') {
                 // Leer el archivo como buffer para detectar y convertir encoding
                 let contenido = fs.readFileSync(rutaArchivo);
@@ -890,6 +910,9 @@ class ImportadorVentasOptimizado {
                 }
             } else {
                 // TXT o TSV: igual que antes
+                log(`📖 Leyendo archivo ${extension}...`);
+                if (reportarProgreso) reportarProgreso(0, 0, 0);
+                
                 const fileStream = fs.createReadStream(rutaArchivo, { encoding: 'utf8' });
                 let delimitador = '\t';
                 if (extension === '.tsv') delimitador = '\t';
@@ -900,24 +923,38 @@ class ImportadorVentasOptimizado {
                 let encabezados = [];
                 let batch = [];
                 let esEncabezado = true;
+                let lineasLeidas = 0;
+                
                 for await (const linea of rl) {
                     if (!linea || linea.trim() === '') continue;
+                    
                     if (esEncabezado) {
                         encabezados = linea.split(delimitador).map(h => h.trim());
                         this.validarEncabezados(encabezados);
                         esEncabezado = false;
-                        console.log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
+                        log(`✅ Encabezados detectados: ${encabezados.length} columnas\n`);
+                        if (reportarProgreso) reportarProgreso(0, 0, 0);
                         continue;
                     }
+                    
+                    lineasLeidas++;
                     batch.push(linea);
+                    
                     if (batch.length >= this.BATCH_INSERT_SIZE) {
+                        log(`📊 Procesando batch de ${batch.length} líneas (total leído: ${lineasLeidas})`);
                         await this.procesarBatch(batch, encabezados, delimitador);
+                        if (reportarProgreso) reportarProgreso(lineasLeidas, this.estadisticas.exitosas, this.estadisticas.errores);
                         batch = [];
                     }
                 }
+                
                 if (batch.length > 0) {
+                    log(`📊 Procesando batch final de ${batch.length} líneas (total leído: ${lineasLeidas})`);
                     await this.procesarBatch(batch, encabezados, delimitador);
+                    if (reportarProgreso) reportarProgreso(lineasLeidas, this.estadisticas.exitosas, this.estadisticas.errores);
                 }
+                
+                log(`✅ Lectura completada: ${lineasLeidas} líneas procesadas`);
             }
             this.estadisticas.tiempoFin = Date.now();
             return this.estadisticas;
@@ -925,7 +962,7 @@ class ImportadorVentasOptimizado {
             if (hashArchivo) {
                 this.archivosEnProceso.delete(hashArchivo);
             }
-            console.error("\n❌ Error crítico en importación:", error);
+            log("\n❌ Error crítico en importación: " + error.message);
             throw error;
         }
     }

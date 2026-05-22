@@ -64,4 +64,43 @@ async function deleteById(req, res) {
     }
 }
 
-module.exports = { getAll, getById, getByVendedor, getByCategoria, create, updateById, deleteById };
+async function deleteByDateRange(req, res) {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const result = await service.deleteByDateRange(fechaInicio, fechaFin);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+}
+
+async function getByDateRange(req, res) {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const result = await service.getByDateRange(fechaInicio, fechaFin);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+}
+
+async function getAllWithDates(req, res) {
+    try {
+        const result = await service.getAllWithDates();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+async function debugDates(req, res) {
+    try {
+        const { fechaInicio, fechaFin } = req.query;
+        const result = await service.debugDates(fechaInicio, fechaFin);
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+}
+
+module.exports = { getAll, getById, getByVendedor, getByCategoria, create, updateById, deleteById, deleteByDateRange, getByDateRange, getAllWithDates, debugDates };

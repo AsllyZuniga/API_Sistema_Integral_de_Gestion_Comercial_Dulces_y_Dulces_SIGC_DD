@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start *)",
+      "Bash(curl http://localhost:3000/health)",
+      "Bash(pkill *)",
+      "Bash(npx sequelize-cli *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git reset *)",
+      "Bash(curl -s \"http://localhost:3000/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES&ciudad=75\")",
+      "Bash(curl -s \"http://localhost:3000/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES\")",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES\")",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30&categoria=0001%20-%201000-ACEITES%20VEGETALES\" -i)",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30\")",
+      "Bash(curl -s \"http://localhost:3000/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30\")",
+      "Bash(curl -s \"http://localhost:3000/semana/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-04-01&fechaFin=2026-05-30\" -i)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(d\\); console.log\\('scripts:', JSON.stringify\\(p.scripts, null, 2\\)\\); console.log\\('main:', p.main\\);\")",
+      "Bash(xargs -I{} git update-ref -d {})",
+      "Bash(git reflog *)",
+      "Bash(git gc *)",
+      "Bash(git stash *)",
+      "Bash(git push *)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s http://localhost:3000/items)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"test@test.com\",\"password\":\"test\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"codigo\":\"0550\",\"password\":\"123456\"}')",
+      "Bash(curl -s http://localhost:3000/vendedor)",
+      "Bash(curl -s 'http://localhost:3000/vendedor?codigo_vendedor=0550')",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"codigo\":\"0001\",\"password\":\"0001\"}')",
+      "Bash(node *)",
+      "Bash(git log *)",
+      "Bash(curl -s 'http://localhost:3000/usuario')",
+      "Bash(curl -s -X POST http://localhost:3000/admin/reset-passwords)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"codigo\":\"0550\",\"password\":\"0550\"}')",
+      "Bash(curl -s 'http://localhost:3000/cliente' -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3Nzg5MzgzMzAsImV4cCI6MTc3ODk4MTUzMH0.0l8Q-B5JFtHMb_4lHz6NAws8jHNIPXgBt5BCE09_NRI\")",
+      "Bash(curl -s 'http://localhost:3000/ciudad')"
+    ]
+  },
+  "prefersReducedMotion": false
+}

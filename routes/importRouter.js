@@ -69,6 +69,16 @@ router.post('/ventas/upload', upload.single('archivo'), importarVentasConArchivo
 router.post('/ventas', importarVentas);
 
 // Importar cuotas desde archivo CSV cargado (Postman/Frontend)
-router.post('/cuotas/upload', uploadCsvOnly.single('archivo'), importarCuotasConArchivo);
+router.post('/cuotas/upload', (req, res, next) => {
+    uploadCsvOnly.single('archivo')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({
+                error: 'Error al procesar el archivo',
+                mensaje: err.message
+            });
+        }
+        next();
+    });
+}, importarCuotasConArchivo);
 
 module.exports = router;

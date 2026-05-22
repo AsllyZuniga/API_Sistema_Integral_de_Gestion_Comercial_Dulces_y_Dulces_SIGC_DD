@@ -1,3 +1,4 @@
+require('dotenv').config();
 var createError = require("http-errors");
 var express = require("express");
 var path = require("path");
@@ -9,12 +10,14 @@ var indexRouter = require("./routes/index");
 var barrioRouter = require("./routes/barrioRouter");
 var canalRouter = require("./routes/canalRouter");
 var categoriaRouter = require("./routes/categoriaRouter");
+var ciudadRouter = require("./routes/ciudadRouter");
 var clienteRouter = require("./routes/clienteRouter");
 var cuotaDiaRouter = require("./routes/cuotaDiaRouter");
 var cuotaCategoriaRouter = require("./routes/cuotaCategoriaRouter");
 var cuotaCategoriaImportRouter = require("./routes/cuotaCategoriaImportRouter");
 var cuotaMesRouter = require("./routes/cuotaMesRouter");
 var cuotaSemanaRouter = require("./routes/cuotaSemanaRouter");
+var cuotaProveedorRouter = require("./routes/cuotaProveedorRouter");
 var detalle_ventaRouter = require("./routes/detalle_ventaRouter");
 var itemRouter = require("./routes/itemRouter");
 var megacategoriaRouter = require("./routes/megacategoriaRouter");
@@ -34,6 +37,7 @@ var cumplimientoSemanaRouter = require("./routes/cumplimientoSemanaRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const vendedorCuotaCategoriaRouter = require('./routes/vendedorCuotaCategoriaRouter');
+const adminVentasRouter = require('./routes/adminVentasRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 const exportRoutes = require('./routes/exportRoutes');
 
@@ -80,12 +84,14 @@ app.use("/", indexRouter);
 app.use("/barrio", barrioRouter);
 app.use("/canale", canalRouter);
 app.use("/categoria", categoriaRouter);
+app.use("/ciudad", ciudadRouter);
 app.use("/cliente", clienteRouter);
 app.use("/cuota-dia", cuotaDiaRouter);
 app.use("/cuota-categoria", cuotaCategoriaRouter);
 app.use("/cuota-categoria-import", cuotaCategoriaImportRouter);
 app.use("/cuota-mes", cuotaMesRouter);
 app.use("/cuota-semana", cuotaSemanaRouter);
+app.use("/cuota-proveedor", cuotaProveedorRouter);
 app.use("/detalle_venta", detalle_ventaRouter);
 app.use("/items", itemRouter);
 app.use("/megacategoria", megacategoriaRouter);
@@ -105,9 +111,19 @@ app.use('/semana/cumplimiento', cumplimientoSemanaRouter);
 app.use('/import', importRouter);
 app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 app.use('/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
+app.use('/admin', adminVentasRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
 
+
+app.get('/health', (req, res) => {
+  const pkg = require('./package.json');
+  res.json({
+    status: 'OK',
+    version_code: pkg.version,
+    version_name: pkg.config?.version_name || process.env.VERSION_NAME || 'unknown'
+  });
+});
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

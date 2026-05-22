@@ -1,9 +1,14 @@
 {
-  "name": "ejemplo-ws",
-  "version": "0.0.0",
+  "name": "sigc-dd-api",
+  "version": "1.0.0",
+  "description": "API Sistema Integral de Gestión Comercial - Dulces y Dulces",
   "private": true,
+  "config": {
+    "version_name": "Chocobreak"
+  },
   "scripts": {
-    "start": "node ./bin/www"
+    "start": "node ./bin/www",
+    "dev": "nodemon ./bin/www"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -14,7 +19,7 @@
     "debug": "~2.6.9",
     "dotenv": "^16.6.1",
     "ejs": "^4.0.1",
-    "exceljs": "^4.4.0",
+    "exceljs": "^3.4.0",
     "express": "^4.22.1",
     "http-errors": "~1.6.3",
     "iconv-lite": "^0.7.2",
@@ -23,7 +28,7 @@
     "multer": "^2.1.1",
     "pg": "^8.18.0",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.37.7",
+    "sequelize": "^6.37.8",
     "sequelize-auto": "^0.8.8"
   },
   "devDependencies": {

@@ -41,19 +41,19 @@ const toDateOnly = (value) => {
 async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
     const replacements = { idVendedor };
     let whereClause = 'WHERE v.id_vendedor = :idVendedor';
-    
+
     if (filters.fechaInicio) {
         whereClause += ' AND v.fecha >= :fechaInicio';
         replacements.fechaInicio = toDateOnly(filters.fechaInicio);
     }
-    
+
     if (filters.fechaFin) {
         whereClause += ' AND v.fecha <= :fechaFin';
         replacements.fechaFin = toDateOnly(filters.fechaFin);
     }
-    
+
     const query = `
-        SELECT 
+        SELECT
             v.id_venta,
             v.fecha,
             v.id_cliente,
@@ -72,10 +72,40 @@ async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
         ${whereClause}
         ORDER BY v.fecha DESC, v.id_venta, it.descripcion
     `;
-    return sequelize.query(query, {
+    const rows = await sequelize.query(query, {
         type: QueryTypes.SELECT,
         replacements
     });
+
+    // Consolidar: agrupar por cliente+producto, sumar cantidad y subtotal
+    const map = new Map();
+    for (const row of rows) {
+        const key = `${row.cliente}|||${row.producto}`;
+        const cantidad = parseFloat(row.cantidad) || 0;
+        const subtotal = parseFloat(row.subtotal_producto) || 0;
+
+        if (map.has(key)) {
+            const entry = map.get(key);
+            entry.cantidad += cantidad;
+            entry.subtotal_producto += subtotal;
+        } else {
+            map.set(key, {
+                id_cliente: row.id_cliente,
+                cliente: row.cliente,
+                id_item: row.id_item,
+                producto: row.producto,
+                cantidad,
+                subtotal_producto: subtotal
+            });
+        }
+    }
+
+    return Array.from(map.values()).map(entry => ({
+        ...entry,
+        precio_promedio_ponderado: entry.cantidad !== 0
+            ? parseFloat((entry.subtotal_producto / entry.cantidad).toFixed(2))
+            : 0
+    }));
 }
 
 // Devuelve todos los datos relacionados con un vendedor específico para depuración

@@ -51,5 +51,24 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async deleteById(req, res) {
+        try {
+            const result = await cuotaCategoriaService.deleteById(req.params.id);
+            return res.status(200).send({ success: true, message: 'Cuota de categoría eliminada correctamente' });
+        } catch (error) {
+            return res.status(500).send({ error: error.message });
+        }
+    },
+
+    async deleteByDateRange(req, res) {
+        try {
+            const { fechaInicio, fechaFin } = req.query;
+            const result = await cuotaCategoriaService.deleteByDateRange(fechaInicio, fechaFin);
+            return res.status(200).send(result);
+        } catch (error) {
+            return res.status(400).send({ error: error.message });
+        }
     }
 };

@@ -10,6 +10,7 @@ const path = require('path');
  */
 async function importarVentasConArchivo(req, res) {
     let archivoProcesado = null;
+    let heartbeatInterval = null;
 
     try {
         // Dar tiempo suficiente al servidor (3 horas) para archivos inmensos
@@ -48,14 +49,27 @@ async function importarVentasConArchivo(req, res) {
         const importador = new ImportadorVentasOptimizado(models.sequelize, models);
         importador.BATCH_SIZE = batchSize;
 
+        // ✅ HEARTBEAT: Mantener viva la conexión cada 5 segundos (previene timeout en hosting)
+        heartbeatInterval = setInterval(() => {
+            if (!res.headersSent || res.writableEnded === false) {
+                res.write('\n'); // Envía un newline para mantener viva la conexión
+            }
+        }, 5000);
+
+        // Logger callback para enviar logs al cliente en tiempo real
+        const loggerCallback = (mensaje) => {
+            console.log(mensaje); // Mantener en consola para debugging
+            res.write(mensaje + '\n'); // Enviar también al cliente
+        };
+
         // Callback para enviar el progreso a Postman en vivo
         const reportarProgreso = (procesados, insertados, errores) => {
             const memoriaUsada = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
             res.write(`⏳ [PROGRESO] Líneas leídas: ${procesados} | Detalles insertados: ${insertados} | Errores: ${errores} | RAM: ${memoriaUsada}MB\n`);
         };
 
-        // Ejecutar el motor de importación
-        const estadisticas = await importador.importar(archivoProcesado, reportarProgreso);
+        // Ejecutar el motor de importación con logger
+        const estadisticas = await importador.importar(archivoProcesado, reportarProgreso, loggerCallback);
 
         res.write(`\n✅ IMPORTACIÓN COMPLETADA EXITOSAMENTE\n`);
         res.write(`==================================================\n`);
@@ -78,6 +92,11 @@ async function importarVentasConArchivo(req, res) {
             fs.unlinkSync(archivoProcesado);
         }
         res.end();
+    } finally {
+        // Limpiar el heartbeat cuando termine
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+        }
     }
 }
 
@@ -162,6 +181,9 @@ async function importarCuotasConArchivo(req, res) {
     let archivoProcesado = null;
 
     try {
+        req.setTimeout(30 * 60 * 1000);
+        res.setTimeout(30 * 60 * 1000);
+
         if (!req.file) {
             return res.status(400).json({
                 error: 'Archivo requerido',
@@ -171,6 +193,7 @@ async function importarCuotasConArchivo(req, res) {
 
         const extension = path.extname(req.file.originalname || '').toLowerCase();
         if (extension !== '.csv') {
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
             return res.status(400).json({
                 error: 'Tipo de archivo inválido',
                 mensaje: 'Para este endpoint solo se permiten archivos .csv'
@@ -195,6 +218,7 @@ async function importarCuotasConArchivo(req, res) {
             fs.unlinkSync(archivoProcesado);
         }
 
+        if (res.headersSent) return;
         return res.status(200).json({
             mensaje: 'Importación de cuotas completada exitosamente',
             archivo: nombreArchivo,
@@ -202,12 +226,15 @@ async function importarCuotasConArchivo(req, res) {
             resumen: resultado
         });
     } catch (error) {
+        console.error('Error en importarCuotasConArchivo:', error);
         if (archivoProcesado && fs.existsSync(archivoProcesado)) {
             fs.unlinkSync(archivoProcesado);
         }
+        if (res.headersSent) return;
         return res.status(500).json({
             error: 'Error en la importación de cuotas',
-            mensaje: error.message
+            mensaje: error.message,
+            detalle: error.stack?.split('\n')[1]?.trim()
         });
     }
 }
