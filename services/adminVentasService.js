@@ -16,13 +16,13 @@ const previewEliminarVentas = async (fechaInicio, fechaFin) => {
 
     const [ventas, detalles] = await Promise.all([
         sequelize.query(
-            `SELECT COUNT(*) AS total FROM venta WHERE fecha >= :fechaInicio AND fecha <= :fechaFin`,
+            `SELECT COUNT(*) AS total FROM venta WHERE CAST(fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(fecha AS DATE) <= CAST(:fechaFin AS DATE)`,
             { replacements, type: QueryTypes.SELECT }
         ),
         sequelize.query(
             `SELECT COUNT(*) AS total FROM detalle_venta dv
              JOIN venta v ON v.id_venta = dv.id_venta
-             WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin`,
+             WHERE CAST(v.fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(v.fecha AS DATE) <= CAST(:fechaFin AS DATE)`,
             { replacements, type: QueryTypes.SELECT }
         )
     ]);
@@ -43,14 +43,14 @@ const eliminarVentasPorRango = async (fechaInicio, fechaFin) => {
         const [detallesRows] = await sequelize.query(
             `DELETE FROM detalle_venta
              WHERE id_venta IN (
-                 SELECT id_venta FROM venta WHERE fecha >= :fechaInicio AND fecha <= :fechaFin
+                 SELECT id_venta FROM venta WHERE CAST(fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(fecha AS DATE) <= CAST(:fechaFin AS DATE)
              )
              RETURNING id_detalle`,
             { replacements, type: QueryTypes.SELECT, transaction: t }
         );
 
         const [ventasRows] = await sequelize.query(
-            `DELETE FROM venta WHERE fecha >= :fechaInicio AND fecha <= :fechaFin
+            `DELETE FROM venta WHERE CAST(fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(fecha AS DATE) <= CAST(:fechaFin AS DATE)
              RETURNING id_venta`,
             { replacements, type: QueryTypes.SELECT, transaction: t }
         );
