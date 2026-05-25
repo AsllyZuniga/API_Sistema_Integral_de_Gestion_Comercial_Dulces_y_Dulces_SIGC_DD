@@ -619,12 +619,16 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             0 AS total_nc
         FROM "vendedor" vd
         LEFT JOIN LATERAL (
-            SELECT cs.cuota_semana
-            FROM "cuotaSemana" cs
-            WHERE ${cuotaConditions.join(' AND ')}
-              AND cs.id_usuario IS NOT NULL
-            ORDER BY cs.fecha_fin DESC NULLS LAST, cs."id_cuotaSemana" DESC
-            LIMIT 1
+            SELECT SUM(cuota) AS cuota_semana
+            FROM (
+                SELECT cs.cuota_semana AS cuota,
+                       ROW_NUMBER() OVER (PARTITION BY EXTRACT(YEAR FROM cs.fecha_inicio), EXTRACT(MONTH FROM cs.fecha_inicio) ORDER BY cs.fecha_fin DESC) AS rn
+                FROM "cuotaSemana" cs
+                WHERE cs.id_usuario = vd.id_usuario
+                  AND cs.fecha_fin >= :cuotaFechaInicio
+                  AND cs.fecha_fin <= :cuotaFechaFin
+            ) cs_ranked
+            WHERE cs_ranked.rn = 1
         ) cs ON true
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
         WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
