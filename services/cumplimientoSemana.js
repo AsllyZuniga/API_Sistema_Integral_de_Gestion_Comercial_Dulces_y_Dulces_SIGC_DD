@@ -307,9 +307,9 @@ const getCategoriaIdByNombre = async (nombreCategoria) => {
     return row?.id_categoria;
 };
 
-const signedNcAmountSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)) ELSE COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0) END`;
-const signedNcSubtotalSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.subtotal, 0)) ELSE COALESCE(${alias}.subtotal, 0) END`;
-const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `CASE WHEN UPPER(TRIM(${ventaAlias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${detalleAlias}.subtotal, 0)) ELSE COALESCE(${detalleAlias}.subtotal, 0) END`;
+const signedNcAmountSql = (alias) => `COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)`;
+const signedNcSubtotalSql = (alias) => `COALESCE(${alias}.subtotal, 0)`;
+const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `COALESCE(${detalleAlias}.subtotal, 0)`;
 
 const round = (value, decimals = 2) => {
     const factor = 10 ** decimals;
@@ -569,9 +569,10 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         }
     }
 
-    let detalleJoins = `JOIN detalle_venta dv ON dv.id_venta = v.id_venta`;
+    let detalleJoins = '';
     if (detalleConditions.length > 0) {
-        detalleJoins += `\n            JOIN item it ON it.id_item = dv.id_item`;
+        detalleJoins = `JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item it ON it.id_item = dv.id_item`;
     }
 
     const allConditions = [...dateConditions, ...detalleConditions];
@@ -590,49 +591,43 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
     const cuotaProveedorJoin = '';
     const cuotaProveedorSelect = 'NULL AS cuota_proveedor';
     
+    // Usar misma lógica que cumplimientoMes: sumar desde dv.subtotal (detalle_venta)
     const query = `
         WITH ventas_filtradas AS (
             SELECT
                 v.id_vendedor,
                 SUM(
-                    CASE WHEN v.numero_documento LIKE 'NC%' 
-                    THEN -ABS(COALESCE(v.valor_neto, v.subtotal, 0)) 
-                    ELSE COALESCE(v.valor_neto, v.subtotal, 0) 
+                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' 
+                    THEN -ABS(COALESCE(dv.subtotal, 0)) 
+                    ELSE COALESCE(dv.subtotal, 0) 
                     END
-                ) AS venta_acum,
-                SUM(
-                    CASE WHEN v.numero_documento LIKE 'NC%' 
-                    THEN COALESCE(v.subtotal, 0)
-                    ELSE 0
-                    END
-                ) AS total_nc
+                ) AS venta_acum
             FROM venta v
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             ${detalleJoins}
             LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${whereClause}
             GROUP BY v.id_vendedor
         )
         SELECT
+            vd.id_vendedor,
             vd.codigo_vendedor AS cod,
             vd.nombre AS vendedor,
             COALESCE(cs.cuota_semana, 0) AS cuota_semana,
-            ${cuotaProveedorSelect},
+            NULL AS cuota_proveedor,
             COALESCE(vf.venta_acum, 0) AS venta_acum,
-            COALESCE(vf.total_nc, 0) AS total_nc
-        FROM vendedor vd
+            0 AS total_nc
+        FROM "vendedor" vd
         LEFT JOIN LATERAL (
-            SELECT SUM(cuota) AS cuota_semana
-            FROM (
-                SELECT cs.cuota_semana AS cuota,
-                       ROW_NUMBER() OVER (PARTITION BY EXTRACT(YEAR FROM cs.fecha_inicio), EXTRACT(MONTH FROM cs.fecha_inicio) ORDER BY cs.fecha_fin DESC) AS rn
-                FROM "cuotaSemana" cs
-                WHERE ${cuotaConditions.join(' AND ')}
-            ) cs_ranked
-            WHERE cs_ranked.rn = 1
+            SELECT cs.cuota_semana
+            FROM "cuotaSemana" cs
+            WHERE ${cuotaConditions.join(' AND ')}
+              AND cs.id_usuario IS NOT NULL
+            ORDER BY cs.fecha_fin DESC NULLS LAST, cs."id_cuotaSemana" DESC
+            LIMIT 1
         ) cs ON true
-        ${cuotaProveedorJoin}
         LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) > 0)
+        WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
