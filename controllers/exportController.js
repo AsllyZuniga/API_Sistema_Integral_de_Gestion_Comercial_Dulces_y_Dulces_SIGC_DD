@@ -1,20 +1,19 @@
-const { exportAllDataToExcel } = require('../services/exportService');
+const { exportAllDataToJson } = require('../services/exportService');
 
 const exportData = async (req, res) => {
     try {
-        const workbook = await exportAllDataToExcel();
+        const data = await exportAllDataToJson();
 
         res.setHeader(
             'Content-Type',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            'application/json'
         );
         res.setHeader(
             'Content-Disposition',
-            'attachment; filename=' + 'export_data.xlsx'
+            'attachment; filename=' + 'export_data.json'
         );
 
-        await workbook.xlsx.write(res);
-        res.end();
+        res.json(data);
     } catch (error) {
         console.error('Error exporting data:', error);
         res.status(500).send('Error exporting data');
