@@ -206,7 +206,9 @@ const getVendedoresConClientesItems = async (options = {}) => {
                     [Sequelize.col('item.descripcion'), 'descripcion'],
                     [Sequelize.col('item.codigo_item'), 'codigo_item'],
                     [Sequelize.fn('SUM', Sequelize.col('detalle_venta_model.cantidad')), 'cantidadTotal'],
-                    [Sequelize.fn('COUNT', Sequelize.col('detalle_venta_model.id_detalle')), 'veces']
+                    [Sequelize.fn('COUNT', Sequelize.col('detalle_venta_model.id_detalle')), 'veces'],
+                    [Sequelize.fn('AVG', Sequelize.col('detalle_venta_model.precio_unitario')), 'precio_unitario'],
+                    [Sequelize.fn('SUM', Sequelize.col('detalle_venta_model.subtotal')), 'subtotal']
                 ],
                 include: [
                     {
@@ -249,7 +251,9 @@ const getVendedoresConClientesItems = async (options = {}) => {
                 descripcion: item.descripcion,
                 codigo_item: item.codigo_item,
                 cantidadTotal: parseFloat(item.cantidadTotal || 0),
-                veces: parseInt(item.veces)
+                veces: parseInt(item.veces),
+                precio_unitario: parseFloat(item.precio_unitario || 0),
+                subtotal: parseFloat(item.subtotal || 0)
             });
         }
 
