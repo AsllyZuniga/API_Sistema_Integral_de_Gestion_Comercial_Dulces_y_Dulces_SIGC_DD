@@ -63,11 +63,11 @@ module.exports = {
 
     /**
      * GET /dia/cumplimiento/front
-     * Para admins - muestra las ventas diarias agregadas de todos los vendedores
+     * Para admins - cuota diaria por vendedor (agregada en el rango de fechas)
      */
     async listFront(req, res) {
         try {
-            const data = await cumplimientoDiaService.getCumplimientoDiaFront(getFilters(req.query));
+            const data = await cumplimientoDiaService.getCumplimientoDiaVendedores(getFilters(req.query));
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);
@@ -84,6 +84,19 @@ module.exports = {
                 req.params.codigoVendedor,
                 getFilters(req.query)
             );
+            return res.status(200).send(data);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
+    },
+
+    /**
+     * GET /api/dia/cumplimiento/vendedores
+     * Para admins - cuota diaria agregada por vendedor en rango de fechas
+     */
+    async listFrontVendedores(req, res) {
+        try {
+            const data = await cumplimientoDiaService.getCumplimientoDiaVendedores(getFilters(req.query));
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);
