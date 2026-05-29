@@ -6,6 +6,7 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 // Rutas específicas sin parámetros (PRIMERO)
 router.get('/front/me', requireAuthJWT, cumplimientoDiaController.listFrontMe);
 router.get('/front', cumplimientoDiaController.listFront);
+router.get('/vendedores', cumplimientoDiaController.listFrontVendedores);
 
 // Rutas con parámetros
 router.get('/vendedor/:codigoVendedor', cumplimientoDiaController.getByVendedor);

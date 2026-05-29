@@ -448,8 +448,79 @@ const getCumplimientoDiaSupervisor = async (idSupervisor, filters = {}) => {
     };
 };
 
+/**
+ * Obtiene cuota diaria por vendedor en un rango de fechas
+ * Si es un solo día, busca la cuota del último día del mes en la BD
+ * Devuelve lista de vendedores con su cuota diaria agregada
+ */
+const getCumplimientoDiaVendedores = async (filters = {}) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
+    let replacements = {
+        fechaInicio: normalizedFilters.fechaInicio,
+        fechaFin: normalizedFilters.fechaFin
+    };
+
+    // Si es un solo día, busca la cuota del último día del mes
+    const isSingleDay = formatDateOnly(normalizedFilters.fechaInicio) === formatDateOnly(normalizedFilters.fechaFin);
+    
+    if (isSingleDay) {
+        const year = normalizedFilters.fechaInicio.getFullYear();
+        const month = normalizedFilters.fechaInicio.getMonth();
+        
+        // Obtener el último día del mes
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+        replacements.fechaInicio = lastDayOfMonth;
+        replacements.fechaFin = lastDayOfMonth;
+    }
+
+    const query = `
+        SELECT
+            vd.id_vendedor,
+            vd.codigo_vendedor,
+            vd.nombre,
+            SUM(COALESCE(cd.cuota_dia, 0)) AS cuota_dia_total
+        FROM vendedor vd
+        LEFT JOIN "cuotaDia" cd ON cd.id_usuario = vd.id_usuario
+            AND cd.fecha_fin >= :fechaInicio
+            AND cd.fecha_fin <= :fechaFin
+        GROUP BY vd.id_vendedor, vd.codigo_vendedor, vd.nombre
+        ORDER BY vd.nombre ASC
+    `;
+
+    const rows = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const detalle = rows.map((row) => {
+        return {
+            idVendedor: row.id_vendedor,
+            codigoVendedor: row.codigo_vendedor,
+            nombre: row.nombre,
+            cuotaDia: round(toNumber(row.cuota_dia_total), 2)
+        };
+    });
+
+    // Calcular total de cuota
+    const totalCuota = detalle.reduce((acc, row) => acc + toNumber(row.cuotaDia), 0);
+
+    return {
+        periodo: {
+            fechaInicio: normalizedFilters.fechaInicioFormatted,
+            fechaFin: normalizedFilters.fechaFinFormatted,
+            notaFiltro: isSingleDay ? `Se devuelven datos del último día del mes (${formatDateOnly(replacements.fechaFin)})` : undefined
+        },
+        detalle,
+        total: {
+            cuotaDia: round(totalCuota, 2),
+            vendedoresCount: detalle.length
+        }
+    };
+};
+
 module.exports = {
     getCumplimientoDiaFront,
     getCumplimientoDiaVendedor,
-    getCumplimientoDiaSupervisor
+    getCumplimientoDiaSupervisor,
+    getCumplimientoDiaVendedores
 };
