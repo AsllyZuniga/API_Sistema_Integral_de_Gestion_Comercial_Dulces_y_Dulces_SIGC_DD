@@ -451,7 +451,8 @@ const getCumplimientoDiaSupervisor = async (idSupervisor, filters = {}) => {
 /**
  * Obtiene cuota diaria por vendedor en un rango de fechas
  * Si es un solo día, busca la cuota del último día del mes en la BD
- * Devuelve lista de vendedores con su cuota diaria agregada
+ * Calcula: cumplimiento, venta diaria, proyección
+ * Devuelve lista de vendedores con su información de cumplimiento
  */
 const getCumplimientoDiaVendedores = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
@@ -460,8 +461,9 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
         fechaFin: normalizedFilters.fechaFin
     };
 
-    // Si es un solo día, busca la cuota del último día del mes
+    // Si es un solo día, busca la cuota del último día del mes en la BD
     const isSingleDay = formatDateOnly(normalizedFilters.fechaInicio) === formatDateOnly(normalizedFilters.fechaFin);
+    let fechaCuota = normalizedFilters.fechaInicio;
     
     if (isSingleDay) {
         const year = normalizedFilters.fechaInicio.getFullYear();
@@ -469,8 +471,10 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
         
         // Obtener el último día del mes
         const lastDayOfMonth = new Date(year, month + 1, 0);
-        replacements.fechaInicio = lastDayOfMonth;
-        replacements.fechaFin = lastDayOfMonth;
+        fechaCuota = lastDayOfMonth;
+        replacements.fechaCuota = lastDayOfMonth;
+    } else {
+        replacements.fechaCuota = normalizedFilters.fechaFin;
     }
 
     const query = `
@@ -478,12 +482,28 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
             vd.id_vendedor,
             vd.codigo_vendedor,
             vd.nombre,
-            SUM(COALESCE(cd.cuota_dia, 0)) AS cuota_dia_total
+            COALESCE(cd.cuota_dia_total, 0) AS cuota_dia_total,
+            COALESCE(vt.venta_acum, 0) AS venta_acum
         FROM vendedor vd
-        LEFT JOIN "cuotaDia" cd ON cd.id_usuario = vd.id_usuario
-            AND cd.fecha_fin >= :fechaInicio
-            AND cd.fecha_fin <= :fechaFin
-        GROUP BY vd.id_vendedor, vd.codigo_vendedor, vd.nombre
+        LEFT JOIN (
+            SELECT id_usuario, SUM(COALESCE(cuota_dia, 0)) AS cuota_dia_total
+            FROM "cuotaDia"
+            WHERE fecha_fin = :fechaCuota
+            GROUP BY id_usuario
+        ) cd ON cd.id_usuario = vd.id_usuario
+        LEFT JOIN (
+            SELECT v.id_vendedor,
+                SUM(
+                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' 
+                    THEN -ABS(COALESCE(dv.subtotal, 0)) 
+                    ELSE COALESCE(dv.subtotal, 0) 
+                    END
+                ) AS venta_acum
+            FROM venta v
+            LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin
+            GROUP BY v.id_vendedor
+        ) vt ON vt.id_vendedor = vd.id_vendedor
         ORDER BY vd.nombre ASC
     `;
 
@@ -492,27 +512,52 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
         type: QueryTypes.SELECT
     });
 
+    // Calcular días del mes para proyección
+    const year = fechaCuota.getFullYear();
+    const month = fechaCuota.getMonth();
+    const diasDelMes = new Date(year, month + 1, 0).getDate();
+
     const detalle = rows.map((row) => {
+        const cuotaDia = toNumber(row.cuota_dia_total);
+        const ventaDiaria = toNumber(row.venta_acum);
+        const cumplimiento = cuotaDia > 0 ? (ventaDiaria / cuotaDia) * 100 : 0;
+        
+        // Proyección: si es un solo día, proyectamos al mes completo
+        const proyeccion = isSingleDay ? ventaDiaria * diasDelMes : ventaDiaria;
+        const cumplimientoProyectado = cuotaDia > 0 ? (proyeccion / cuotaDia) * 100 : 0;
+
         return {
             idVendedor: row.id_vendedor,
             codigoVendedor: row.codigo_vendedor,
             nombre: row.nombre,
-            cuotaDia: round(toNumber(row.cuota_dia_total), 2)
+            cuotaDia: round(cuotaDia, 2),
+            ventaDiaria: round(ventaDiaria, 2),
+            cumplimiento: round(cumplimiento, 2),
+            proyeccion: round(proyeccion, 2),
+            cumplimientoProyectado: round(cumplimientoProyectado, 2)
         };
     });
 
-    // Calcular total de cuota
+    // Calcular totales
     const totalCuota = detalle.reduce((acc, row) => acc + toNumber(row.cuotaDia), 0);
+    const totalVenta = detalle.reduce((acc, row) => acc + toNumber(row.ventaDiaria), 0);
+    const totalProyeccion = detalle.reduce((acc, row) => acc + toNumber(row.proyeccion), 0);
+    const cumplimientoTotal = totalCuota > 0 ? (totalVenta / totalCuota) * 100 : 0;
+    const cumplimientoProyectadoTotal = totalCuota > 0 ? (totalProyeccion / totalCuota) * 100 : 0;
 
     return {
         periodo: {
             fechaInicio: normalizedFilters.fechaInicioFormatted,
             fechaFin: normalizedFilters.fechaFinFormatted,
-            notaFiltro: isSingleDay ? `Se devuelven datos del último día del mes (${formatDateOnly(replacements.fechaFin)})` : undefined
+            notaFiltro: isSingleDay ? `Se devuelven datos del último día del mes (${formatDateOnly(fechaCuota)})` : undefined
         },
         detalle,
         total: {
             cuotaDia: round(totalCuota, 2),
+            ventaDiaria: round(totalVenta, 2),
+            cumplimiento: round(cumplimientoTotal, 2),
+            proyeccion: round(totalProyeccion, 2),
+            cumplimientoProyectado: round(cumplimientoProyectadoTotal, 2),
             vendedoresCount: detalle.length
         }
     };
