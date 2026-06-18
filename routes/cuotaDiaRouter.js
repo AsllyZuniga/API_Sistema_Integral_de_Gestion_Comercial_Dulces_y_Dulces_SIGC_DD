@@ -2,12 +2,22 @@ var express = require('express');
 var router = express.Router();
 const { Op } = require('sequelize');
 const db = require('../models');
+const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
 router.get('/', require('../controllers').cuotaDiaController.list);
 router.post('/', require('../controllers').cuotaDiaController.add);
 
-router.get('/por-dia', async (req, res) => {
+router.get('/por-dia', requireAuthJWT, async (req, res) => {
     try {
+        const rolId = req.auth.rol;
+
+        if (String(rolId) !== '1') {
+            return res.status(403).json({
+                success: false,
+                error: 'Acceso denegado. Solo administradores pueden consultar este endpoint'
+            });
+        }
+
         const { fecha_inicio, fecha_fin } = req.query;
 
         if (!fecha_inicio || !fecha_fin) {
