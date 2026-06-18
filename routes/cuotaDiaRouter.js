@@ -24,7 +24,14 @@ router.get('/por-dia', async (req, res) => {
             });
         }
 
-        const data = await db.cuotaDia_model.findAll({
+        const rangoDias = await db.rango_dias_model.findOne({
+            where: {
+                fecha_inicio: { [Op.lte]: fecha_inicio },
+                fecha_fin: { [Op.gte]: fecha_inicio }
+            }
+        });
+
+        const cuotas = await db.cuotaDia_model.findAll({
             where: {
                 fecha_inicio: { [Op.lte]: fecha_inicio },
                 fecha_fin: { [Op.gte]: fecha_inicio }
@@ -40,6 +47,41 @@ router.get('/por-dia', async (req, res) => {
                 }]
             }]
         });
+
+        const data = await Promise.all(cuotas.map(async (cuota) => {
+            const vendedor = cuota.usuario?.vendedor;
+            let venta_acumulada_dia = 0;
+
+            if (vendedor) {
+                const [result] = await db.sequelize.query(
+                    `SELECT COALESCE(SUM(d.subtotal), 0) as total FROM "public"."detalle_venta" d INNER JOIN "public"."venta" v ON d.id_venta = v.id_venta WHERE v.id_vendedor = :id_vendedor AND v.fecha = :fecha`,
+                    {
+                        replacements: { id_vendedor: vendedor.id_vendedor, fecha: fecha_inicio },
+                        type: db.Sequelize.QueryTypes.SELECT
+                    }
+                );
+
+                venta_acumulada_dia = parseFloat(result.total) || 0;
+            }
+
+            const cuota_dia = parseFloat(cuota.cuota_dia) || 0;
+            const pct_cumplimiento = cuota_dia > 0 ? (venta_acumulada_dia / cuota_dia) * 100 : 0;
+
+            const dias_corridos = rangoDias?.dias_corridos || 1;
+            const dias_habiles = rangoDias?.dias_habiles || 1;
+            const proye_venta = (dias_corridos * dias_habiles) > 0
+                ? (venta_acumulada_dia / (dias_corridos * dias_habiles)) * 100
+                : 0;
+
+            return {
+                ...cuota.toJSON(),
+                venta_acumulada_dia,
+                pct_cumplimiento: parseFloat(pct_cumplimiento.toFixed(2)),
+                proye_venta: parseFloat(proye_venta.toFixed(2)),
+                dias_corridos,
+                dias_habiles
+            };
+        }));
 
         return res.status(200).json({
             success: true,
