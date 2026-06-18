@@ -9,26 +9,20 @@ const {
     subcategoria_model,
     megacategoria_model
 } = require('../models');
-const ExcelJS = require('exceljs');
 
 const BATCH_SIZE = 1000; // Procesar de 1000 en 1000 registros
 
-const exportAllDataToExcel = async () => {
-    const workbook = new ExcelJS.Workbook();
+const exportAllDataToJson = async () => {
+    const exportData = {};
 
     // Vendedores
-    const vendedoresSheet = workbook.addWorksheet('Vendedores');
     const vendedores = await vendedor_model.findAll({ raw: true });
-    if (vendedores.length > 0) {
-        vendedoresSheet.columns = Object.keys(vendedores[0]).map(key => ({ header: key, key }));
-        vendedoresSheet.addRows(vendedores);
-    }
+    exportData.vendedores = vendedores;
 
     // Ventas (en lotes)
-    const ventasSheet = workbook.addWorksheet('Ventas');
+    const ventasData = [];
     let ventasOffset = 0;
     let ventasBatch;
-    let firstVentasBatch = true;
     do {
         ventasBatch = await venta_model.findAll({
             include: [
@@ -40,31 +34,12 @@ const exportAllDataToExcel = async () => {
             limit: BATCH_SIZE,
             offset: ventasOffset,
         });
-        if (ventasBatch.length > 0) {
-            const flattenedVentas = ventasBatch.map(v => {
-                const flat = { ...v };
-                if (v.cliente) {
-                    Object.keys(v.cliente).forEach(key => {
-                        flat[`cliente_${key}`] = v.cliente[key];
-                    });
-                }
-                if (v.vendedor) {
-                    Object.keys(v.vendedor).forEach(key => {
-                        flat[`vendedor_${key}`] = v.vendedor[key];
-                    });
-                }
-                delete flat.cliente;
-                delete flat.vendedor;
-                return flat;
-            });
-            ventasSheet.columns = Object.keys(flattenedVentas[0]).map(key => ({ header: key, key }));
-            ventasSheet.addRows(flattenedVentas);
-        }
+        ventasData.push(...ventasBatch);
         ventasOffset += BATCH_SIZE;
     } while (ventasBatch.length > 0);
+    exportData.ventas = ventasData;
 
     // Detalle Ventas
-    const detalleVentasSheet = workbook.addWorksheet('Detalle_Ventas');
     const detallesVenta = await detalle_venta_model.findAll({
         include: [
             { model: venta_model, as: 'venta' },
@@ -73,30 +48,9 @@ const exportAllDataToExcel = async () => {
         raw: true,
         nest: true
     });
-
-    if (detallesVenta.length > 0) {
-        const flattenedDetalles = detallesVenta.map(dv => {
-            const flat = { ...dv };
-            if (dv.venta) {
-                Object.keys(dv.venta).forEach(key => {
-                    flat[`venta_${key}`] = dv.venta[key];
-                });
-            }
-            if (dv.item) {
-                Object.keys(dv.item).forEach(key => {
-                    flat[`item_${key}`] = dv.item[key];
-                });
-            }
-            delete flat.venta;
-            delete flat.item;
-            return flat;
-        });
-        detalleVentasSheet.columns = Object.keys(flattenedDetalles[0]).map(key => ({ header: key, key }));
-        detalleVentasSheet.addRows(flattenedDetalles);
-    }
+    exportData.detalleVentas = detallesVenta;
 
     // Items
-    const itemsSheet = workbook.addWorksheet('Items');
     const items = await item_model.findAll({
         include: [
             { model: proveedor_model, as: 'proveedor' },
@@ -107,42 +61,31 @@ const exportAllDataToExcel = async () => {
         raw: true,
         nest: true
     });
-    if (items.length > 0) {
-        const flattenedItems = items.map(i => {
-            const flat = { ...i };
-            if (i.proveedor) {
-                Object.keys(i.proveedor).forEach(key => {
-                    flat[`proveedor_${key}`] = i.proveedor[key];
-                });
-            }
-            if (i.categoria) {
-                Object.keys(i.categoria).forEach(key => {
-                    flat[`categoria_${key}`] = i.categoria[key];
-                });
-            }
-            if (i.subcategoria) {
-                Object.keys(i.subcategoria).forEach(key => {
-                    flat[`subcategoria_${key}`] = i.subcategoria[key];
-                });
-            }
-            if (i.megacategoria) {
-                Object.keys(i.megacategoria).forEach(key => {
-                    flat[`megacategoria_${key}`] = i.megacategoria[key];
-                });
-            }
-            delete flat.proveedor;
-            delete flat.categoria;
-            delete flat.subcategoria;
-            delete flat.megacategoria;
-            return flat;
-        });
-        itemsSheet.columns = Object.keys(flattenedItems[0]).map(key => ({ header: key, key }));
-        itemsSheet.addRows(flattenedItems);
-    }
+    exportData.items = items;
 
-    return workbook;
+    // Clientes
+    const clientes = await cliente_model.findAll({ raw: true });
+    exportData.clientes = clientes;
+
+    // Proveedores
+    const proveedores = await proveedor_model.findAll({ raw: true });
+    exportData.proveedores = proveedores;
+
+    // Categorías
+    const categorias = await categoria_model.findAll({ raw: true });
+    exportData.categorias = categorias;
+
+    // Subcategorías
+    const subcategorias = await subcategoria_model.findAll({ raw: true });
+    exportData.subcategorias = subcategorias;
+
+    // Megacategorías
+    const megacategorias = await megacategoria_model.findAll({ raw: true });
+    exportData.megacategorias = megacategorias;
+
+    return exportData;
 };
 
 module.exports = {
-    exportAllDataToExcel
+    exportAllDataToJson
 };

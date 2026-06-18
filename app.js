@@ -34,6 +34,7 @@ var ventaRouter = require("./routes/ventaRouter");
 var rango_diasRouter = require("./routes/rango_diasRouter");
 var cumplimientoMesRouter = require("./routes/cumplimientoMesRouter");
 var cumplimientoSemanaRouter = require("./routes/cumplimientoSemanaRouter");
+var cumplimientoDiaRouter = require("./routes/cumplimientoDiaRouter");
 const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const vendedorCuotaCategoriaRouter = require('./routes/vendedorCuotaCategoriaRouter');
@@ -51,7 +52,24 @@ startRangoDiasScheduler();
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-app.use(cors());
+// Configuración de CORS para producción
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'X-JSON-Response']
+};
+
+app.use(cors(corsOptions));
 
 // Configuración para archivos gigantes y timeouts
 app.use(express.json({ limit: '6gb' }));
@@ -81,37 +99,38 @@ app.use(["/mes/cumplimiento", "/semana/cumplimiento", "/cuota-categoria"], (req,
 
 app.use("/api/auth", authRouter);
 app.use("/", indexRouter);
-app.use("/barrio", barrioRouter);
-app.use("/canale", canalRouter);
-app.use("/categoria", categoriaRouter);
-app.use("/ciudad", ciudadRouter);
-app.use("/cliente", clienteRouter);
-app.use("/cuota-dia", cuotaDiaRouter);
-app.use("/cuota-categoria", cuotaCategoriaRouter);
-app.use("/cuota-categoria-import", cuotaCategoriaImportRouter);
-app.use("/cuota-mes", cuotaMesRouter);
-app.use("/cuota-semana", cuotaSemanaRouter);
-app.use("/cuota-proveedor", cuotaProveedorRouter);
-app.use("/detalle_venta", detalle_ventaRouter);
-app.use("/items", itemRouter);
-app.use("/megacategoria", megacategoriaRouter);
-app.use("/obsequio", obsequioRouter);
-app.use("/proveedor", proveedorRouter);
-app.use("/roles", rolRouter);
-app.use("/subcanale", subcanalRouter);
-app.use("/subcategoria", subcategoriaRouter);
-app.use("/tipos_documento", tipo_documentoRouter);
-app.use("/tipos_negocio", tipo_negocioRouter);
-app.use("/usuario", usuarioRouter);
-app.use("/vendedor", vendedorRouter);
-app.use("/venta", ventaRouter);
-app.use("/rango-dias", rango_diasRouter);
-app.use('/mes/cumplimiento', cumplimientoMesRouter);
-app.use('/semana/cumplimiento', cumplimientoSemanaRouter);
-app.use('/import', importRouter);
-app.use('/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
-app.use('/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
-app.use('/admin', adminVentasRouter);
+app.use("/api/barrio", barrioRouter);
+app.use("/api/canale", canalRouter);
+app.use("/api/categoria", categoriaRouter);
+app.use("/api/ciudad", ciudadRouter);
+app.use("/api/cliente", clienteRouter);
+app.use("/api/cuota-dia", cuotaDiaRouter);
+app.use("/api/cuota-categoria", cuotaCategoriaRouter);
+app.use("/api/cuota-categoria-import", cuotaCategoriaImportRouter);
+app.use("/api/cuota-mes", cuotaMesRouter);
+app.use("/api/cuota-semana", cuotaSemanaRouter);
+app.use("/api/cuota-proveedor", cuotaProveedorRouter);
+app.use("/api/detalle_venta", detalle_ventaRouter);
+app.use("/api/items", itemRouter);
+app.use("/api/megacategoria", megacategoriaRouter);
+app.use("/api/obsequio", obsequioRouter);
+app.use("/api/proveedor", proveedorRouter);
+app.use("/api/roles", rolRouter);
+app.use("/api/subcanale", subcanalRouter);
+app.use("/api/subcategoria", subcategoriaRouter);
+app.use("/api/tipos_documento", tipo_documentoRouter);
+app.use("/api/tipos_negocio", tipo_negocioRouter);
+app.use("/api/usuario", usuarioRouter);
+app.use("/api/vendedor", vendedorRouter);
+app.use("/api/venta", ventaRouter);
+app.use("/api/rango-dias", rango_diasRouter);
+app.use('/api/mes/cumplimiento', cumplimientoMesRouter);
+app.use('/api/semana/cumplimiento', cumplimientoSemanaRouter);
+app.use('/api/dia/cumplimiento', cumplimientoDiaRouter);
+app.use('/api/import', importRouter);
+app.use('/api/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
+app.use('/api/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
+app.use('/api/admin', adminVentasRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
 
