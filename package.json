@@ -2,7 +2,8 @@
   "name": "sigc-dd-api",
   "version": "1.0.0",
   "description": "API Sistema Integral de Gestión Comercial - Dulces y Dulces",
-  "private": true,
+  "license": "MIT",
+  "private": false,
   "config": {
     "version_name": "Chocobreak"
   },
