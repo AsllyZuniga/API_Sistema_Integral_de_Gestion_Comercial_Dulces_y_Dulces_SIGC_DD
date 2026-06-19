@@ -6,7 +6,7 @@
 [![Express](https://img.shields.io/badge/Express-4.x-lightgrey?logo=express)](https://expressjs.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)](https://www.postgresql.org)
 [![Sequelize](https://img.shields.io/badge/Sequelize-6.x-52b0e7?logo=sequelize)](https://sequelize.org)
-[![License](https://img.shields.io/badge/license-Private-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
 
