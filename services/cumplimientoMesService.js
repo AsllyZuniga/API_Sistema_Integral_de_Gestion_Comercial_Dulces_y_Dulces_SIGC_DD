@@ -1155,17 +1155,18 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}) => {
     const whereCondition = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
 
     // Query para obtener ventas por ciudad (de todos los vendedores)
+    // Usa id_ciudad_original de detalle_venta para mantener la ciudad al momento
+    // de la importación (igual que el archivo TXT del ERP)
     const queryVentas = `
         SELECT
-            COALESCE(c.id_ciudad, 0) AS id_ciudad,
+            COALESCE(dv.id_ciudad_original, 0) AS id_ciudad,
             COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
             SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
         FROM venta v
         LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-        LEFT JOIN ciudad ci ON ci.id_ciudad = c.id_ciudad
+        LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
         ${whereCondition}
-        GROUP BY COALESCE(c.id_ciudad, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+        GROUP BY COALESCE(dv.id_ciudad_original, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
         ORDER BY venta DESC
     `;
 

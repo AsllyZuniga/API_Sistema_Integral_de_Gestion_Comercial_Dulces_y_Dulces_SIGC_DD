@@ -284,7 +284,8 @@ class ImportadorVentas {
                 precio_unitario: this.normalizarValor(fila['Costo promedio total']),
                 costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
                 descuento: this.normalizarValor(fila['Valor descuentos']),
-                subtotal: this.normalizarValor(fila['Valor subtotal'])
+                subtotal: this.normalizarValor(fila['Valor subtotal']),
+                id_ciudad_original: ciudad.id_ciudad
             });
 
             return true;
