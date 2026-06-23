@@ -22,12 +22,10 @@ GET /vendedor/con-items-comprados
 |-----------|------|-------------------|--------|-------------|
 | `vendedoresPage` | `integer` | `1` | - | Página de vendedores |
 | `vendedoresLimit` | `integer` | `10` | `100` | Items por página de vendedores |
-| `clientesPage` | `integer` | `1` | - | Página de clientes por vendedor |
-| `clientesLimit` | `integer` | `5` | `50` | Items por página de clientes |
 | `fechaInicio` | `string (YYYY-MM-DD)` | - | - | Fecha inicial para filtrar ventas |
 | `fechaFin` | `string (YYYY-MM-DD)` | - | - | Fecha final para filtrar ventas |
 
-> **Nota**: Los items por cliente **no se paginan**. Se devuelven todos los items comprados dentro del rango de fechas.
+> **Nota**: Solo se pagina el nivel de **VENDEDORES**. Los clientes (de cada vendedor) e items (de cada cliente) se devuelven completos, sin paginación.
 
 ## 📥 Ejemplos de Llamadas
 
@@ -43,21 +41,21 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados?fechaInicio=2026
 
 ### Ejemplo 1B: Supervisor (solo vendedores asignados)
 ```bash
-curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=10&clientesLimit=5" \
+curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=10" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 > El token del supervisor hace que el endpoint devuelva automáticamente solo sus vendedores asignados. No requiere endpoint separado.
 
 ### Ejemplo 1C: Vendedor (solo sus clientes)
 ```bash
-curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=1&clientesLimit=10" \
+curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=1" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 > El token del vendedor hace que el endpoint devuelva solo el registro de ese vendedor con los clientes que él atendió y los items que esos clientes le compraron. No requiere endpoint separado.
 
 ### Ejemplo 2: Con Paginación Personalizada
 ```bash
-curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=5&clientesPage=1&clientesLimit=3"
+curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=5"
 ```
 
 ### Ejemplo 3: Segunda página de vendedores
@@ -129,22 +127,14 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados" \
             "totalItems": 1
           }
         ],
-        "paginacionClientes": {
-          "page": 1,
-          "limit": 5,
-          "total": 45
-        }
+        "totalClientes": 2
       },
       {
         "id_vendedor": 2,
         "codigo_vendedor": "VEN-002",
         "nombre": "María García",
         "clientes": [],
-        "paginacionClientes": {
-          "page": 1,
-          "limit": 5,
-          "total": 0
-        }
+        "totalClientes": 0
       }
     ],
     "paginacionVendedores": {
@@ -165,8 +155,8 @@ vendedores[]
 ├── id_vendedor: número
 ├── codigo_vendedor: string
 ├── nombre: string
-├── clientes[]: array de clientes
-└── paginacionClientes: objeto de paginación
+├── clientes[]: array de clientes (sin paginación, se devuelven todos)
+└── totalClientes: número (cantidad de clientes en el array)
 ```
 
 ### Nivel 2: Clientes (dentro de cada vendedor)
@@ -235,54 +225,76 @@ paginacion*
 }
 ```
 
-## 🔄 Flujo de Carga Diferida (Lazy Loading)
+## 🔄 Flujo de Carga
 
-El endpoint funciona con **dos niveles de paginación** y los items se devuelven completos:
+El endpoint pagina **solo el nivel de VENDEDORES**. Los clientes (por vendedor) e items (por cliente) se devuelven completos:
 
 1. **Vendedores**: Se traen paginados según `vendedoresPage` y `vendedoresLimit`
-2. **Clientes**: Para cada vendedor, se traen sus clientes paginados según `clientesPage` y `clientesLimit`
-3. **Items**: Para cada cliente, se traen **todos** los items comprados (sin paginación)
+2. **Clientes**: Para cada vendedor, se traen **TODOS** sus clientes (sin paginación)
+3. **Items**: Para cada cliente, se traen **TODOS** los items comprados (sin paginación)
 
 ### Ventajas de este Enfoque
 
-✅ **Optimizado para BD**: No carga todos los vendedores/clientes de una vez  
-✅ **Lazy Loading**: Cada nivel se carga por separado  
+✅ **Paginación simple**: Solo se pagina el primer nivel  
 ✅ **Items completos**: Sin truncar el historial de compras del cliente  
-✅ **Escalable**: Funciona con miles de vendedores/clientes  
+✅ **Clientes completos**: Sin truncar la lista de clientes del vendedor  
 ✅ **Información Útil**: `totalCompras` y `veces` dan contexto de compras  
 
 ## 💡 Casos de Uso
 
 ### 1. Dashboard Principal - Ver Resumen
 ```bash
-# Primer vendedor, 3 clientes
-GET /vendedor/con-items-comprados?vendedoresLimit=1&clientesLimit=3
+# Primer vendedor
+GET /vendedor/con-items-comprados?vendedoresLimit=1
 ```
 
-### 2. Explorar Clientes de un Vendedor (Frontend hace este llamado)
+### 2. Ver Segunda Página de Vendedores
 ```bash
-# Mantener vendedor fijo, cargar más clientes
-GET /vendedor/con-items-comprados?vendedoresLimit=1&clientesPage=2&clientesLimit=10
+# Vendedores 11-20 (cada uno con todos sus clientes e items)
+GET /vendedor/con-items-comprados?vendedoresPage=2&vendedoresLimit=10
 ```
 
-### 3. Ver Historial Completo de Compras de un Cliente
+### 3. Ver Historial Completo de un Vendedor
 ```bash
-# Los items se devuelven completos para cada cliente, sin paginación
-GET /vendedor/con-items-comprados?vendedoresLimit=1&clientesLimit=1
+# 1 vendedor específico con todos sus clientes e items
+GET /vendedor/con-items-comprados?vendedoresLimit=1
 ```
 
 ### 4. Reporte de Todos los Vendedores
 ```bash
-# Traer todos los vendedores con paginación
-GET /vendedor/con-items-comprados?vendedoresLimit=100&clientesLimit=10
+# Hasta 100 vendedores por página
+GET /vendedor/con-items-comprados?vendedoresLimit=100
 ```
 
 ## 🎯 Recomendaciones
 
-- **Inicialmente**: Usar valores pequeños (`vendedoresLimit=10, clientesLimit=5`) para no sobrecargar
-- **Items**: Se devuelven completos por cliente (sin paginación). Si un cliente tiene 500 items, se traen los 500
-- **Frontend**: Implementar lazy loading - al hacer scroll en el árbol, incrementar `Page` de vendedores/clientes
-- **Monitoreo**: Medir tiempos de respuesta para ajustar límites según rendimiento
+- **Vendedores**: Paginar con `vendedoresPage` y `vendedoresLimit` (default 10, max 100). **Solo aplica a admin y supervisor**
+- **Vendedor (rol 3)**: no se pagina (siempre devuelve 1 único vendedor)
+- **Clientes**: Se devuelven completos por cada vendedor. Si un vendedor tiene 500 clientes, se traen los 500
+- **Items**: Se devuelven completos por cada cliente. Si un cliente tiene 500 items, se traen los 500
+- **Frontend**: Al hacer scroll en la lista de vendedores, incrementar `vendedoresPage` (botón "Cargar más vendedores")
+- **Monitoreo**: Medir tiempos de respuesta; si un vendedor tiene muchos clientes, la respuesta puede ser pesada
+
+## 📅 Filtrado por Fechas (a partir de v1.4.0)
+
+Cuando se envían `fechaInicio` y/o `fechaFin`, el endpoint **excluye** automáticamente:
+
+- ❌ Vendedores que NO tienen ventas en el rango seleccionado
+- ❌ Clientes que NO compraron en el rango (aunque históricamente hayan comprado)
+- ✅ Items que SÍ fueron comprados dentro del rango
+
+### Comportamiento según fechas
+
+| Escenario | Resultado |
+|---|---|
+| Con `fechaInicio` y `fechaFin` | Solo aparecen vendedores, clientes e items con actividad en el rango |
+| Con solo `fechaInicio` | Solo desde esa fecha en adelante |
+| Con solo `fechaFin` | Solo hasta esa fecha |
+| **Sin fechas** | Mantiene el comportamiento v1.3.0: aparecen vendedores y clientes históricos con `totalCompras: 0` e `items: []` si no tuvieron ventas en el rango |
+
+### Respaldo del comportamiento anterior
+
+Una copia del comportamiento previo a este cambio está guardada en `/impactos/` (no se monta en el router, solo referencia documental). Ver `impactos/README.md`.
 
 ## 🔒 Notas de Seguridad
 
@@ -293,6 +305,19 @@ GET /vendedor/con-items-comprados?vendedoresLimit=100&clientesLimit=10
 - Los resultados visibles dependen de los permisos del usuario autenticado. No es necesario agregar middleware adicional.
 
 ## 📝 Changelog
+
+### v1.4.0
+- **Filtrado estricto por fechas**: cuando se envían `fechaInicio`/`fechaFin`, el endpoint ahora excluye:
+  - Vendedores sin ventas en el rango (no aparecen)
+  - Clientes sin compras en el rango (no aparecen)
+- Si NO se envían fechas, el endpoint mantiene el comportamiento v1.3.0 (compatibilidad hacia atrás)
+- Agregado pre-filtrado de IDs de vendedores con ventas en el rango (1 query extra `GROUP BY id_vendedor` en `venta`)
+- Respaldo del comportamiento anterior guardado en `/impactos/` (no se monta en el router)
+
+### v1.3.0
+- **Eliminada paginación de clientes**: se devuelven todos los clientes de cada vendedor, sin `clientesPage`/`clientesLimit`
+- Solo se pagina el nivel de VENDEDORES
+- `paginacionClientes` reemplazado por `totalClientes` en la respuesta
 
 ### v1.2.0
 - **Eliminada paginación de items**: los items se devuelven completos por cliente, sin `itemsPage`/`itemsLimit`
