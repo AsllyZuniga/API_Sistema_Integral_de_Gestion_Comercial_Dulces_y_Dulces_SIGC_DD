@@ -147,6 +147,18 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
 };
 
 const buildVendedorFilter = (filters = {}, replacements = {}) => {
+    const lista = Array.isArray(filters.vendedores) && filters.vendedores.length > 0
+        ? filters.vendedores.map(v => String(v).trim()).filter(Boolean)
+        : null;
+
+    if (lista) {
+        lista.forEach((v, i) => {
+            replacements[`vendedorList${i}`] = v;
+        });
+        const placeholders = lista.map((_, i) => `:vendedorList${i}`).join(',');
+        return `AND vd.codigo_vendedor IN (${placeholders})`;
+    }
+
     if (!filters.vendedor) return '';
 
     replacements.vendedor = String(filters.vendedor);
@@ -581,8 +593,156 @@ const getCumplimientoMesFront = async (filters = {}) => {
         type: QueryTypes.SELECT
     });
 
+    // Query 2: Ventas agrupadas por vendedor + proveedor + categoría
+    const detalleReplacements = { ...replacements };
+    const detalleDetConditions = [];
+    if (normalizedFilters.categorias && normalizedFilters.categorias.length > 0) {
+        const placeholders = normalizedFilters.categorias.map((_, i) => `:detCat${i}`).join(',');
+        detalleDetConditions.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        normalizedFilters.categorias.forEach((cat, i) => { detalleReplacements[`detCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            detalleDetConditions.push('CAST(it.id_categoria AS TEXT) = :detCategoria');
+            detalleReplacements.detCategoria = String(categoriaId);
+        }
+    }
+    if (proveedoresFront) {
+        detalleDetConditions.push(`(${buildProveedorCondition(proveedoresFront, detalleReplacements, 'dv')})`);
+    }
+    const detalleDetWhere = detalleDetConditions.length > 0 ? `AND ${detalleDetConditions.join(' AND ')}` : '';
+
+    const queryDetalle = `
+        SELECT
+            vd.codigo_vendedor,
+            TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1)) AS codigo_proveedor,
+            COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')) AS nombre_proveedor,
+            it.id_categoria,
+            cat.nombre AS nombre_categoria,
+            SUM(
+                CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
+                THEN -ABS(COALESCE(dv.subtotal, 0))
+                ELSE COALESCE(dv.subtotal, 0)
+                END
+            ) AS venta
+        FROM venta v
+        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        JOIN item it ON it.id_item = dv.id_item
+        LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
+        LEFT JOIN categoria cat ON cat.id_categoria = it.id_categoria
+        WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin
+          ${detalleDetWhere}
+        GROUP BY vd.codigo_vendedor, codigo_proveedor, nombre_proveedor, it.id_categoria, cat.nombre
+        ORDER BY vd.codigo_vendedor, nombre_proveedor, cat.nombre
+    `;
+
+    const detalleRows = await sequelize.query(queryDetalle, {
+        replacements: detalleReplacements,
+        type: QueryTypes.SELECT
+    });
+
+    // Query 3: Cuotas por proveedor asignadas al vendedor
+    const cuotaReplacements = { ...replacements };
+    const queryCuotasProv = `
+        SELECT
+            vd.codigo_vendedor,
+            vcp.id_proveedor,
+            cp.cuota AS cuota_proveedor,
+            TRIM(COALESCE(pr.nombre, '')) AS nombre_proveedor,
+            TRIM(COALESCE(pr.codigo, '')) AS codigo_proveedor
+        FROM "vendedorCuotaProveedor" vcp
+        JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+        JOIN vendedor vd ON vd.id_vendedor = vcp.id_vendedor
+        LEFT JOIN proveedor pr ON pr.id_proveedor = vcp.id_proveedor
+        WHERE vcp.estado = true
+          AND cp.fecha_inicio <= :cuotaFechaFin
+          AND cp.fecha_fin >= :cuotaFechaInicio
+    `;
+    const cuotasProvRows = await sequelize.query(queryCuotasProv, {
+        replacements: cuotaReplacements,
+        type: QueryTypes.SELECT
+    });
+
+    // Agrupar detalle por vendedor
+    const detallePorVendedorMap = new Map();
+    detalleRows.forEach((r) => {
+        const codVend = r.codigo_vendedor;
+        if (!detallePorVendedorMap.has(codVend)) {
+            detallePorVendedorMap.set(codVend, new Map());
+        }
+        const provMap = detallePorVendedorMap.get(codVend);
+        const provKey = r.codigo_proveedor || r.nombre_proveedor;
+        if (!provMap.has(provKey)) {
+            provMap.set(provKey, {
+                codigoProveedor: r.codigo_proveedor,
+                nombreProveedor: r.nombre_proveedor,
+                ventaAcum: 0,
+                categorias: new Map()
+            });
+        }
+        const prov = provMap.get(provKey);
+        prov.ventaAcum = round(toNumber(prov.ventaAcum) + toNumber(r.venta), 2);
+        if (r.id_categoria) {
+            const catKey = r.id_categoria;
+            if (!prov.categorias.has(catKey)) {
+                prov.categorias.set(catKey, {
+                    idCategoria: r.id_categoria,
+                    categoria: r.nombre_categoria,
+                    ventaAcum: 0
+                });
+            }
+            const cat = prov.categorias.get(catKey);
+            cat.ventaAcum = round(toNumber(cat.ventaAcum) + toNumber(r.venta), 2);
+        }
+    });
+
+    // Agrupar cuotas por vendedor
+    const cuotasPorVendedorMap = new Map();
+    cuotasProvRows.forEach((r) => {
+        const codVend = r.codigo_vendedor;
+        if (!cuotasPorVendedorMap.has(codVend)) {
+            cuotasPorVendedorMap.set(codVend, new Map());
+        }
+        const provMap = cuotasPorVendedorMap.get(codVend);
+        const provKey = r.codigo_proveedor || r.nombre_proveedor;
+        provMap.set(provKey, {
+            idProveedor: r.id_proveedor,
+            nombreProveedor: r.nombre_proveedor,
+            cuotaProveedor: toNumber(r.cuota_proveedor)
+        });
+    });
+
     const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
     const detalle = enrichCumplimiento(rows, diasCorridos, diasHabiles);
+
+    // Enriquecer cada vendedor con su detallePorProveedor
+    detalle.forEach((v) => {
+        const codVend = v.codVendedor || v.cod;
+        const provMap = detallePorVendedorMap.get(codVend) || new Map();
+        const cuotaMap = cuotasPorVendedorMap.get(codVend) || new Map();
+
+        // Solo incluir proveedores/categorías con ventas reales
+        const allProvKeys = new Set([...provMap.keys(), ...cuotaMap.keys()]);
+        const detallePorProveedor = Array.from(allProvKeys).map((key) => {
+            const prov = provMap.get(key);
+            const cuota = cuotaMap.get(key);
+            const ventaAcum = prov ? prov.ventaAcum : 0;
+            const cuotaProveedor = cuota ? cuota.cuotaProveedor : 0;
+            const porcCump = cuotaProveedor > 0 ? round((ventaAcum / cuotaProveedor) * 100, 2) : 0;
+            const categorias = prov ? Array.from(prov.categorias.values()).filter(c => c.ventaAcum > 0) : [];
+            return {
+                codigoProveedor: (prov?.codigoProveedor || cuota?.nombreProveedor || '').trim() || null,
+                nombreProveedor: prov?.nombreProveedor || cuota?.nombreProveedor || 'SIN PROVEEDOR',
+                cuotaProveedor,
+                ventaAcum,
+                porcCump,
+                categorias
+            };
+        }).filter(p => p.ventaAcum > 0).sort((a, b) => b.ventaAcum - a.ventaAcum);
+
+        v.detallePorProveedor = detallePorProveedor;
+    });
 
     return {
         periodo: {
