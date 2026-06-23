@@ -147,6 +147,18 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
 };
 
 const buildVendedorFilter = (filters = {}, replacements = {}) => {
+    const lista = Array.isArray(filters.vendedores) && filters.vendedores.length > 0
+        ? filters.vendedores.map(v => String(v).trim()).filter(Boolean)
+        : null;
+
+    if (lista) {
+        lista.forEach((v, i) => {
+            replacements[`vendedorList${i}`] = v;
+        });
+        const placeholders = lista.map((_, i) => `:vendedorList${i}`).join(',');
+        return `AND vd.codigo_vendedor IN (${placeholders})`;
+    }
+
     if (!filters.vendedor) return '';
 
     replacements.vendedor = String(filters.vendedor);
