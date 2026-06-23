@@ -36,19 +36,19 @@ Agrega en la pestaña **Params**:
 | vendedoresLimit | 10 | Cuántos vendedores por página |
 | clientesPage | 1 | Página de clientes por vendedor |
 | clientesLimit | 5 | Cuántos clientes por vendedor |
-| itemsPage | 1 | Página de items por cliente |
-| itemsLimit | 10 | Cuántos items por cliente |
+
+> **Nota**: Los items ya no se paginan. Se devuelven todos los items por cliente.
 
 ## 3️⃣ Ejemplos Rápidos para Copiar-Pegar
 
 ### Opción A: URL Completa en el Navegador
 ```
-http://localhost:3000/vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=10&clientesPage=1&clientesLimit=5&itemsPage=1&itemsLimit=10
+http://localhost:3000/vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=10&clientesPage=1&clientesLimit=5
 ```
 
 ### Opción B: Curl (Terminal)
 ```bash
-curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=10&clientesLimit=5&itemsLimit=10"
+curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=10&clientesLimit=5"
 ```
 
 ### Opción C: Curl con Autenticación
@@ -75,13 +75,12 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados" \
 1. **Params**:
    - `vendedoresLimit` = `1`
    - `clientesLimit` = `3`
-   - `itemsLimit` = `5`
 2. Click **Send**
 
 **Esperado**: 
 - 1 vendedor
 - 3 clientes por vendedor
-- 5 items por cliente
+- Todos los items de cada cliente (sin límite)
 
 ---
 
@@ -101,12 +100,11 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados" \
 1. **Params**:
    - `vendedoresLimit` = `100`
    - `clientesLimit` = `20`
-   - `itemsLimit` = `50`
 2. Click **Send**
 
 **Esperado**: 
 - Todos los vendedores
-- Muchos clientes y items
+- Muchos clientes y sus items completos
 - Response más grande
 
 ---
@@ -201,7 +199,7 @@ Luego las usas así:
 ### Problema: "Response takes too long"
 **Causa**: Demasiados resultados o DB lenta  
 **Solución**: 
-- Reduce `vendedoresLimit`, `clientesLimit`, `itemsLimit`
+- Reduce `vendedoresLimit`, `clientesLimit`
 - Verifica que la BD esté respondiendo bien
 
 ### Problema: "Error al obtener vendedores..."

@@ -120,7 +120,8 @@ const getBySupervisor = async (id_supervisor) => {
 /**
  * Obtiene vendedores con clientes e items de forma optimizada
  * Soporta carga diferida (lazy loading) por nivel
- * @param {object} options - { vendedoresPage, vendedoresLimit, clientesPage, clientesLimit, itemsPage, itemsLimit, id_supervisor, fechaInicio, fechaFin }
+ * Los items NO se paginan: se devuelven todos los items por cliente.
+ * @param {object} options - { vendedoresPage, vendedoresLimit, clientesPage, clientesLimit, id_supervisor, id_vendedor, fechaInicio, fechaFin }
  */
 const getVendedoresConClientesItems = async (options = {}) => {
     const {
@@ -128,9 +129,8 @@ const getVendedoresConClientesItems = async (options = {}) => {
         vendedoresLimit = 10,
         clientesPage = 1,
         clientesLimit = 5,
-        itemsPage = 1,
-        itemsLimit = 10,
         id_supervisor = null,
+        id_vendedor = null,
         fechaInicio = null,
         fechaFin = null
     } = options;
@@ -155,47 +155,76 @@ const getVendedoresConClientesItems = async (options = {}) => {
 
     const offset = (vendedoresPage - 1) * vendedoresLimit;
 
+    const whereVendedor = {};
+    if (id_supervisor) whereVendedor.id_supervisor = id_supervisor;
+    if (id_vendedor) whereVendedor.id_vendedor = id_vendedor;
+
     // 1. Obtener vendedores paginados (sin las relaciones complejas aún)
     const { count: totalVendedores, rows: vendedores } = await vendedor_model.findAndCountAll({
-        where: id_supervisor ? { id_supervisor } : undefined,
+        where: Object.keys(whereVendedor).length ? whereVendedor : undefined,
         offset,
         limit: vendedoresLimit,
-        attributes: ['id_vendedor', 'codigo_vendedor', 'nombre']
+        attributes: ['id_vendedor', 'codigo_vendedor', 'nombre'],
+        order: [[Sequelize.fn('LOWER', Sequelize.col('nombre')), 'ASC']],
+        distinct: true
     });
 
     const vendedoresConClientes = [];
 
     // 2. Para cada vendedor, obtener clientes únicos asociados (con paginación)
     for (const vendedor of vendedores) {
+        // 2a. Obtener los clientes que tienen al menos una venta con este vendedor (sin filtro de fecha)
         const { count: totalClientesRaw, rows: clientesData } = await cliente_model.findAndCountAll({
             attributes: [
                 'id_cliente',
                 'nro_documento',
-                'razon_social',
-                [Sequelize.fn('COUNT', Sequelize.col('ventas.id_venta')), 'totalCompras']
+                'razon_social'
             ],
             include: [
                 {
                     model: venta_model,
                     as: 'ventas',
-                    where: {
-                        id_vendedor: vendedor.id_vendedor,
-                        ...fechaWhere
-                    },
+                    where: { id_vendedor: vendedor.id_vendedor },
                     attributes: [],
                     required: true
                 }
             ],
             group: ['cliente_model.id_cliente'],
             subQuery: false,
+            order: [[Sequelize.fn('LOWER', Sequelize.col('cliente_model.razon_social')), 'ASC']],
             offset: (clientesPage - 1) * clientesLimit,
             limit: clientesLimit,
-            raw: true
+            raw: true,
+            distinct: true
         });
 
-        const totalClientes = Array.isArray(totalClientesRaw) ? totalClientesRaw.length : totalClientesRaw;
+        const totalClientes = Array.isArray(totalClientesRaw)
+            ? totalClientesRaw.length
+            : (totalClientesRaw || 0);
         const clientesIds = clientesData.map((cliente) => cliente.id_cliente);
 
+        // 2b. Calcular totalCompras por cliente dentro del rango de fechas
+        const comprasMap = new Map();
+        if (clientesIds.length) {
+            const ventasEnRango = await venta_model.findAll({
+                attributes: [
+                    'id_cliente',
+                    [Sequelize.fn('COUNT', Sequelize.col('id_venta')), 'totalCompras']
+                ],
+                where: {
+                    id_vendedor: vendedor.id_vendedor,
+                    id_cliente: { [Sequelize.Op.in]: clientesIds },
+                    ...fechaWhere
+                },
+                group: ['id_cliente'],
+                raw: true
+            });
+            ventasEnRango.forEach(v => {
+                comprasMap.set(String(v.id_cliente), parseInt(v.totalCompras) || 0);
+            });
+        }
+
+        // 2c. Obtener los items comprados en el rango de fechas
         let itemsAgrupados = [];
 
         if (clientesIds.length) {
@@ -259,20 +288,14 @@ const getVendedoresConClientesItems = async (options = {}) => {
 
         const clientesConItems = clientesData.map((cliente) => {
             const itemsCliente = itemsPorCliente.get(String(cliente.id_cliente)) || [];
-            const startIndex = (itemsPage - 1) * itemsLimit;
-            const itemsPaginados = itemsCliente.slice(startIndex, startIndex + itemsLimit);
 
             return {
                 id_cliente: cliente.id_cliente,
                 nro_documento: cliente.nro_documento,
                 razon_social: cliente.razon_social,
-                totalCompras: parseInt(cliente.totalCompras),
-                items: itemsPaginados,
-                paginacionItems: {
-                    page: itemsPage,
-                    limit: itemsLimit,
-                    total: itemsCliente.length
-                }
+                totalCompras: comprasMap.get(String(cliente.id_cliente)) || 0,
+                items: itemsCliente,
+                totalItems: itemsCliente.length
             };
         });
 
