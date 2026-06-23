@@ -16,6 +16,26 @@ GET /vendedor/con-items-comprados
 > - **Supervisor (rol=2)**: devuelve solo los vendedores asignados al supervisor (donde `id_supervisor = idUsuario` del token).
 > - **Vendedor (rol=3)**: devuelve solo el vendedor autenticado (donde `id_vendedor = idVendedor` del token), con los clientes que él atendió y los items que esos clientes le compraron.
 
+## ⚠️ URL ÚNICA Y OBLIGATORIA
+
+**Esta es la ÚNICA URL válida para todos los roles**:
+
+```
+GET /api/vendedor/con-items-comprados
+```
+
+❌ **NO uses** la URL antigua `/api/vendedor/supervisor/con-items-comprados` (eliminado en v1.1.0, ahora retorna `410 Gone` con la URL correcta). Si tu frontend la usa, cámbiala a la URL única de arriba.
+
+### Respuesta del endpoint obsoleto (410 Gone)
+```json
+{
+  "success": false,
+  "message": "Esta ruta está obsoleta. Use GET /api/vendedor/con-items-comprados (detecta el rol automáticamente por token).",
+  "error": "ENDPOINT_OBSOLETO",
+  "urlCorrecta": "/api/vendedor/con-items-comprados"
+}
+```
+
 ## ⚙️ Parámetros de Query (Todos Opcionales)
 
 | Parámetro | Tipo | Valor por Defecto | Máximo | Descripción |
@@ -305,6 +325,11 @@ Una copia del comportamiento previo a este cambio está guardada en `/impactos/`
 - Los resultados visibles dependen de los permisos del usuario autenticado. No es necesario agregar middleware adicional.
 
 ## 📝 Changelog
+
+### v1.4.1
+- **Hotfix**: validación numérica en `getBySupervisor` (retorna 400 si no es entero positivo)
+- **Hotfix**: agregada ruta deprecated `/vendedor/supervisor/con-items-comprados` que retorna `410 Gone` con la URL correcta
+- Documentación: sección "URL ÚNICA Y OBLIGATORIA" para evitar confusión con la URL antigua
 
 ### v1.4.0
 - **Filtrado estricto por fechas**: cuando se envían `fechaInicio`/`fechaFin`, el endpoint ahora excluye:
