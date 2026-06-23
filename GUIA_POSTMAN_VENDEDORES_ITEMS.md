@@ -1,5 +1,15 @@
 # 📖 Guía Rápida: Testear Endpoint en Postman
 
+## ⚠️ URL ÚNICA
+
+**Esta es la única URL válida** (todos los roles: admin, supervisor, vendedor):
+
+```
+{{base_url}}/vendedor/con-items-comprados
+```
+
+❌ NO uses `/vendedor/supervisor/con-items-comprados` (eliminado en v1.1.0, retorna `410 Gone`).
+
 ## 1️⃣ Crear Nueva Solicitud en Postman
 
 1. **Abre Postman** (o usa la colección existente)
