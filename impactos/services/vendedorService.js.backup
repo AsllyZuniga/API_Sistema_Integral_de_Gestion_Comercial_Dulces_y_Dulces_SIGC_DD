@@ -154,50 +154,7 @@ const getVendedoresConClientesItems = async (options = {}) => {
 
     const whereVendedor = {};
     if (id_supervisor) whereVendedor.id_supervisor = id_supervisor;
-
-    // 0. Si hay filtro de fechas, pre-calcular IDs de vendedores con ventas en el rango.
-    // Esto excluye vendedores que NO tienen ninguna venta en el rango seleccionado.
-    let idsVendedoresConVentas = null;
-    if (fechaInicio || fechaFin) {
-        const vendedoresConVentas = await venta_model.findAll({
-            attributes: ['id_vendedor'],
-            where: { ...fechaWhere },
-            group: ['id_vendedor'],
-            raw: true
-        });
-        idsVendedoresConVentas = vendedoresConVentas.map(v => v.id_vendedor);
-
-        if (!idsVendedoresConVentas.length) {
-            return {
-                vendedores: [],
-                paginacionVendedores: {
-                    page: vendedoresPage,
-                    limit: vendedoresLimit,
-                    total: 0
-                }
-            };
-        }
-    }
-
-    // Combinar id_vendedor (filtro por token/rol) con el filtro de ventas en rango
-    if (id_vendedor && idsVendedoresConVentas !== null) {
-        // Intersección: el id_vendedor debe estar en la lista
-        if (!idsVendedoresConVentas.includes(id_vendedor)) {
-            return {
-                vendedores: [],
-                paginacionVendedores: {
-                    page: vendedoresPage,
-                    limit: vendedoresLimit,
-                    total: 0
-                }
-            };
-        }
-        whereVendedor.id_vendedor = id_vendedor;
-    } else if (id_vendedor) {
-        whereVendedor.id_vendedor = id_vendedor;
-    } else if (idsVendedoresConVentas !== null) {
-        whereVendedor.id_vendedor = { [Sequelize.Op.in]: idsVendedoresConVentas };
-    }
+    if (id_vendedor) whereVendedor.id_vendedor = id_vendedor;
 
     // 1. Obtener vendedores paginados (sin las relaciones complejas aún)
     const { count: totalVendedores, rows: vendedores } = await vendedor_model.findAndCountAll({
@@ -213,8 +170,7 @@ const getVendedoresConClientesItems = async (options = {}) => {
 
     // 2. Para cada vendedor, obtener clientes únicos asociados (con paginación)
     for (const vendedor of vendedores) {
-        // 2a. Obtener TODOS los clientes que tienen al menos una venta con este vendedor
-        //     dentro del rango de fechas seleccionado (sin paginación)
+        // 2a. Obtener TODOS los clientes que tienen al menos una venta con este vendedor (sin paginación)
         const clientesData = await cliente_model.findAll({
             attributes: [
                 'id_cliente',
@@ -225,10 +181,7 @@ const getVendedoresConClientesItems = async (options = {}) => {
                 {
                     model: venta_model,
                     as: 'ventas',
-                    where: {
-                        id_vendedor: vendedor.id_vendedor,
-                        ...fechaWhere
-                    },
+                    where: { id_vendedor: vendedor.id_vendedor },
                     attributes: [],
                     required: true
                 }

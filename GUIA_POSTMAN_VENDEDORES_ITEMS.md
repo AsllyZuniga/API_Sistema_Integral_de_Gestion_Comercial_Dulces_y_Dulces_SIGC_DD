@@ -32,23 +32,26 @@ Agrega en la pestaña **Params**:
 
 | Key | Value | Descripción |
 |-----|-------|-------------|
-| vendedoresPage | 1 | Página de vendedores |
-| vendedoresLimit | 10 | Cuántos vendedores por página |
-| clientesPage | 1 | Página de clientes por vendedor |
-| clientesLimit | 5 | Cuántos clientes por vendedor |
+| vendedoresPage | 1 | Página de vendedores (solo admin/supervisor) |
+| vendedoresLimit | 10 | Cuántos vendedores por página (max 100) |
+| fechaInicio | 2026-01-01 | (Opcional) Fecha inicio del rango |
+| fechaFin | 2026-01-31 | (Opcional) Fecha fin del rango |
 
-> **Nota**: Los items ya no se paginan. Se devuelven todos los items por cliente.
+> **Notas**:
+> - Solo se pagina el nivel de VENDEDORES. Los clientes (por vendedor) e items (por cliente) se devuelven completos.
+> - Para el rol **VENDEDOR**, la paginación no aplica (siempre devuelve 1 único vendedor).
+> - Con fechas, **se excluyen** los vendedores/clientes sin actividad en el rango. Sin fechas, mantiene el comportamiento v1.3.0.
 
 ## 3️⃣ Ejemplos Rápidos para Copiar-Pegar
 
 ### Opción A: URL Completa en el Navegador
 ```
-http://localhost:3000/vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=10&clientesPage=1&clientesLimit=5
+http://localhost:3000/vendedor/con-items-comprados?vendedoresPage=1&vendedoresLimit=10
 ```
 
 ### Opción B: Curl (Terminal)
 ```bash
-curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=10&clientesLimit=5"
+curl -X GET "http://localhost:3000/vendedor/con-items-comprados?vendedoresLimit=10"
 ```
 
 ### Opción C: Curl con Autenticación
@@ -74,12 +77,11 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados" \
 ### Test 2: Pocos Resultados (Dashboard)
 1. **Params**:
    - `vendedoresLimit` = `1`
-   - `clientesLimit` = `3`
 2. Click **Send**
 
 **Esperado**: 
 - 1 vendedor
-- 3 clientes por vendedor
+- Todos sus clientes (sin límite)
 - Todos los items de cada cliente (sin límite)
 
 ---
@@ -92,6 +94,7 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados" \
 
 **Esperado**: 
 - Vendedores en posición 11-20
+- Cada uno con todos sus clientes e items
 - Paginación muestra `page: 2`
 
 ---
@@ -99,13 +102,41 @@ curl -X GET "http://localhost:3000/vendedor/con-items-comprados" \
 ### Test 4: Reporte Completo (todos los vendedores)
 1. **Params**:
    - `vendedoresLimit` = `100`
-   - `clientesLimit` = `20`
 2. Click **Send**
 
 **Esperado**: 
-- Todos los vendedores
-- Muchos clientes y sus items completos
-- Response más grande
+- Hasta 100 vendedores
+- Cada uno con todos sus clientes e items completos
+- Response puede ser muy grande
+
+---
+
+### Test 5: Filtrar por Rango de Fechas (v1.4.0+)
+1. **Params**:
+   - `vendedoresLimit` = `20`
+   - `fechaInicio` = `2026-01-01`
+   - `fechaFin` = `2026-01-31`
+2. Click **Send**
+
+**Esperado**: 
+- Solo vendedores que tuvieron ventas en enero 2026
+- Solo clientes que compraron en enero 2026
+- Solo items comprados en enero 2026
+- Vendedores sin actividad en el rango NO aparecen
+
+---
+
+### Test 6: Vendedor (rol 3) - Solo sus datos
+1. **Params**:
+   - `fechaInicio` = `2026-01-01`
+   - `fechaFin` = `2026-01-31`
+2. Click **Send** con token de un vendedor
+
+**Esperado**: 
+- Solo 1 vendedor (el autenticado)
+- Solo sus clientes con compras en el rango
+- Solo sus items en el rango
+- Paginación no aplica
 
 ---
 
@@ -199,7 +230,7 @@ Luego las usas así:
 ### Problema: "Response takes too long"
 **Causa**: Demasiados resultados o DB lenta  
 **Solución**: 
-- Reduce `vendedoresLimit`, `clientesLimit`
+- Reduce `vendedoresLimit` (los clientes e items ya no se pueden reducir)
 - Verifica que la BD esté respondiendo bien
 
 ### Problema: "Error al obtener vendedores..."
