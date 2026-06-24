@@ -1,6 +1,6 @@
 # SIGC DD API — Sistema Integral de Gestión Comercial
 
-> **Dulces y Dulces S.A.** · Commercial Management REST API · `v1.0.0` (Stable)
+> **Dulces y Dulces S.A.** · Commercial Management REST API · `v1.0.0` (Stable) · `Chocobreak`
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green?logo=node.js)](https://nodejs.org)
 [![Express](https://img.shields.io/badge/Express-4.x-lightgrey?logo=express)](https://expressjs.com)
@@ -15,16 +15,20 @@
 1. [Overview](#overview)
 2. [Tech Stack](#tech-stack)
 3. [Architecture](#architecture)
-4. [Functional Modules](#functional-modules)
+4. [Documentation Structure](#documentation-structure)
+5. [Functional Modules](#functional-modules)
    - [Security & Authentication](#security--authentication)
    - [Commercial Masters](#commercial-masters)
    - [Business Entities](#business-entities)
    - [Quotas & Compliance Engine](#quotas--compliance-engine)
-5. [Optimized Import System](#optimized-import-system)
-6. [API Endpoints Reference](#api-endpoints-reference)
-7. [Developer Guide](#developer-guide)
-8. [Operational Scripts](#operational-scripts)
-9. [Performance](#performance)
+   - [Sales Reports](#sales-reports)
+   - [Import Engine](#import-engine)
+   - [Export Engine](#export-engine)
+6. [Optimized Import System](#optimized-import-system)
+7. [API Endpoints Reference](#api-endpoints-reference)
+8. [Developer Guide](#developer-guide)
+9. [Operational Scripts](#operational-scripts)
+10. [Performance](#performance)
 
 ---
 
@@ -34,12 +38,14 @@ The **SIGC DD API** is a high-performance RESTful backend designed for the compl
 
 Key capabilities:
 
-- Full CRUD management of 25+ commercial entities.
+- Full CRUD management of **30+ commercial entities** (35 controllers).
 - Hierarchical product catalogue (Mega-category → Category → Sub-category → Item).
 - Geographic structure (City → Neighborhood) linked to clients and sales channels.
-- Sales-force quota engine at daily, weekly, and monthly granularity.
+- Sales-force quota engine at daily, weekly, and monthly granularity, plus per-category and per-provider targets.
+- Role-based compliance reports (admin / supervisor / vendor) with JWT authentication.
 - Batch import of **millions of sales records** in a single operation with real-time progress tracking.
-- bcrypt-secured user authentication with role-based access control.
+- bcrypt-secured user authentication with role-based access control (3 default roles: admin, supervisor, vendor).
+- Item sales reporting with role-aware filtering (`/api/items-vendidos`).
 
 ---
 
@@ -51,12 +57,17 @@ Key capabilities:
 | Web Framework | Express | 4.22.x |
 | ORM | Sequelize | 6.37.x |
 | Database | PostgreSQL (NeonDB / self-hosted) | 16 |
-| Authentication | bcryptjs | 3.x |
+| Authentication | jsonwebtoken + bcryptjs | 9.x / 3.x |
 | File Upload | Multer | 2.x |
 | Environment | dotenv | 16.x |
 | Template Engine | EJS | 4.x |
 | HTTP Logging | Morgan | 1.x |
 | CORS | cors | 2.x |
+| CSV / TSV Parsing | csv-parse | 6.x |
+| Date / Holidays | date-holidays | 3.x |
+| Charset Conversion | iconv-lite | 0.7.x |
+| Dev tool | nodemon | (dev) |
+| Migrations | sequelize-cli + sequelize-auto | (dev) |
 
 ---
 
@@ -66,18 +77,46 @@ Key capabilities:
 SIGC DD API
 ├── bin/www                  # HTTP server bootstrap (PORT env var, default 3000)
 ├── app.js                   # Express app — middleware, routes, error handlers
+├── package.json             # Dependencies and scripts (npm start / npm run dev)
 ├── config/
-│   └── config.example.json  # Database connection template (development/test/production)
+│   ├── config.example.json  # Database connection template
+│   └── config.json          # Active database configuration (gitignored)
 ├── models/                  # Sequelize model definitions + relationship index
-├── controllers/             # Request/response handlers (26 controllers)
-├── services/                # Business logic, import engine (20+ services)
-├── routes/                  # Express routers (27 route files)
+├── controllers/             # Request/response handlers (35 controllers)
+├── services/                # Business logic + import engine (40 services)
+├── routes/                  # Express routers (36 route files)
+├── middlewares/             # JWT authentication and authorization
 ├── migrations/              # Sequelize schema migrations
-├── scripts/                 # CLI operational utilities
+├── scripts/                 # Operational CLI utilities (production + import)
+├── docs/                    # Mantenible project documentation
+│   ├── endpoints/
+│   ├── postman/
+│   ├── importador/
+│   ├── configuracion/
+│   ├── reglas-de-negocio/
+│   └── fixes/               # One-shot fix/verify scripts (21 files)
+├── dev-notes/               # Historical notes, analyses and reports (19 files)
+├── postman/                 # Postman collections (exported JSON)
+├── impactos/                # Backups of pre-v1.4.0 vendedor code
 └── uploads/                 # Runtime directory for uploaded TSV files
 ```
 
 > The app is configured to accept payloads up to **6 GB** and request timeouts of **4 hours**, enabling handling of enterprise-scale import files.
+
+---
+
+## Documentation Structure
+
+The project documentation is split across three locations, each with a clear purpose:
+
+| Location | Purpose | Audience |
+|---|---|---|
+| [`README.md`](README.md) (root) | Project overview, stack, architecture, full endpoint reference, dev guide. | Everyone (entry point). |
+| [`docs/`](docs/README.md) | Mantenible, theme-organized technical documentation (endpoints, postman guides, importador, configuración, reglas de negocio). | Developers and integrators. |
+| [`dev-notes/`](dev-notes/README.md) | Historical notes, one-time analyses, fix guides, executive summaries, and reports. | Maintainers needing context. |
+| [`docs/fixes/`](docs/fixes/) | One-shot fix/verify scripts and diagnostic utilities (reubicados desde `scripts/`). | Operators on incident response. |
+
+**Convention:** when a document in `dev-notes/` becomes active, maintainable documentation, it should be moved to the appropriate `docs/` subdirectory.
 
 ---
 
@@ -87,7 +126,7 @@ SIGC DD API
 
 **Base route:** `/api/auth`
 
-Authentication is credential-based (vendor code + password). Passwords are stored as **bcrypt** hashes (10 salt rounds). Plain-text passwords are transparently migrated to bcrypt on first successful login.
+Authentication is credential-based (vendor code / username + password). Passwords are stored as **bcrypt** hashes (10 salt rounds). Plain-text passwords are transparently migrated to bcrypt on first successful login. JWT tokens are signed with `JWT_SECRET` and must be sent as `Authorization: Bearer <token>`.
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -95,9 +134,9 @@ Authentication is credential-based (vendor code + password). Passwords are store
 | `/api/auth/register` | `POST` | Register a new user account linked to an existing vendor record. |
 | `/api/auth/register/bulk` | `POST` | Batch-register multiple users in a single request. |
 
-**User model fields:** `id_usuario`, `username`, `password` (bcrypt), `estado` (active/inactive), `id_rol` (FK → `roles`).
+**Roles:** admin (1), supervisor (2), vendor (3). Default role resolves to `Vendedor` (3) if no `id_rol` is supplied.
 
-**Roles model:** Flexible role system. Default role resolves to `Vendedor` if no `id_rol` is supplied.
+**User model fields:** `id_usuario`, `username`, `password` (bcrypt), `estado` (active/inactive), `id_rol` (FK → `roles`).
 
 ---
 
@@ -107,7 +146,7 @@ Masters are the reference data that support transactions. All masters expose sta
 
 #### Providers
 
-**Route:** `/proveedore`
+**Route:** `/api/proveedor`
 
 Suppliers linked to items in the product catalogue.
 
@@ -115,29 +154,29 @@ Suppliers linked to items in the product catalogue.
 
 | Route | Entity | Description |
 |---|---|---|
-| `/megacategoria` | `megacategoria` | Top-level product grouping |
-| `/categoria` | `categoria` | Mid-level category (belongs to megacategoria) |
-| `/subcategoria` | `subcategoria` | Leaf-level classification (belongs to categoria) |
+| `/api/megacategoria` | `megacategoria` | Top-level product grouping |
+| `/api/categoria` | `categoria` | Mid-level category (belongs to megacategoria) |
+| `/api/subcategoria` | `subcategoria` | Leaf-level classification (belongs to categoria) |
 
 #### Sales Channels
 
 | Route | Entity | Description |
 |---|---|---|
-| `/canale` | `canal` | Main sales channel |
-| `/subcanale` | `subcanal` | Sub-channel (belongs to canal) |
+| `/api/canale` | `canal` | Main sales channel |
+| `/api/subcanale` | `subcanal` | Sub-channel (belongs to canal) |
 
 #### Geography
 
 | Route | Entity | Description |
 |---|---|---|
-| `/ciudad` | `ciudad` | City master |
-| `/barrio` | `barrio` | Neighborhood (belongs to ciudad) |
+| `/api/ciudad` | `ciudad` | City master |
+| `/api/barrio` | `barrio` | Neighborhood (belongs to ciudad) |
 
 #### Sellers (Vendors)
 
-**Route:** `/vendedor`
+**Route:** `/api/vendedor`
 
-Sales representatives. Each vendor can be linked to a system user account and assigned quota records.
+Sales representatives. Each vendor can be linked to a system user account, assigned to a supervisor, and assigned quota records.
 
 | Field | Type | Description |
 |---|---|---|
@@ -145,6 +184,7 @@ Sales representatives. Each vendor can be linked to a system user account and as
 | `codigo_vendedor` | STRING | ERP vendor code |
 | `nombre` | STRING | Full name |
 | `id_usuario` | INTEGER FK | Linked user account |
+| `id_supervisor` | INTEGER FK | Supervisor (`usuario.id_usuario`) |
 | `id_cuotaDia` | INTEGER FK | Daily quota record |
 | `id_cuotaSemana` | INTEGER FK | Weekly quota record |
 | `id_cuotaMes` | INTEGER FK | Monthly quota record |
@@ -153,11 +193,11 @@ Sales representatives. Each vendor can be linked to a system user account and as
 
 | Route | Entity | Description |
 |---|---|---|
-| `/tipos_documento` | `tipo_documento` | Invoice/document types |
-| `/tipos_negocio` | `tipo_negocio` | Client business types |
-| `/obsequio` | `obsequio` | Gift/premium item flags |
-| `/roles` | `rol` | User roles |
-| `/usuario` | `usuario` | System user accounts |
+| `/api/tipos_documento` | `tipo_documento` | Invoice/document types |
+| `/api/tipos_negocio` | `tipo_negocio` | Client business types |
+| `/api/obsequio` | `obsequio` | Gift/premium item flags |
+| `/api/roles` | `rol` | User roles |
+| `/api/usuario` | `usuario` | System user accounts |
 
 ---
 
@@ -165,7 +205,7 @@ Sales representatives. Each vendor can be linked to a system user account and as
 
 #### Clients
 
-**Route:** `/cliente`
+**Route:** `/api/cliente`
 
 Clients represent legal entities that receive invoices. Key fields:
 
@@ -183,7 +223,7 @@ Clients represent legal entities that receive invoices. Key fields:
 
 #### Items (Products)
 
-**Route:** `/items`
+**Route:** `/api/items`
 
 Product catalogue entries with unit-of-measure conversion factors and category linkage.
 
@@ -203,7 +243,7 @@ Product catalogue entries with unit-of-measure conversion factors and category l
 
 #### Sales (Invoices / Transactions)
 
-**Route:** `/venta` · Detail route: `/detalle_venta`
+**Route:** `/api/venta` · Detail route: `/api/detalle_venta`
 
 Sales records are the core transactional entity. Each sale (header) contains one or more line items (detail).
 
@@ -250,27 +290,77 @@ The quota system enables sales management to track vendor performance against ta
 
 | Route | Entity | Description |
 |---|---|---|
-| `/cuota-dia` | `cuotaDia` | Daily quota targets per vendor |
-| `/cuota-semana` | `cuotaSemana` | Weekly quota targets per vendor |
-| `/cuota-mes` | `cuotaMes` | Monthly quota targets per vendor |
-| `/vendedor-cuota-proveedor` | `vendedorCuotaProveedor` | Many-to-many: vendor ↔ provider quota targets |
-| `/rango-dias` | `rango_dias` | Day-range definitions used in quota calculations |
-| `/mes/cumplimiento` | — | `GET` — Returns monthly compliance report for a vendor |
+| `/api/cuota-dia` | `cuotaDia` | Daily quota targets per vendor |
+| `/api/cuota-semana` | `cuotaSemana` | Weekly quota targets per vendor |
+| `/api/cuota-mes` | `cuotaMes` | Monthly quota targets per vendor |
+| `/api/cuota-categoria` | `cuotaCategoria` | Category-level quota targets |
+| `/api/cuota-categoria-import` | `cuotaCategoriaImport` | Bulk import endpoint for category quotas |
+| `/api/cuota-proveedor` | `cuotaProveedor` | Provider-level quota targets |
+| `/api/vendedor-cuota-proveedor` | `vendedorCuotaProveedor` | Many-to-many: vendor ↔ provider quota targets |
+| `/api/vendedor-cuota-categoria` | `vendedorCuotaCategoria` | Many-to-many: vendor ↔ category quota targets |
+| `/api/rango-dias` | `rango_dias` | Day-range definitions used in quota calculations |
 
 The **compliance service** (`cumplimientoMesService.js`) cross-references actual sales data against quota targets and returns achievement percentages per vendor per period.
 
 ---
 
+### Sales Reports
+
+| Route | Description |
+|---|---|
+| `/api/mes/cumplimiento` | `GET` — Monthly compliance report per vendor. |
+| `/api/semana/cumplimiento` | `GET` — Weekly compliance report per vendor. |
+| `/api/dia/cumplimiento` | `GET` — Daily compliance report per vendor. |
+| `/api/admin` | `GET` — Administrative sales reports (admin only). |
+| `/api/items-vendidos` | `GET` — Items sold with role-based filtering (admin / supervisor / vendor). |
+| `/api/vendedor` | `GET` — Vendors with clients and items, with role-aware filters and pagination. |
+| `/export` | `GET` — Data export endpoint (CSV / JSON, query-string driven). |
+
+#### `GET /api/items-vendidos` — Items Sold
+
+Returns items sold in a date range, filtered automatically by the caller's role:
+
+- **admin (rol=1):** all items, with optional pagination.
+- **supervisor (rol=2):** items sold by vendors in their team (`vendedor.id_supervisor = req.auth.idUsuario`).
+- **vendor (rol=3):** only their own sales (`venta.id_vendedor = req.auth.idVendedor`), no pagination.
+
+Required query params: `fechaInicio`, `fechaFin` (`YYYY-MM-DD`).
+
+Response columns: `proveedor`, `codigo_item`, `descripcion`, `unidades_cajas`, `subtotal`.
+
+See [`docs/endpoints/ENDPOINT_VENDEDOR_ITEMS.md`](docs/endpoints/ENDPOINT_VENDEDOR_ITEMS.md) for full details (filters, error codes, examples).
+
+---
+
+### Import Engine
+
+| Route | Method | Description |
+|---|---|---|
+| `/api/import/ventas` | `POST` | Multipart upload of a TSV sales file. |
+| `/api/import/status` | `GET` | Current import status and progress. |
+
+See [Optimized Import System](#optimized-import-system) below and [`docs/importador/`](docs/importador/).
+
+### Export Engine
+
+| Route | Method | Description |
+|---|---|---|
+| `/export` | `GET` | Export data to CSV / JSON (driven by query string). |
+| `/` (index) | `GET` | Health summary route. |
+| `/health` | `GET` | Returns `{ status, version_code, version_name }` from `package.json`. |
+
+---
+
 ## Optimized Import System
 
-**Route:** `POST /import/ventas`  
-**Status:** `GET /import/status`
+**Route:** `POST /api/import/ventas`  
+**Status:** `GET /api/import/status`
 
 The import system is designed for high-throughput ingestion of TSV sales files exported from the corporate ERP.
 
 ### How It Works
 
-1. A TSV file is uploaded via multipart form to `POST /import/ventas`.
+1. A TSV file is uploaded via multipart form to `POST /api/import/ventas`.
 2. The server streams the file line-by-line using Node.js `readline` (no full in-memory load).
 3. **Pre-loading phase:** All master tables (providers, categories, clients, items, channels, cities, etc.) are loaded into in-memory `Map` structures for O(1) lookup during processing.
 4. **Upsert logic:** Each data row resolves master foreign keys. If a referenced master record does not exist, it is created automatically.
@@ -317,33 +407,42 @@ REPORTE PROV CON OBS
 | **Auth** | `/api/auth/login` | POST |
 | **Auth** | `/api/auth/register` | POST |
 | **Auth** | `/api/auth/register/bulk` | POST |
-| **Sales** | `/venta` | GET, POST |
-| **Sales** | `/venta/:id` | GET, PUT, DELETE |
-| **Sale Detail** | `/detalle_venta` | GET, POST, PUT, DELETE |
-| **Import** | `/import/ventas` | POST (multipart/form-data) |
-| **Import** | `/import/status` | GET |
-| **Clients** | `/cliente` | GET, POST, PUT, DELETE |
-| **Vendors** | `/vendedor` | GET, POST, PUT, DELETE |
-| **Items** | `/items` | GET, POST, PUT, DELETE |
-| **Providers** | `/proveedore` | GET, POST, PUT, DELETE |
-| **Mega-category** | `/megacategoria` | GET, POST, PUT, DELETE |
-| **Category** | `/categoria` | GET, POST, PUT, DELETE |
-| **Sub-category** | `/subcategoria` | GET, POST, PUT, DELETE |
-| **Channel** | `/canale` | GET, POST, PUT, DELETE |
-| **Sub-channel** | `/subcanale` | GET, POST, PUT, DELETE |
-| **City** | `/ciudad` | GET, POST, PUT, DELETE |
-| **Neighborhood** | `/barrio` | GET, POST, PUT, DELETE |
-| **Users** | `/usuario` | GET, POST, PUT, DELETE |
-| **Roles** | `/roles` | GET, POST, PUT, DELETE |
-| **Document Types** | `/tipos_documento` | GET, POST, PUT, DELETE |
-| **Business Types** | `/tipos_negocio` | GET, POST, PUT, DELETE |
-| **Gifts/Premiums** | `/obsequio` | GET, POST, PUT, DELETE |
-| **Daily Quota** | `/cuota-dia` | GET, POST, PUT, DELETE |
-| **Weekly Quota** | `/cuota-semana` | GET, POST, PUT, DELETE |
-| **Monthly Quota** | `/cuota-mes` | GET, POST, PUT, DELETE |
-| **Vendor-Provider Quota** | `/vendedor-cuota-proveedor` | GET, POST, PUT, DELETE |
-| **Day Ranges** | `/rango-dias` | GET, POST, PUT, DELETE |
-| **Compliance** | `/mes/cumplimiento` | GET |
+| **Sales** | `/api/venta` | GET, POST, PUT, DELETE |
+| **Sale Detail** | `/api/detalle_venta` | GET, POST, PUT, DELETE |
+| **Import** | `/api/import/ventas` | POST (multipart/form-data) |
+| **Import** | `/api/import/status` | GET |
+| **Export** | `/export` | GET |
+| **Health** | `/health` | GET |
+| **Clients** | `/api/cliente` | GET, POST, PUT, DELETE |
+| **Vendors** | `/api/vendedor` | GET, POST, PUT, DELETE |
+| **Items** | `/api/items` | GET, POST, PUT, DELETE |
+| **Items Sold** | `/api/items-vendidos` | GET (role-filtered) |
+| **Providers** | `/api/proveedor` | GET, POST, PUT, DELETE |
+| **Mega-category** | `/api/megacategoria` | GET, POST, PUT, DELETE |
+| **Category** | `/api/categoria` | GET, POST, PUT, DELETE |
+| **Sub-category** | `/api/subcategoria` | GET, POST, PUT, DELETE |
+| **Channel** | `/api/canale` | GET, POST, PUT, DELETE |
+| **Sub-channel** | `/api/subcanale` | GET, POST, PUT, DELETE |
+| **City** | `/api/ciudad` | GET, POST, PUT, DELETE |
+| **Neighborhood** | `/api/barrio` | GET, POST, PUT, DELETE |
+| **Users** | `/api/usuario` | GET, POST, PUT, DELETE |
+| **Roles** | `/api/roles` | GET, POST, PUT, DELETE |
+| **Document Types** | `/api/tipos_documento` | GET, POST, PUT, DELETE |
+| **Business Types** | `/api/tipos_negocio` | GET, POST, PUT, DELETE |
+| **Gifts/Premiums** | `/api/obsequio` | GET, POST, PUT, DELETE |
+| **Daily Quota** | `/api/cuota-dia` | GET, POST, PUT, DELETE |
+| **Weekly Quota** | `/api/cuota-semana` | GET, POST, PUT, DELETE |
+| **Monthly Quota** | `/api/cuota-mes` | GET, POST, PUT, DELETE |
+| **Category Quota** | `/api/cuota-categoria` | GET, POST, PUT, DELETE |
+| **Category Quota Import** | `/api/cuota-categoria-import` | POST |
+| **Provider Quota** | `/api/cuota-proveedor` | GET, POST, PUT, DELETE |
+| **Vendor-Provider Quota** | `/api/vendedor-cuota-proveedor` | GET, POST, PUT, DELETE |
+| **Vendor-Category Quota** | `/api/vendedor-cuota-categoria` | GET, POST, PUT, DELETE |
+| **Day Ranges** | `/api/rango-dias` | GET, POST, PUT, DELETE |
+| **Monthly Compliance** | `/api/mes/cumplimiento` | GET |
+| **Weekly Compliance** | `/api/semana/cumplimiento` | GET |
+| **Daily Compliance** | `/api/dia/cumplimiento` | GET |
+| **Admin Reports** | `/api/admin` | GET |
 
 ---
 
@@ -377,7 +476,8 @@ cp .env.example .env   # if .env.example is present, otherwise create manually
 npx sequelize-cli db:migrate
 
 # 6. Start the server
-npm start
+npm start             # production
+npm run dev           # development with nodemon
 ```
 
 The server listens on `http://localhost:3000` by default.
@@ -400,6 +500,13 @@ DB_PASSWORD=your_database_password
 
 # SSL (required for NeonDB and most cloud providers)
 DB_SSL=true
+
+# JWT
+JWT_SECRET=your_jwt_secret
+JWT_EXPIRES_IN=24h
+
+# CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:4200
 ```
 
 > **Note:** The database connection is configured in `config/config.json` (generated from `config/config.example.json`). SSL is enabled by default for cloud deployments.
@@ -442,7 +549,14 @@ npx sequelize-cli db:migrate:status
 
 ## Operational Scripts
 
-All utility scripts are located in the `scripts/` directory and are run directly with Node.js.
+Operational scripts are split across two locations:
+
+| Location | Purpose |
+|---|---|
+| `scripts/` | Production CLI utilities (TSV validation, import, monitoring, debug). |
+| `docs/fixes/` | One-shot fix/verify scripts and diagnostic utilities. |
+
+### `scripts/` — Production Utilities
 
 | Script | Description |
 |---|---|
@@ -457,6 +571,15 @@ All utility scripts are located in the `scripts/` directory and are run directly
 | `scripts/testMethods.js` | Test individual service methods |
 | `scripts/truncate.js` | Truncate transactional tables (use with caution) |
 | `scripts/verifyData.js` | Verify data integrity after import |
+| `scripts/importarCuotasCategoria.js` | Import category-level quota records |
+| `scripts/crear_indice_categoria.js` | Create the `idx_categoria` performance index |
+| `scripts/gen_Contr_Routs.sh` | Generate controller + route scaffolding (bash) |
+
+### `docs/fixes/` — One-Shot Fix and Verify Scripts
+
+Twenty-one diagnostic and fix scripts kept for reference and re-runs during incident response. They include scripts for: duplicate detection and cleanup, provider matching diagnostics, schema inspection/setup, table re-creation, category-duplicate resolution, quota re-import, and import-cleanup routines. See [`docs/fixes/`](docs/fixes/) for the full list.
+
+> ⚠️ Scripts in `docs/fixes/` are not part of the normal run path. Review them before executing and adapt paths/constants to your environment.
 
 ### `scripts/validarTSV.js` — TSV File Validator
 
@@ -566,10 +689,14 @@ The SIGC DD API is engineered for high-volume commercial data workloads:
 Documentación técnica detallada organizada por tema en el directorio [`docs/`](docs/README.md):
 
 - **Endpoints**: [`docs/endpoints/`](docs/endpoints/) — referencia de endpoints específicos.
-- **Postman**: [`docs/postman/`](docs/postman/) — guías de uso de Postman con la API.
+- **Postman**: [`docs/postman/`](docs/postman/) — guías y colecciones para Postman.
 - **Importador**: [`docs/importador/`](docs/importador/) — documentación del motor de importación.
 - **Configuración**: [`docs/configuracion/`](docs/configuracion/) — instrucciones y archivos grandes.
 - **Reglas de Negocio**: [`docs/reglas-de-negocio/`](docs/reglas-de-negocio/) — validaciones y rendimiento.
+- **Fixes puntuales**: [`docs/fixes/`](docs/fixes/) — scripts de fix/verificación reubicados.
+- **Notas de desarrollo**: [`dev-notes/`](dev-notes/README.md) — análisis, reportes y resúmenes históricos.
+
+Colecciones de Postman listas para importar: [`postman/`](postman/).
 
 ---
 
