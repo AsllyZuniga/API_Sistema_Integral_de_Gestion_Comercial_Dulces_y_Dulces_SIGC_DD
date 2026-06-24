@@ -4,6 +4,9 @@ const itemsVendidosService = require('../services/itemsVendidosService');
 
 const ROLES_AUTORIZADOS = new Set(['1', '2', '3']);
 
+// Códigos de error que el servicio puede devolver y que corresponden
+// a un 400 Bad Request (input del cliente). Cualquier otro error del
+// servicio baja como 403 para no filtrar detalles al cliente.
 const CODIGOS_ERROR_400 = new Set([
     'FECHAS_REQUERIDAS',
     'FECHA_INVALIDA',
@@ -15,6 +18,9 @@ const CODIGOS_ERROR_400 = new Set([
 module.exports = {
     async list(req, res) {
         try {
+            // req.auth.rol puede llegar como número o string según el
+            // flujo de autenticación; se normaliza a string para
+            // comparaciones estrictas contra ROLES_AUTORIZADOS.
             const idRol = String(req.auth?.rol ?? req.auth?.idRol ?? '');
 
             if (!ROLES_AUTORIZADOS.has(idRol)) {

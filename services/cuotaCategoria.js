@@ -144,6 +144,16 @@ const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
 	};
 };
 
+/**
+ * Cumplimiento de cuotas por categoría para el período (todos los
+ * vendedores sumados). Devuelve el detalle por categoría con
+ * cuota, acumulado, porcentaje de cumplimiento, proyectado y totales.
+ *
+ * Si no se pasan fechas en filters, se usa el mes actual.
+ *
+ * @param {object} [filters={}] fechaInicio, fechaFin
+ * @returns {Promise<{detalle: Array, total: object, periodo: object}>}
+ */
 const getCuotaCategoriaGeneral = async (filters = {}) => {
 	const period = normalizePeriodFilters(filters);
 	const replacements = {
@@ -217,6 +227,15 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 	return buildCuotaCategoriaPayload(rows, period);
 };
 
+/**
+ * Cumplimiento de cuotas por categoría para UN vendedor en el período.
+ * Devuelve null si el vendedor no existe.
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin
+ * @returns {Promise<null | {detalle: Array, total: object, periodo: object,
+ *   vendedor: object}>}
+ */
 const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 	const codigoNormalizado = String(codigoVendedor || '').trim();
 	if (!codigoNormalizado) return null;
@@ -314,6 +333,15 @@ const getCuotaCategoriaPorVendedor = async (codigoVendedor, filters = {}) => {
 	});
 };
 
+/**
+ * Cumplimiento de cuotas por categoría para TODOS los vendedores
+ * en el período, agrupado por vendedor + categoría. Pensado para
+ * reportes de cobertura.
+ *
+ * @param {object} [filters={}] fechaInicio, fechaFin
+ * @returns {Promise<{detalle: Array, totalesGenerales: object,
+ *   periodo: object}>}
+ */
 const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 	const period = normalizePeriodFilters(filters);
 	const replacements = {
@@ -558,7 +586,15 @@ const getCuotaCategoriaTodosVendedores = async (filters = {}) => {
 	};
 };
 
-// ✅ VALIDACIÓN DE CUOTAS POR CATEGORÍA Y VENDEDOR
+/**
+ * Valida la integridad de las cuotas por categoría y vendedor en un
+ * período. Útil para detectar cuotas faltantes o en cero antes de
+ * generar reportes de cumplimiento.
+ *
+ * @param {string} [fechaInicio='2026-03-01'] YYYY-MM-DD
+ * @param {string} [fechaFin='2026-03-31'] YYYY-MM-DD
+ * @returns {Promise<{errores: Array, resumen: object}>}
+ */
 const validateCuotasMarzo = async (fechaInicio = '2026-03-01', fechaFin = '2026-03-31') => {
 	try {
 		// Obtener todos los vendedores
@@ -655,7 +691,19 @@ const validateCuotasMarzo = async (fechaInicio = '2026-03-01', fechaFin = '2026-
 	}
 };
 
-// ✅ COMPARAR CUOTAS DEL CSV CON BD
+/**
+ * Compara las cuotas recibidas desde un CSV contra las existentes
+ * en BD para el período. Devuelve coincidencias y discrepancias
+ * con su porcentaje de integridad.
+ *
+ * @param {Array<{codigo_vendedor: string, categoria: string,
+ *   cuota: number}>} datosCSV cuotas parseadas del CSV
+ * @param {string} [fechaInicio='2026-03-01'] YYYY-MM-DD
+ * @returns {Promise<{total_coincidencias: number,
+ *   total_discrepancias: number, coincidencias: Array,
+ *   discrepancias: Array, porcentaje_integridad: number|string}>}
+ *   En caso de error: { error: true, mensaje: string }
+ */
 const compareCuotasCSVvsBD = async (datosCSV, fechaInicio = '2026-03-01') => {
 	try {
 		const discrepancias = [];
@@ -732,12 +780,28 @@ const compareCuotasCSVvsBD = async (datosCSV, fechaInicio = '2026-03-01') => {
 	}
 };
 
+/**
+ * Elimina una cuota de categoría por su id.
+ *
+ * @param {number|string} id id_cuotaCategoria
+ * @returns {Promise<number>} filas afectadas
+ * @throws {Error} 'Cuota de categoría no encontrada' si el id no existe
+ */
 const deleteById = async (id) => {
 	const row = await cuotaCategoria_model.findByPk(id);
 	if (!row) throw new Error('Cuota de categoría no encontrada');
 	return await row.destroy();
 };
 
+/**
+ * Elimina cuotas de categoría cuyo rango de vigencia se solape con
+ * [fechaInicio, fechaFin] (ambos inclusive).
+ *
+ * @param {string} fechaInicio YYYY-MM-DD
+ * @param {string} fechaFin YYYY-MM-DD
+ * @returns {Promise<{deletedCount: number, message: string}>}
+ * @throws {Error} si falta fechaInicio o fechaFin
+ */
 const deleteByDateRange = async (fechaInicio, fechaFin) => {
 	if (!fechaInicio || !fechaFin) {
 		throw new Error('Se requieren fechaInicio y fechaFin (YYYY-MM-DD)');

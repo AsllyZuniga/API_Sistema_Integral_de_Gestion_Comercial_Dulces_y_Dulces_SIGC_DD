@@ -57,6 +57,8 @@ const getItemsVendidosPorRol = async ({
     if (validacion) return validacion;
 
     const replacements = { fechaInicio, fechaFin };
+    // WHERE base sobre la tabla venta. Las restricciones por rol se
+    // concatenan como cláusulas AND adicionales más abajo.
     const filtrosVenta = ['v.fecha BETWEEN :fechaInicio AND :fechaFin'];
 
     if (idRol === '2') {
@@ -78,6 +80,9 @@ const getItemsVendidosPorRol = async ({
                 paginacion: { page: Number(page) || 1, limit: Number(limit) || 10, total: 0, paginado: true }
             };
         }
+        // Se generan placeholders manuales (:idVend0, :idVend1, ...)
+        // porque Sequelize no serializa correctamente un array JS en
+        // ANY(:array) dentro de raw queries contra PostgreSQL.
         const placeholders = idsEquipo.map((_, i) => `:idVend${i}`).join(',');
         filtrosVenta.push(`v.id_vendedor IN (${placeholders})`);
         idsEquipo.forEach((id, i) => {
@@ -99,6 +104,13 @@ const getItemsVendidosPorRol = async ({
     const usarPaginacion = idRol === '1' || idRol === '2';
     const whereVenta = filtrosVenta.join(' AND ');
 
+    // SQL crudo (en lugar del ORM) para tener control exacto del
+    // GROUP BY y del conteo de filas agrupadas: con el ORM el count
+    // y los rows no se sincronizan bien cuando hay agregación + LIMIT.
+    //
+    // El LEFT JOIN a proveedor preserva los items sin proveedor
+    // asignado (quedan con nombre vacío). TRIM elimina espacios
+    // sobrantes de las columnas CHAR(50) y CHAR(200).
     const baseSelect = `
         SELECT
             TRIM(COALESCE(p.nombre, '')) AS proveedor,
@@ -142,6 +154,9 @@ const getItemsVendidosPorRol = async ({
     });
 
     return {
+        // Normalización final: las columnas CHAR llegan con padding
+        // residual tras el TRIM y los SUM llegan como string; se
+        // garantiza el shape y los tipos esperados en la respuesta.
         rows: rows.map(r => ({
             proveedor: r.proveedor || '',
             codigo_item: r.codigo_item || '',

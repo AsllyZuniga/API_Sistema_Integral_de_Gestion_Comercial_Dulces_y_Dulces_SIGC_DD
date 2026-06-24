@@ -2,6 +2,19 @@
 
 const { verifyAuthToken } = require('../utils/jwt');
 
+/**
+ * Verifica que la petición incluya un token JWT válido en el header
+ * `Authorization: Bearer <token>`. Si es válido, decodifica el payload
+ * y lo expone en `req.auth` para los middlewares/controladores siguientes.
+ *
+ * Respuestas:
+ *   - 401 si falta el header, el esquema no es Bearer, el token está
+ *     malformado o la firma/expiración es inválida
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
 const requireAuthJWT = (req, res, next) => {
     const authHeader = String(req.headers.authorization || '').trim();
 
