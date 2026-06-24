@@ -14,7 +14,7 @@ const previewEliminarVentas = async (fechaInicio, fechaFin) => {
     validarFechas(fechaInicio, fechaFin);
     const replacements = { fechaInicio, fechaFin };
 
-    const [ventas, detalles] = await Promise.all([
+    const [ventas, detalles, factVentas] = await Promise.all([
         sequelize.query(
             `SELECT COUNT(*) AS total FROM venta WHERE CAST(fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(fecha AS DATE) <= CAST(:fechaFin AS DATE)`,
             { replacements, type: QueryTypes.SELECT }
@@ -24,6 +24,17 @@ const previewEliminarVentas = async (fechaInicio, fechaFin) => {
              JOIN venta v ON v.id_venta = dv.id_venta
              WHERE CAST(v.fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(v.fecha AS DATE) <= CAST(:fechaFin AS DATE)`,
             { replacements, type: QueryTypes.SELECT }
+        ),
+        sequelize.query(
+            `SELECT COUNT(*) AS total FROM fact_ventas fv
+             WHERE fv.id_venta IN (
+                 SELECT id_venta FROM venta WHERE CAST(fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(fecha AS DATE) <= CAST(:fechaFin AS DATE)
+             ) OR fv.id_detalle IN (
+                 SELECT id_detalle FROM detalle_venta dv
+                 JOIN venta v ON v.id_venta = dv.id_venta
+                 WHERE CAST(v.fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(v.fecha AS DATE) <= CAST(:fechaFin AS DATE)
+             )`,
+            { replacements, type: QueryTypes.SELECT }
         )
     ]);
 
@@ -31,7 +42,8 @@ const previewEliminarVentas = async (fechaInicio, fechaFin) => {
         fechaInicio,
         fechaFin,
         ventasAEliminar: Number(ventas[0].total),
-        detallesAEliminar: Number(detalles[0].total)
+        detallesAEliminar: Number(detalles[0].total),
+        factVentasAEliminar: Number(factVentas[0].total)
     };
 };
 
@@ -40,6 +52,19 @@ const eliminarVentasPorRango = async (fechaInicio, fechaFin) => {
     const replacements = { fechaInicio, fechaFin };
 
     return sequelize.transaction(async (t) => {
+        const [factRows] = await sequelize.query(
+            `DELETE FROM fact_ventas
+             WHERE id_venta IN (
+                 SELECT id_venta FROM venta WHERE CAST(fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(fecha AS DATE) <= CAST(:fechaFin AS DATE)
+             ) OR id_detalle IN (
+                 SELECT id_detalle FROM detalle_venta dv
+                 JOIN venta v ON v.id_venta = dv.id_venta
+                 WHERE CAST(v.fecha AS DATE) >= CAST(:fechaInicio AS DATE) AND CAST(v.fecha AS DATE) <= CAST(:fechaFin AS DATE)
+             )
+             RETURNING id_fact`,
+            { replacements, type: QueryTypes.SELECT, transaction: t }
+        );
+
         const [detallesRows] = await sequelize.query(
             `DELETE FROM detalle_venta
              WHERE id_venta IN (
@@ -59,7 +84,8 @@ const eliminarVentasPorRango = async (fechaInicio, fechaFin) => {
             fechaInicio,
             fechaFin,
             ventasEliminadas: Array.isArray(ventasRows) ? ventasRows.length : 0,
-            detallesEliminados: Array.isArray(detallesRows) ? detallesRows.length : 0
+            detallesEliminados: Array.isArray(detallesRows) ? detallesRows.length : 0,
+            factVentasEliminadas: Array.isArray(factRows) ? factRows.length : 0
         };
     });
 };
