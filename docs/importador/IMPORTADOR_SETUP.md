@@ -54,7 +54,7 @@
 - Troubleshooting
 - Configuración recomendada
 
-📂 `GUIA_RAPIDA_IMPORT.md`
+📂 [`../GUIA_RAPIDA_IMPORT.md`](../GUIA_RAPIDA_IMPORT.md)
 
 - Instrucciones paso a paso
 - Ejemplos de ejecución
@@ -292,7 +292,7 @@ node scripts/validarTSV.js ./ventastest.txt --verbose
 ## 📚 Documentación Completa
 
 - **IMPORTADOR_README.md** - Referencia técnica completa
-- **GUIA_RAPIDA_IMPORT.md** - Guía paso a paso
+- **[`../GUIA_RAPIDA_IMPORT.md`](../GUIA_RAPIDA_IMPORT.md)** - Guía paso a paso
 - **Código en servicios/importventas.js** - Comentarios detallados
 
 ---

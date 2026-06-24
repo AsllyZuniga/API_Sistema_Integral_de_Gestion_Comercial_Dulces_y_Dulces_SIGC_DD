@@ -242,8 +242,8 @@ Si ves:
 Para más detalles, mira:
 
 - `POSTMAN_GUIDE.md` - Guía completa de Postman
-- `IMPORTADOR_README.md` - Documentación técnica
-- `GUIA_RAPIDA_IMPORT.md` - Guía CLI
+- [`../importador/IMPORTADOR_README.md`](../importador/IMPORTADOR_README.md) - Documentación técnica
+- [`../GUIA_RAPIDA_IMPORT.md`](../GUIA_RAPIDA_IMPORT.md) - Guía CLI
 
 ---
 

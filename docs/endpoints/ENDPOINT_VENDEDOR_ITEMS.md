@@ -314,7 +314,7 @@ Cuando se envían `fechaInicio` y/o `fechaFin`, el endpoint **excluye** automát
 
 ### Respaldo del comportamiento anterior
 
-Una copia del comportamiento previo a este cambio está guardada en `/impactos/` (no se monta en el router, solo referencia documental). Ver `impactos/README.md`.
+Una copia del comportamiento previo a este cambio está guardada en `/impactos/` (no se monta en el router, solo referencia documental). Ver [`../../impactos/README.md`](../../impactos/README.md).
 
 ## 🔒 Notas de Seguridad
 

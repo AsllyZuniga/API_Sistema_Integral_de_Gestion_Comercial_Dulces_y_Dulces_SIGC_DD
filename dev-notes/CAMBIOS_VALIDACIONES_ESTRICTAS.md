@@ -167,7 +167,7 @@ Antes de importar, asegúrate que:
 
 ## 📚 Documentación Completa
 
-Ver [VALIDACIONES_ESTRICTAS.md](VALIDACIONES_ESTRICTAS.md) para:
+Ver [VALIDACIONES_ESTRICTAS.md](../docs/reglas-de-negocio/VALIDACIONES_ESTRICTAS.md) para:
 - Proceso detallado de validación
 - Errores comunes y cómo solucionarlos
 - Ejemplos completos
