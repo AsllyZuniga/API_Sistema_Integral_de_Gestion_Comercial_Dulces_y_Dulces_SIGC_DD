@@ -33,15 +33,7 @@ const resolveFechaRange = (query) => {
 module.exports = {
     async getBySupervisor(req, res) {
         try {
-            const idSupervisor = Number(req.params.id_supervisor);
-            if (!Number.isInteger(idSupervisor) || idSupervisor <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'El parámetro id_supervisor debe ser un entero positivo',
-                    error: 'ID_SUPERVISOR_INVALIDO'
-                });
-            }
-            const data = await vendedorService.getBySupervisor(idSupervisor);
+            const data = await vendedorService.getBySupervisor(req.params.id_supervisor);
             return res.status(200).json({
                 success: true,
                 data: data
@@ -54,22 +46,6 @@ module.exports = {
                 error: error.message
             });
         }
-    },
-
-    /**
-     * Handler para la URL antigua /vendedor/supervisor/con-items-comprados.
-     * Devuelve 410 Gone apuntando a la URL correcta.
-     * Razón: a partir de v1.1.0, este endpoint se unificó en /vendedor/con-items-comprados
-     * con detección de rol por token.
-     */
-    async deprecatedSupervisorConItems(req, res) {
-        return res.status(410).json({
-            success: false,
-            message: 'Esta ruta está obsoleta. Use GET /api/vendedor/con-items-comprados (detecta el rol automáticamente por token).',
-            error: 'ENDPOINT_OBSOLETO',
-            urlCorrecta: '/api/vendedor/con-items-comprados',
-            documentacion: 'Ver ENDPOINT_VENDEDOR_ITEMS.md v1.1.0+'
-        });
     },
     async list(req, res) {
         try {
