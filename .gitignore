@@ -155,3 +155,4 @@ global-bundle.pem
 *.crt
 *.key
 *.cer
+global-bundle.pem
