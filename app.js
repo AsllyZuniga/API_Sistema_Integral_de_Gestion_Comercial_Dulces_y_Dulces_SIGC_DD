@@ -39,6 +39,7 @@ const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const vendedorCuotaCategoriaRouter = require('./routes/vendedorCuotaCategoriaRouter');
 const adminVentasRouter = require('./routes/adminVentasRouter');
+const itemsVendidosRouter = require('./routes/itemsVendidosRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 const exportRoutes = require('./routes/exportRoutes');
 
@@ -131,6 +132,7 @@ app.use('/api/import', importRouter);
 app.use('/api/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 app.use('/api/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
 app.use('/api/admin', adminVentasRouter);
+app.use('/api/items-vendidos', itemsVendidosRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
 
