@@ -218,7 +218,7 @@ Código  | Nombre          | CAFES
 
 | Recurso | Ubicación |
 |---------|-----------|
-| **Guía de Uso** | [VALIDACION_CUOTAS_MARZO.md](./VALIDACION_CUOTAS_MARZO.md) |
+| **Guía de Uso** | [VALIDACION_CUOTAS_MARZO.md](../docs/reglas-de-negocio/VALIDACION_CUOTAS_MARZO.md) |
 | **Resumen Técnico** | [IMPLEMENTACION_VALIDACION_CUOTAS.md](./IMPLEMENTACION_VALIDACION_CUOTAS.md) |
 | **Checklist** | [CHECKLIST_IMPLEMENTACION_CUOTAS.md](./CHECKLIST_IMPLEMENTACION_CUOTAS.md) |
 | **Postman** | [postman/Validacion_Cuotas_Marzo.json](./postman/Validacion_Cuotas_Marzo.json) |

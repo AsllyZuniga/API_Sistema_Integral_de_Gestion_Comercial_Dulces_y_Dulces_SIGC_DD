@@ -561,4 +561,16 @@ The SIGC DD API is engineered for high-volume commercial data workloads:
 
 ---
 
+## Additional Documentation
+
+Documentación técnica detallada organizada por tema en el directorio [`docs/`](docs/README.md):
+
+- **Endpoints**: [`docs/endpoints/`](docs/endpoints/) — referencia de endpoints específicos.
+- **Postman**: [`docs/postman/`](docs/postman/) — guías de uso de Postman con la API.
+- **Importador**: [`docs/importador/`](docs/importador/) — documentación del motor de importación.
+- **Configuración**: [`docs/configuracion/`](docs/configuracion/) — instrucciones y archivos grandes.
+- **Reglas de Negocio**: [`docs/reglas-de-negocio/`](docs/reglas-de-negocio/) — validaciones y rendimiento.
+
+---
+
 *SIGC DD API — © Dulces y Dulces S.A. · All rights reserved.*

@@ -369,6 +369,17 @@ const buildTotales = (rows, diasCorridos, diasHabiles) => {
     };
 };
 
+/**
+ * Cumplimiento mensual de TODOS los vendedores. Devuelve una fila por
+ * vendedor con su cuota del mes, venta acumulada (considerando NC
+ * como resta), porcentaje de cumplimiento, proyección y totales.
+ *
+ * Filtros soportados: fechaInicio, fechaFin, ciudad, categoria,
+ * proveedores (array o escalar), supervisor, vendedor.
+ *
+ * @param {object} [filters={}] filtros del reporte
+ * @returns {Promise<{detalle: Array, totales: object, periodo: object}>}
+ */
 const getCumplimientoMes = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
@@ -482,6 +493,16 @@ const getCumplimientoMes = async (filters = {}) => {
     return addTotalsRow(enriched, diasCorridos, diasHabiles);
 };
 
+/**
+ * Cumplimiento mensual de UN vendedor identificado por código.
+ * Atajo sobre `getCumplimientoMesFront` que filtra el detalle por
+ * `codVendedor`.
+ *
+ * @param {string} codigo codigo_vendedor
+ * @param {object} [filters={}] mismos filtros que getCumplimientoMesFront
+ * @returns {Promise<object|null>} fila del vendedor, o null si no aparece
+ *   en el período/filtros.
+ */
 const getCumplimientoPorCodigo = async (codigo, filters = {}) => {
     const data = await getCumplimientoMesFront({ ...filters, vendedor: codigo });
     const codigoNormalizado = String(codigo || '').trim();
@@ -489,6 +510,15 @@ const getCumplimientoPorCodigo = async (codigo, filters = {}) => {
     return data.detalle.find((row) => String(row.codVendedor || '').trim() === codigoNormalizado) || null;
 };
 
+/**
+ * Variante "front" del cumplimiento mensual: misma data cruda que
+ * `getCumplimientoMes` pero con el shape final orientado al consumo
+ * del frontend (detalle + totales + período formateado).
+ *
+ * @param {object} [filters={}] mismos filtros que getCumplimientoMes
+ * @returns {Promise<{detalle: Array, totales: object,
+ *   periodo: {fechaInicio: string, fechaFin: string}}>}
+ */
 const getCumplimientoMesFront = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
@@ -754,6 +784,16 @@ const getCumplimientoMesFront = async (filters = {}) => {
     };
 };
 
+/**
+ * Detalle de líneas (categorías / proveedores) vendidas por un
+ * vendedor en el período. Devuelve tanto el resumen por línea como
+ * el detalle por línea (productos, subtotal, cantidad).
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin, ciudad, etc.
+ * @returns {Promise<{resumenPorLinea: Array, detallePorLinea: Array,
+ *   periodo: object}>}
+ */
 const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
@@ -927,6 +967,17 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
     };
 };
 
+/**
+ * Devuelve el detalle de una línea (categoría/proveedor) específica
+ * para un vendedor. Realiza una coincidencia flexible: por código
+ * exacto, por prefijo, o por coincidencia en el nombre de la línea.
+ *
+ * @param {string} codigoVendedor
+ * @param {string} codigoLinea código o texto a buscar
+ * @param {object} [filters={}] mismos filtros que getLineasPorVendedor
+ * @returns {Promise<{codigoVendedor: string, codigoLinea: string,
+ *   detallePorLinea: Array}>}
+ */
 const getLineaEspecificaPorVendedor = async (codigoVendedor, codigoLinea, filters = {}) => {
     const data = await getLineasPorVendedor(codigoVendedor, filters);
     const codigoLineaNormalizado = String(codigoLinea || '').trim();
@@ -949,6 +1000,17 @@ const getLineaEspecificaPorVendedor = async (codigoVendedor, codigoLinea, filter
     };
 };
 
+/**
+ * Distribución de ventas por ciudad de un vendedor en el período.
+ * Devuelve cada ciudad con su venta acumulada y porcentaje de
+ * participación sobre el total del vendedor.
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin, etc.
+ * @returns {Promise<{detallePorCiudad: Array,
+ *   resumen: {totalVenta: number, ciudadesCount: number},
+ *   periodo: object}>}
+ */
 const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
@@ -1058,6 +1120,15 @@ const getCiudadesPorVendedor = async (codigoVendedor, filters = {}) => {
     };
 };
 
+/**
+ * Listado de productos (items) vendidos por un vendedor en el
+ * período, con cantidad y subtotal agregados.
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin, ciudad, etc.
+ * @returns {Promise<{detalle: Array<{Codigo: string, Descripcion: string,
+ *   Cantidad: number, Subtotal: number}>, periodo: object}>}
+ */
 const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
@@ -1138,6 +1209,14 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
     };
 };
 
+/**
+ * Distribución de líneas (categorías/proveedores) sumando TODOS los
+ * vendedores del período. Útil para reportes gerenciales.
+ *
+ * @param {object} [filters={}] fechaInicio, fechaFin, ciudad, etc.
+ * @returns {Promise<{detallePorLinea: Array,
+ *   periodo: {fechaInicio: string, fechaFin: string}}>}
+ */
 const getLineasGeneral = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
@@ -1295,7 +1374,19 @@ const getLineasGeneral = async (filters = {}) => {
     };
 };
 
-// Cumplimiento por ciudad GLOBAL (todos los vendedores)
+/**
+ * Cumplimiento por ciudad GLOBAL (todos los vendedores del período).
+ * Para preservar la ciudad histórica de la venta, usa el campo
+ * `id_ciudad_original` de detalle_venta cuando está disponible.
+ *
+ * @param {object} [filters={}] fechaInicio, fechaFin, etc.
+ * @returns {Promise<{detallePorCiudad: Array,
+ *   resumen: {cuotaTotal: number, ventaTotal: number,
+ *   porcCumplimiento: number, proyeccionTotal: number,
+ *   porcCumplimientoProyectado: number, diasCorridos: number,
+ *   diasHabiles: number},
+ *   periodo: {fechaInicio: string, fechaFin: string}}>}
+ */
 const getCumplimientoPorCiudadGlobal = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};

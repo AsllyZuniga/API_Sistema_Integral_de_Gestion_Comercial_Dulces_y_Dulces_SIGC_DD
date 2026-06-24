@@ -30,6 +30,13 @@ const resolveFechaRange = (query) => {
     return { fechaInicio, fechaFin };
 };
 
+/**
+ * GET /api/vendedor/supervisor/:id_supervisor
+ *
+ * Devuelve todos los vendedores asignados al supervisor cuyo
+ * id_usuario es :id_supervisor. Responde 400 si el id no es un entero
+ * positivo.
+ */
 module.exports = {
     async getBySupervisor(req, res) {
         try {
@@ -71,6 +78,10 @@ module.exports = {
             documentacion: 'Ver ENDPOINT_VENDEDOR_ITEMS.md v1.1.0+'
         });
     },
+    /**
+     * GET /api/vendedor
+     * Lista todos los vendedores con sus relaciones.
+     */
     async list(req, res) {
         try {
             const data = await vendedorService.getAll();
@@ -88,6 +99,10 @@ module.exports = {
         }
     },
 
+    /**
+     * GET /api/vendedor/:id
+     * Devuelve un vendedor por id, o 404 si no existe.
+     */
     async getById(req, res) {
         try {
             const data = await vendedorService.getById(req.params.id);
@@ -111,6 +126,11 @@ module.exports = {
         }
     },
 
+    /**
+     * POST /api/vendedor
+     * Crea un nuevo vendedor. 400 si falta el nombre o hay violación
+     * de unicidad / FK. 201 con el vendedor creado en éxito.
+     */
     async add(req, res) {
         try {
             // Validación básica
@@ -180,6 +200,11 @@ module.exports = {
         }
     },
 
+    /**
+     * PUT /api/vendedor/:id
+     * Actualiza parcialmente un vendedor. 404 si no existe, 400 ante
+     * violación de unicidad, 200 con el vendedor actualizado en éxito.
+     */
     async update(req, res) {
         try {
             const existing = await vendedorService.getById(req.params.id);
@@ -224,6 +249,11 @@ module.exports = {
         }
     },
 
+    /**
+     * PUT /api/vendedor/:id/asignar-supervisor
+     * Body: { id_supervisor: number | null }
+     * Asigna (o quita si null) el supervisor del vendedor.
+     */
     async assignSupervisor(req, res) {
         try {
             const resultado = await vendedorService.assignSupervisor(
@@ -267,6 +297,11 @@ module.exports = {
         }
     },
 
+    /**
+     * PUT /api/vendedor/asignar-supervisor-masivo
+     * Body: { id_supervisor, vendedores: [...] }
+     * Asigna masivamente un supervisor a varios vendedores.
+     */
     async assignSupervisorBulk(req, res) {
         try {
             const resultado = await vendedorService.assignSupervisorBulk({
@@ -296,6 +331,10 @@ module.exports = {
         }
     },
 
+    /**
+     * PUT /api/vendedor/:id/quitar-supervisor
+     * Quita el supervisor del vendedor indicado. 404 si no existe.
+     */
     async removeSupervisor(req, res) {
         try {
             const resultado = await vendedorService.removeSupervisor(req.params.id);

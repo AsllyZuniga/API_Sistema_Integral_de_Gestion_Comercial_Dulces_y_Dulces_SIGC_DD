@@ -51,6 +51,25 @@ const buildAuthTokenPayload = (userPayload) => ({
     rol: userPayload.rol?.idRol || null
 });
 
+/**
+ * Autentica un usuario por código de vendedor + username + password.
+ *
+ * Flujo:
+ *   1. Intenta encontrar un vendedor con ese código, cuyo usuario
+ *      coincida con el username. (Flujo normal de vendedores.)
+ *   2. Si no encuentra, hace fallback a búsqueda directa por
+ *      username para admin/supervisor sin vendedor vinculado.
+ *
+ * Si la contraseña almacenada está en texto plano y coincide, la
+ * re-hashea con bcrypt en el mismo paso (migración transparente).
+ *
+ * @param {{codigo?: string, username?: string, password: string}} credentials
+ * @returns {Promise<{success: boolean, status: number, message?: string,
+ *   data?: {message: string, vendedor: object, token: string,
+ *   tokenType: string, expiresIn: string}}>}
+ *   En éxito (success=true, status=200) devuelve data con el token.
+ *   En fallo (success=false) devuelve status sugerido (400/401/403) y message.
+ */
 const login = async ({ codigo, username, password }) => {
     const codigoNormalizado = normalizeText(codigo);
     const usernameNormalizado = normalizeText(username);
@@ -196,6 +215,19 @@ const resolveRoleId = async (idRol) => {
     return primerRol ? primerRol.id_rol : null;
 };
 
+/**
+ * Registra un nuevo usuario (con o sin vendedor vinculado).
+ *
+ * Si se pasa `codigo`, lo busca entre los vendedores sin usuario y
+ * vincula el nuevo usuario a ese vendedor. El password siempre se
+ * almacena hasheado con bcrypt.
+ *
+ * @param {{codigo?: string, username: string, password: string,
+ *   id_rol?: number, estado?: boolean}} payload
+ * @returns {Promise<{success: boolean, status: number, message?: string,
+ *   data?: {message: string, vendedor: object|null, usuario: object}}>}
+ *   Posibles status: 201 creado, 400/404/409 error de validación/conflicto.
+ */
 const register = async ({ codigo, username, password, id_rol, estado = true }) => {
     const codigoNormalizado = normalizeText(codigo);
     const usernameNormalizado = normalizeText(username);
@@ -339,6 +371,22 @@ const register = async ({ codigo, username, password, id_rol, estado = true }) =
     }
 };
 
+/**
+ * Registro masivo de usuarios. Procesa cada fila de forma
+ * independiente llamando a `register`, de modo que un fallo en una
+ * fila no aborta el resto del lote.
+ *
+ * Acepta el payload como arreglo directo o como objeto
+ * `{ usuarios: [...] }`.
+ *
+ * @param {Array<{codigo?: string, username: string, password: string,
+ *   id_rol?: number, estado?: boolean}> | {usuarios: Array}} payload
+ * @returns {Promise<{success: true, status: 200, data: {message: string,
+ *   total: number, creados: number, fallidos: number,
+ *   resultados: Array}}>}
+ *   Siempre retorna success=true con detalle por fila; los fallos
+ *   individuales van en `resultados[].status = 'error'`.
+ */
 const registerBulk = async (payload) => {
     const rows = Array.isArray(payload)
         ? payload

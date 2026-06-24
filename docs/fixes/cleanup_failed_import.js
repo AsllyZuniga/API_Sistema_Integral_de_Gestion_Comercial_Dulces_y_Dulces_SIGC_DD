@@ -3,7 +3,7 @@
  * Elimina TODOS los registros de enero para poder reimportar limpiamente
  */
 
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 
 async function cleanup() {
     try {
@@ -11,7 +11,7 @@ async function cleanup() {
 
         // 1. Contar registros antes
         const countBefore = await sequelize.query(`
-            SELECT COUNT(*) as cnt FROM "cuotaProveedor" 
+            SELECT COUNT(*) as cnt FROM "cuotaProveedor"
             WHERE fecha_inicio = '2026-01-01' AND fecha_fin = '2026-01-31'
         `, { type: sequelize.QueryTypes.SELECT });
         console.log(`📊 Cuotas de enero ANTES: ${countBefore[0]?.cnt || 0}`);
@@ -35,7 +35,7 @@ async function cleanup() {
 
         // 4. Verificar
         const countAfter = await sequelize.query(`
-            SELECT COUNT(*) as cnt FROM "cuotaProveedor" 
+            SELECT COUNT(*) as cnt FROM "cuotaProveedor"
             WHERE fecha_inicio = '2026-01-01' AND fecha_fin = '2026-01-31'
         `, { type: sequelize.QueryTypes.SELECT });
         console.log(`\n📊 Cuotas de enero DESPUÉS: ${countAfter[0]?.cnt || 0}`);

@@ -1,6 +1,20 @@
 const authService = require('../services/authService');
 
+/**
+ * POST /api/auth/login
+ *
+ * Body: { codigo?, username, password }
+ *   - Vendedores: envían codigo + username + password
+ *   - Admin/supervisor sin vendedor: solo username + password
+ *
+ * Respuesta 200: { message, vendedor, token, tokenType, expiresIn }
+ * Respuestas de error: 400 (input incompleto), 401 (credenciales),
+ *   403 (usuario inactivo), 500 (error interno).
+ */
 module.exports = {
+    /**
+     * POST /api/auth/login — autentica y devuelve JWT.
+     */
     async login(req, res) {
         try {
             const result = await authService.login({
@@ -24,6 +38,9 @@ module.exports = {
         }
     },
 
+    /**
+     * POST /api/auth/register — registra un único usuario.
+     */
     async register(req, res) {
         try {
             const result = await authService.register({
@@ -49,6 +66,10 @@ module.exports = {
         }
     },
 
+    /**
+     * POST /api/auth/register-bulk — registro masivo de usuarios.
+     * Body: array de usuarios, o { usuarios: [...] }.
+     */
     async registerBulk(req, res) {
         try {
             const result = await authService.registerBulk(req.body);

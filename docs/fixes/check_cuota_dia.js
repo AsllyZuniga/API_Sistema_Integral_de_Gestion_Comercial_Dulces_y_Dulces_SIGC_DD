@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 const { QueryTypes } = require('sequelize');
 
 (async () => {
@@ -22,7 +22,7 @@ const { QueryTypes } = require('sequelize');
 
     // 3. Cuotas para 2026-04-01
     const abril = await sequelize.query(
-      `SELECT COUNT(*) as total, SUM(cuota_dia) as suma FROM "cuotaDia" 
+      `SELECT COUNT(*) as total, SUM(cuota_dia) as suma FROM "cuotaDia"
        WHERE fecha_fin = '2026-04-01'`,
       { type: QueryTypes.SELECT }
     );
@@ -30,7 +30,7 @@ const { QueryTypes } = require('sequelize');
 
     // 4. Sample de datos
     const sample = await sequelize.query(
-      `SELECT id_cuotaDia, cuota_dia, fecha_inicio, fecha_fin, id_usuario 
+      `SELECT id_cuotaDia, cuota_dia, fecha_inicio, fecha_fin, id_usuario
        FROM "cuotaDia" WHERE fecha_fin = '2026-04-01' LIMIT 10`,
       { type: QueryTypes.SELECT }
     );
@@ -39,7 +39,7 @@ const { QueryTypes } = require('sequelize');
 
     // 5. Verificar relación vendedor-usuario-cuotaDia
     const relacion = await sequelize.query(
-      `SELECT 
+      `SELECT
         vd.id_vendedor, vd.nombre, vd.id_usuario,
         COUNT(cd.id_cuotaDia) as cuotas_count,
         SUM(cd.cuota_dia) as cuota_total

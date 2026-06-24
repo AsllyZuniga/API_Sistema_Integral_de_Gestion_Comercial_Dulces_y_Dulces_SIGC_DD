@@ -1,4 +1,4 @@
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 const { QueryTypes } = require('sequelize');
 
 async function getCategoriaIdByNombre(nombreCategoria) {
@@ -32,20 +32,20 @@ async function getCategoriaIdByNombre(nombreCategoria) {
     };
 
     const query = `WITH ventas_filtradas AS (
-      SELECT v.id_vendedor, 
-        SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' 
-            THEN -ABS(COALESCE(dv.subtotal, 0)) 
+      SELECT v.id_vendedor,
+        SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
+            THEN -ABS(COALESCE(dv.subtotal, 0))
             ELSE COALESCE(dv.subtotal, 0) END) AS venta_acum
       FROM venta v
       JOIN detalle_venta dv ON dv.id_venta = v.id_venta
       JOIN item it ON it.id_item = dv.id_item
       LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-      WHERE v.fecha >= :fechaInicio 
+      WHERE v.fecha >= :fechaInicio
         AND v.fecha <= :fechaFin
         AND (TRIM(dv.reporte_prov_con_obs) = :proveedorExacto OR TRIM(dv.reporte_prov_con_obs) LIKE :proveedorLike)
         AND CAST(it.id_categoria AS TEXT) = :categoria
       GROUP BY v.id_vendedor
-    ) 
+    )
     SELECT vd.codigo_vendedor AS cod, vd.nombre AS vendedor, COALESCE(vf.venta_acum, 0) AS venta_acum
     FROM vendedor vd
     LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor

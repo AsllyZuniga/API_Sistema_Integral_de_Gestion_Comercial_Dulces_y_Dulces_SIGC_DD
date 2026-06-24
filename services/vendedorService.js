@@ -16,12 +16,38 @@ const includeRelations = [
     { model: cuotaDia_model, as: 'cuotaDia' }
 ];
 
+/**
+ * Lista todos los vendedores con sus relaciones (usuario, supervisor,
+ * cuotas mes/semana/día). Sin paginación.
+ *
+ * @returns {Promise<Array>} arreglo de instancias del modelo vendedor.
+ */
 const getAll = async () => vendedor_model.findAll({ include: includeRelations });
 
+/**
+ * Obtiene un vendedor por su id con todas sus relaciones.
+ *
+ * @param {number|string} id id_vendedor
+ * @returns {Promise<object|null>} instancia del modelo o null si no existe.
+ */
 const getById = async (id) => vendedor_model.findByPk(id, { include: includeRelations });
 
+/**
+ * Crea un nuevo vendedor.
+ *
+ * @param {object} data campos del modelo vendedor (codigo_vendedor,
+ *   nombre, id_usuario, id_cuotaMes, id_cuotaSemana, id_cuotaDia).
+ * @returns {Promise<object>} instancia creada.
+ */
 const create = async (data) => vendedor_model.create(data);
 
+/**
+ * Actualiza un vendedor existente. Devuelve null si no existe.
+ *
+ * @param {number|string} id id_vendedor
+ * @param {object} data campos a actualizar
+ * @returns {Promise<object|null>} instancia actualizada o null.
+ */
 const updateById = async (id, data) => {
     const vendedor = await vendedor_model.findByPk(id);
     if (!vendedor) return null;
@@ -29,6 +55,20 @@ const updateById = async (id, data) => {
     return vendedor;
 };
 
+/**
+ * Asigna (o quita, si idSupervisor es null/undefined/'') un supervisor
+ * a un vendedor. Acepta el idVendedor como id numérico o como
+ * codigo_vendedor (string).
+ *
+ * Validaciones:
+ *   - Si el vendedor no existe → { error: 'VENDEDOR_NOT_FOUND' }
+ *   - Si se pasa supervisor y no existe → { error: 'SUPERVISOR_NOT_FOUND' }
+ *   - Si el usuario no tiene rol de supervisor → { error: 'USUARIO_NOT_SUPERVISOR' }
+ *
+ * @param {number|string} idVendedor
+ * @param {number|string|null|undefined} idSupervisor
+ * @returns {Promise<{data: object} | {error: string}>}
+ */
 const assignSupervisor = async (idVendedor, idSupervisor) => {
     const identificador = String(idVendedor || '').trim();
 
@@ -65,6 +105,16 @@ const assignSupervisor = async (idVendedor, idSupervisor) => {
 
 const removeSupervisor = async (idVendedor) => assignSupervisor(idVendedor, null);
 
+/**
+ * Asignación masiva de un supervisor a varios vendedores en una sola
+ * operación. Procesa cada vendedor de forma independiente, de modo
+ * que un fallo individual no aborta el lote.
+ *
+ * @param {{id_supervisor: number|string, vendedores: Array<number|string>}} args
+ * @returns {Promise<{data: {total: number, exitosos: number, fallidos: number,
+ *   resultados: Array}} | {error: string, message: string}>}
+ *   Si la lista de vendedores está vacía → EMPTY_VENDEDORES_LIST.
+ */
 const assignSupervisorBulk = async ({ id_supervisor, vendedores }) => {
     const listaVendedores = Array.isArray(vendedores) ? vendedores : [];
 
@@ -110,6 +160,14 @@ const assignSupervisorBulk = async ({ id_supervisor, vendedores }) => {
     };
 };
 
+/**
+ * Devuelve todos los vendedores asignados a un supervisor, con sus
+ * relaciones. `id_supervisor` corresponde a `usuario.id_usuario` del
+ * supervisor (ver models/vendedor.js).
+ *
+ * @param {number} id_supervisor
+ * @returns {Promise<Array>}
+ */
 const getBySupervisor = async (id_supervisor) => {
     return vendedor_model.findAll({
         where: { id_supervisor },

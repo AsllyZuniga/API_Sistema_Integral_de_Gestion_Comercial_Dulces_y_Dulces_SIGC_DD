@@ -1,4 +1,12 @@
-// === FUNCIONES POR PROVEEDOR, CIUDAD, ITEM ===
+/**
+ * Detalle semanal de líneas (proveedores) vendidas por un vendedor.
+ * Devuelve el resumen por línea y el detalle por línea.
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin, etc.
+ * @returns {Promise<{resumenPorLinea: Array, detallePorLinea: Array,
+ *   periodo: object}>}
+ */
 // Por proveedor (líneas)
 async function getLineasPorVendedor(codigoVendedor, filters = {}) {
     const normalizedFilters = normalizePeriodFilters(filters);
@@ -75,6 +83,16 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
     };
 }
 
+/**
+ * Detalle semanal de UNA línea (proveedor) específica para un
+ * vendedor. Coincidencia flexible: código exacto, prefijo, o nombre.
+ *
+ * @param {string} codigoVendedor
+ * @param {string} codigoLinea
+ * @param {object} [filters={}] mismos filtros que getLineasPorVendedor
+ * @returns {Promise<{codigoVendedor: string, codigoLinea: string,
+ *   detallePorLinea: Array}>}
+ */
 // Por proveedor específico
 async function getLineaEspecificaPorVendedor(codigoVendedor, codigoLinea, filters = {}) {
     const data = await getLineasPorVendedor(codigoVendedor, filters);
@@ -95,6 +113,15 @@ async function getLineaEspecificaPorVendedor(codigoVendedor, codigoLinea, filter
     };
 }
 
+/**
+ * Distribución semanal de ventas por ciudad de un vendedor.
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin, etc.
+ * @returns {Promise<{detallePorCiudad: Array,
+ *   resumen: {totalVenta: number, ciudadesCount: number},
+ *   periodo: object}>}
+ */
 // Por ciudad
 async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
     const normalizedFilters = normalizePeriodFilters(filters);
@@ -186,6 +213,14 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
     };
 }
 
+/**
+ * Listado semanal de productos (items) vendidos por un vendedor.
+ *
+ * @param {string} codigoVendedor
+ * @param {object} [filters={}] fechaInicio, fechaFin, etc.
+ * @returns {Promise<{detalle: Array<{Codigo: string, Descripcion: string,
+ *   Cantidad: number, Subtotal: number}>, periodo: object}>}
+ */
 // Por producto/item
 async function getProductosPorVendedor(codigoVendedor, filters = {}) {
     const normalizedFilters = normalizePeriodFilters(filters);
@@ -526,6 +561,15 @@ const addTotalsRow = (rows, diasCorridos, diasHabiles) => {
     ];
 };
 
+/**
+ * Cumplimiento semanal general para admins/supervisores: una fila
+ * por vendedor con su cuota de la semana, venta acumulada,
+ * porcentaje de cumplimiento, proyección y totales.
+ *
+ * @param {object} [filters={}] fechaInicio, fechaFin, ciudad, etc.
+ * @returns {Promise<{detalle: Array, totales: object,
+ *   periodo: {fechaInicio: string, fechaFin: string}}>}
+ */
 // General para admins/supervisores
 const getCumplimientoSemanaFront = async (filters = {}) => {
     const normalizedFilters = normalizePeriodFilters(filters);
@@ -654,6 +698,15 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
 
 
 // Individual por vendedor
+/**
+ * Cumplimiento semanal de UN vendedor identificado por código.
+ * Atajo sobre `getCumplimientoSemanaFront` que filtra el detalle por
+ * `codVendedor`.
+ *
+ * @param {string} codigo codigo_vendedor
+ * @param {object} [filters={}] mismos filtros que getCumplimientoSemanaFront
+ * @returns {Promise<object|null>}
+ */
 async function getCumplimientoSemanaPorCodigo(codigo, filters = {}) {
     const data = await getCumplimientoSemanaFront({ ...filters, vendedor: codigo });
     const codigoNormalizado = String(codigo || '').trim();

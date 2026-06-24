@@ -147,4 +147,12 @@ config/config.json
 
 #uploads
 uploads/
+
+# Certificados y bundles SSL/TLS (no se versionan; se descargan o
+# se provisionan por variables de entorno / secretos en despliegue)
+global-bundle.pem
 *.pem
+*.crt
+*.key
+*.cer
+global-bundle.pem

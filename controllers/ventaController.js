@@ -12,6 +12,12 @@ const {
     tipo_negocio_model,
     item_model
 } = require('../models');
+/**
+ * GET /api/venta
+ * Lista todas las ventas con sus relaciones eager-loaded
+ * (tipoDocumento, cliente+ciudad+barrio+canal+tipoNegocio,
+ *  vendedor+usuario, canal, subcanal, detalles+item).
+ */
 module.exports = {
     list(req, res) {
         return venta_model
@@ -45,6 +51,10 @@ module.exports = {
             .then((ventas) => res.status(200).send(ventas))
             .catch((error) => { res.status(400).send(error); });
     },
+    /**
+     * GET /api/venta/:id
+     * Devuelve una venta por id con todas sus relaciones. 404 si no existe.
+     */
     getById(req, res) {
 
         console.log(req.params.id);
@@ -88,6 +98,11 @@ module.exports = {
             .catch((error) =>
                 res.status(400).send(error));
     },
+    /**
+     * POST /api/venta
+     * Crea una venta a partir de los campos enviados en el body.
+     * Devuelve 201 con la venta creada o 400 ante cualquier error.
+     */
     add(req, res) {
         return venta_model
             .create({
@@ -103,6 +118,11 @@ module.exports = {
             .then((venta) => res.status(201).send(venta))
             .catch((error) => res.status(400).send(error));
     },
+    /**
+     * PUT /api/venta/:id
+     * Actualiza parcialmente una venta. Los campos no enviados conservan
+     * su valor actual. 404 si la venta no existe, 400 ante error.
+     */
     update(req, res) {
         return venta_model
             .findByPk(req.params.id)
