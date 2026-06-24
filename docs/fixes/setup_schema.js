@@ -1,9 +1,9 @@
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 
 (async () => {
   try {
     console.log('\n🔨 CREANDO TABLA vendedor_cuota_categoria...\n');
-    
+
     // 1. Crear la tabla vendedor_cuota_categoria
     await sequelize.query(`
       CREATE TABLE IF NOT EXISTS vendedor_cuota_categoria (
@@ -16,16 +16,16 @@ const { sequelize } = require('./models');
         UNIQUE (id_vendedor, id_categoria, fecha_inicio, fecha_fin)
       );
     `);
-    
+
     console.log('✅ Tabla vendedor_cuota_categoria creada');
-    
+
     // 2. Agregar índice UNIQUE en categoria(nombre) para evitar duplicados
     await sequelize.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uk_categoria_nombre ON categoria(nombre);
     `);
-    
+
     console.log('✅ Índice UNIQUE en categoria(nombre) creado\n');
-    
+
     process.exit(0);
   } catch(e) {
     if (e.message.includes('already exists')) {

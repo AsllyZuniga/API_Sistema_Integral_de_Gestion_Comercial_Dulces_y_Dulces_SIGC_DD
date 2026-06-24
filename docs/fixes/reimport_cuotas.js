@@ -4,7 +4,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { importFromBuffer } = require('./services/importCuotaProveedorService');
+const { importFromBuffer } = require('../../services/importCuotaProveedorService');
 
 async function reimportarCuotas() {
     try {
@@ -12,13 +12,13 @@ async function reimportarCuotas() {
 
         // Ruta del archivo CSV
         const csvPath = path.join(__dirname, 'cuotas_lineas_enero2026_import.csv');
-        
+
         if (!fs.existsSync(csvPath)) {
             throw new Error(`❌ Archivo no encontrado: ${csvPath}`);
         }
 
         console.log(`📄 Archivo: ${path.basename(csvPath)}`);
-        
+
         // Leer el archivo
         const fileContent = fs.readFileSync(csvPath, 'utf8');
         console.log(`📊 Tamaño: ${(fileContent.length / 1024).toFixed(2)} KB`);
@@ -33,7 +33,7 @@ async function reimportarCuotas() {
         console.log(`📊 Filas procesadas: ${resumen.filas_procesadas}`);
         console.log(`✅ Cuotas creadas: ${resumen.cuotas_creadas}`);
         console.log(`⏭️  Cuotas omitidas: ${resumen.cuotas_omitidas}`);
-        
+
         if (resumen.errores.length > 0) {
             console.log(`\n❌ Errores (${resumen.errores.length}):`);
             resumen.errores.slice(0, 10).forEach(err => {

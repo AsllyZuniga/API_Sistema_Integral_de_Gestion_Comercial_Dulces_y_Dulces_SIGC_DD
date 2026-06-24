@@ -2,8 +2,8 @@
  * Verificación: Confirmar que vendedor 0550 tiene 33 proveedores con cuota
  */
 
-const models = require('./models');
-const { sequelize } = require('./models');
+const models = require('../../models');
+const { sequelize } = require('../../models');
 
 async function verificar() {
     try {
@@ -30,7 +30,7 @@ async function verificar() {
                     model: models.cuotaProveedor_model,
                     as: 'cuotaProveedor',
                     required: true,
-                    where: { 
+                    where: {
                         fecha_inicio: '2026-01-01',
                         fecha_fin: '2026-01-31'
                     },

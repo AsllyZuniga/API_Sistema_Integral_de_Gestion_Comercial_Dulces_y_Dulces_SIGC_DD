@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 
 async function fixAllDuplicatesGlobal() {
     try {
@@ -27,42 +27,42 @@ async function fixAllDuplicatesGlobal() {
         // 2. Para cada duplicado
         for (const dup of duplicados) {
             console.log(`\n🔍 Procesando: "${dup.nombre}"`);
-            
+
             // Obtener todos los IDs
             const ids = await sequelize.query(`
-                SELECT id_categoria 
-                FROM categoria 
+                SELECT id_categoria
+                FROM categoria
                 WHERE nombre = :nombre
                 ORDER BY id_categoria ASC
-            `, { 
+            `, {
                 replacements: { nombre: dup.nombre },
-                type: sequelize.QueryTypes.SELECT 
+                type: sequelize.QueryTypes.SELECT
             });
 
             const idsAEliminar = ids.filter(r => r.id_categoria !== dup.id_mantener).map(r => r.id_categoria);
-            
+
             console.log(`   IDs: ${ids.map(r => r.id_categoria).join(', ')} → Mantener: ${dup.id_mantener}, Eliminar: ${idsAEliminar.join(', ')}`);
 
             // Actualizar referencias
             for (const idViejo of idsAEliminar) {
                 // subcategoria
                 const scUpdated = await sequelize.query(`
-                    UPDATE subcategoria 
-                    SET id_categoria = :idMantener 
+                    UPDATE subcategoria
+                    SET id_categoria = :idMantener
                     WHERE id_categoria = :idViejo
-                `, { 
+                `, {
                     replacements: { idMantener: dup.id_mantener, idViejo },
-                    type: sequelize.QueryTypes.UPDATE 
+                    type: sequelize.QueryTypes.UPDATE
                 });
-                
+
                 // item
                 const itUpdated = await sequelize.query(`
-                    UPDATE item 
-                    SET id_categoria = :idMantener 
+                    UPDATE item
+                    SET id_categoria = :idMantener
                     WHERE id_categoria = :idViejo
-                `, { 
+                `, {
                     replacements: { idMantener: dup.id_mantener, idViejo },
-                    type: sequelize.QueryTypes.UPDATE 
+                    type: sequelize.QueryTypes.UPDATE
                 });
 
                 totalActualizadas += (scUpdated[1] || 0) + (itUpdated[1] || 0);
@@ -77,11 +77,11 @@ async function fixAllDuplicatesGlobal() {
                 });
 
                 const result = await sequelize.query(`
-                    DELETE FROM categoria 
+                    DELETE FROM categoria
                     WHERE id_categoria IN (${placeholders})
-                `, { 
+                `, {
                     replacements,
-                    type: sequelize.QueryTypes.DELETE 
+                    type: sequelize.QueryTypes.DELETE
                 });
 
                 totalEliminadas += idsAEliminar.length;
@@ -95,11 +95,11 @@ async function fixAllDuplicatesGlobal() {
 
         // 3. Verificar que no quedan duplicados
         const checkFinal = await sequelize.query(`
-            SELECT COUNT(*) as cnt 
+            SELECT COUNT(*) as cnt
             FROM (
-                SELECT nombre, COUNT(*) 
-                FROM categoria 
-                GROUP BY nombre 
+                SELECT nombre, COUNT(*)
+                FROM categoria
+                GROUP BY nombre
                 HAVING COUNT(*) > 1
             ) sub
         `, { type: sequelize.QueryTypes.SELECT });

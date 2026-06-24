@@ -1,4 +1,4 @@
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 
 /**
  * Script para limpiar duplicados de categorías automáticamente
@@ -10,7 +10,7 @@ const { sequelize } = require('./models');
 
     // Paso 1: Encontrar duplicados
     console.log('🔍 Buscando categorías duplicadas...\n');
-    
+
     const duplicados = await sequelize.query(`
       SELECT nombre, array_agg(id_categoria ORDER BY id_categoria) as ids
       FROM categoria
@@ -25,17 +25,17 @@ const { sequelize } = require('./models');
     }
 
     console.log(`📋 Se encontraron ${duplicados.length} categorías duplicadas:\n`);
-    
+
     const mapeoIdsAntiguosANuevos = {};
-    
+
     duplicados.forEach(dup => {
       const ids = dup.ids;
       const idMenor = Math.min(...ids);
       const idsAEliminar = ids.filter(id => id !== idMenor);
-      
+
       console.log(`   "${dup.nombre}"`);
       console.log(`      IDs: ${ids.join(', ')} → Mantener: ${idMenor}, Eliminar: ${idsAEliminar.join(', ')}`);
-      
+
       // Crear mapeo
       idsAEliminar.forEach(idAntiguo => {
         mapeoIdsAntiguosANuevos[idAntiguo] = idMenor;
@@ -85,7 +85,7 @@ const { sequelize } = require('./models');
     console.log('🗑️  Eliminando categorías duplicadas...\n');
 
     const idsAEliminar = Object.keys(mapeoIdsAntiguosANuevos).map(id => parseInt(id));
-    
+
     const resultado = await sequelize.query(`
       DELETE FROM categoria
       WHERE id_categoria IN (${idsAEliminar.join(',')})
@@ -95,7 +95,7 @@ const { sequelize } = require('./models');
 
     // Paso 4: Verificar
     console.log('🔍 Verificando...\n');
-    
+
     const verificacion = await sequelize.query(`
       SELECT COUNT(*) as total
       FROM categoria

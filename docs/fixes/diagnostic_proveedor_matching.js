@@ -3,7 +3,7 @@
  * Identifica qué nombres del CSV no están encontrando coincidencia en la BD
  */
 
-const models = require('./models');
+const models = require('../../models');
 
 async function diagnostic() {
     try {
@@ -11,11 +11,11 @@ async function diagnostic() {
 
         // Proveedores que el CSV espera (de la fila del vendedor 0550)
         const proveedoresCSV = [
-            'ARCOR', 'TONING', 'INCODEPF', 'ITALO', 'ALICORP ALIMENTOS', 'CONFITECA', 
-            'FLORA FOOD', 'EL REY', 'LEVAPAN', 'SUPER', 'HENKEL', 'RECAMIER', 'PREBEL', 
-            'ENERGIZER', 'COFARMA', 'SAN JORGE VELAS Y VELONES', 'BELLEZA EXPRESS', 
-            'LA CORUÑA', 'KATORI', 'SIEGFRIED', 'BAYER', 'HALEON', 'MONDELEZ', 'ALDOR', 
-            'FONANDES', 'DANISCO', 'CALA', 'JOHNSON Y JOHNSON', 'SANUSS', 'KELLOGGS', 
+            'ARCOR', 'TONING', 'INCODEPF', 'ITALO', 'ALICORP ALIMENTOS', 'CONFITECA',
+            'FLORA FOOD', 'EL REY', 'LEVAPAN', 'SUPER', 'HENKEL', 'RECAMIER', 'PREBEL',
+            'ENERGIZER', 'COFARMA', 'SAN JORGE VELAS Y VELONES', 'BELLEZA EXPRESS',
+            'LA CORUÑA', 'KATORI', 'SIEGFRIED', 'BAYER', 'HALEON', 'MONDELEZ', 'ALDOR',
+            'FONANDES', 'DANISCO', 'CALA', 'JOHNSON Y JOHNSON', 'SANUSS', 'KELLOGGS',
             'MULTIDIMENSIONALES', 'LAB. OSA', 'FINI'
         ];
 
@@ -55,7 +55,7 @@ async function diagnostic() {
         for (const nombreCSV of proveedoresCSV) {
             const norm = normalizeProveedorName(nombreCSV);
             const proveedor = mapBDNormalizado.get(norm);
-            
+
             if (proveedor) {
                 encontrados.push({
                     csv: nombreCSV,
@@ -82,7 +82,7 @@ async function diagnostic() {
         if (noEncontrados.length > 0) {
             noEncontrados.forEach((nombre, idx) => {
                 console.log(`${idx + 1}. "${nombre}"`);
-                
+
                 // Buscar similitudes en la BD
                 const similares = proveedoresBD.filter(p => {
                     const normBD = normalizeProveedorName(p.nombre);

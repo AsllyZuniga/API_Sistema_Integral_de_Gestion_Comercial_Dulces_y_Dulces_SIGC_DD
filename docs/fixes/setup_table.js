@@ -1,9 +1,9 @@
-const { sequelize } = require('./models');
+const { sequelize } = require('../../models');
 
 (async () => {
   try {
     console.log('\n🔨 CREANDO TABLA vendedor_cuota_categoria...\n');
-    
+
     // Crear la tabla con SQL puro
     await sequelize.query(`
       CREATE TABLE IF NOT EXISTS vendedor_cuota_categoria (
@@ -18,19 +18,19 @@ const { sequelize } = require('./models');
         UNIQUE (id_vendedor, id_categoria, fecha_inicio, fecha_fin)
       );
     `);
-    
+
     console.log('✅ Tabla vendedor_cuota_categoria creada\n');
-    
+
     // Verificar que se creó
     const tabla = await sequelize.query(`
-      SELECT table_name FROM information_schema.tables 
+      SELECT table_name FROM information_schema.tables
       WHERE table_name = 'vendedor_cuota_categoria'
     `, { type: sequelize.QueryTypes.SELECT });
-    
+
     if (tabla.length > 0) {
       console.log('✅ Verificación OK: tabla existe\n');
     }
-    
+
     process.exit(0);
   } catch(e) {
     console.error('❌ Error:', e.message);
