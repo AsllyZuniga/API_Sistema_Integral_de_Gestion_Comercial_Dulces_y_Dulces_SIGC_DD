@@ -1269,6 +1269,11 @@ const getLineasGeneral = async (filters = {}) => {
             WHERE vcp.estado = true
               AND cp.fecha_inicio <= :cuotaFechaFin
               AND cp.fecha_fin >= :cuotaFechaInicio
+              -- Excluir duplicados donde codigo=nombre (ej. "ALICORP", "JOHNSON", "OSA",
+              -- "SAN JORGE", "UPFIELD") ya que son entradas separadas de los principales
+              -- (110 - ALICORP ALIMENTOS, 620 - JOHNSON Y JOHNSON, etc.) y producen líneas
+              -- duplicadas en el reporte.
+              AND (pr.codigo IS NULL OR TRIM(pr.codigo) = '' OR TRIM(pr.codigo) != TRIM(pr.nombre))
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (
