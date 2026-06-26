@@ -42,6 +42,7 @@ const adminVentasRouter = require('./routes/adminVentasRouter');
 const itemsVendidosRouter = require('./routes/itemsVendidosRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 const exportRoutes = require('./routes/exportRoutes');
+const filtrosRouter = require('./routes/filtrosRouter');
 
 
 var cors = require('cors');
@@ -135,6 +136,7 @@ app.use('/api/admin', adminVentasRouter);
 app.use('/api/items-vendidos', itemsVendidosRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
+app.use('/api/filtros', filtrosRouter);
 
 
 app.get('/health', (req, res) => {
