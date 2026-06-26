@@ -17,26 +17,35 @@ const extractCategoryId = (categoryStr) => {
 };
 
 const getFilters = (query) => {
+    const toArr = (val) => {
+        if (val == null || val === '') return undefined;
+        const raw = Array.isArray(val) ? val : String(val).split(',');
+        const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+        return arr.length ? arr : undefined;
+    };
+
+    const vendedores = toArr(query.vendedor);
+    const proveedores = toArr(query.proveedor);
+    const categorias = toArr(query.categoria);
+    const ciudades = toArr(query.ciudad);
+
     const filters = {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,
-        vendedor: query.vendedor,
-        ciudad: query.ciudad
+        vendedor: vendedores ? vendedores.join(',') : query.vendedor,
+        vendedores,
+        proveedores,
+        categorias,
+        ciudad: ciudades ? ciudades[0] : query.ciudad,
+        ciudades
     };
 
-    if (query.proveedor) {
-        const list = Array.isArray(query.proveedor)
-            ? query.proveedor
-            : String(query.proveedor).split(',');
-        filters.proveedores = list.map(p => p.trim()).filter(Boolean);
-        filters.proveedor = filters.proveedores[0];
+    if (proveedores) {
+        filters.proveedor = proveedores[0];
     }
 
-    if (query.categoria) {
-        const list = Array.isArray(query.categoria)
-            ? query.categoria
-            : String(query.categoria).split(',');
-        filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
+    if (categorias) {
+        filters.categoria = categorias[0];
     }
 
     return filters;

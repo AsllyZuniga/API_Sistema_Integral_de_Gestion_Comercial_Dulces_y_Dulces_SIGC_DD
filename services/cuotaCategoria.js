@@ -271,6 +271,26 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 	const scopeWhereCuotas = buildScopeWhere(scope, 'vcc.id_vendedor', replacements);
 	const scopeWhereVentas = buildScopeWhereVentas(scope, 'v.id_vendedor', replacements);
 
+	// Filtro adicional por vendedor(es) seleccionado(s) por el usuario.
+	// Acepta `vendedores[]` (array) o `vendedor` (string comma-separated).
+	const vendedoresFiltro = Array.isArray(filters.vendedores) && filters.vendedores.length
+		? filters.vendedores.map((v) => String(v).trim()).filter(Boolean)
+		: (filters.vendedor
+			? String(filters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
+			: null);
+	let extraCuotaWhere = '';
+	let extraVentaWhere = '';
+	if (vendedoresFiltro && vendedoresFiltro.length) {
+		const placeholdersCuota = vendedoresFiltro.map((_, i) => `:fVendedorCuota${i}`).join(',');
+		vendedoresFiltro.forEach((v, i) => { replacements[`fVendedorCuota${i}`] = v; });
+		// Para cuotas: filtrar por codigo_vendedor de la tabla vcc JOIN vendedor
+		// (id_vendedor match). Requiere JOIN adicional.
+		extraCuotaWhere = ` AND vd_cc.codigo_vendedor IN (${placeholdersCuota}) `;
+		const placeholdersVenta = vendedoresFiltro.map((_, i) => `:fVendedorVenta${i}`).join(',');
+		vendedoresFiltro.forEach((v, i) => { replacements[`fVendedorVenta${i}`] = v; });
+		extraVentaWhere = ` AND vd_v.codigo_vendedor IN (${placeholdersVenta}) `;
+	}
+
 	// PARTE 1: Categorías CON cuota (filtradas por scope)
 	// CAST ::date porque vcc.fecha_inicio/fin son timestamp with time zone
 	// y los replacements llegan como texto plano (PG no hace cast implícito
@@ -282,9 +302,11 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 			SUM(vcc.cuota) AS cuota
 		FROM vendedor_cuota_categoria vcc
 		JOIN categoria cat ON cat.id_categoria = vcc.id_categoria
+		${vendedoresFiltro && vendedoresFiltro.length ? 'JOIN vendedor vd_cc ON vd_cc.id_vendedor = vcc.id_vendedor' : ''}
 		WHERE vcc.fecha_inicio <= :fechaFin::date
 		  AND vcc.fecha_fin >= :fechaInicio::date
 		  ${scopeWhereCuotas}
+		  ${extraCuotaWhere}
 		GROUP BY vcc.id_categoria, cat.nombre
 	`, {
 		replacements,
@@ -301,9 +323,11 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		JOIN item it ON it.id_item = dv.id_item
 		JOIN venta v ON v.id_venta = dv.id_venta
 		JOIN categoria cat ON cat.id_categoria = it.id_categoria
+		${vendedoresFiltro && vendedoresFiltro.length ? 'JOIN vendedor vd_v ON vd_v.id_vendedor = v.id_vendedor' : ''}
 		WHERE v.fecha >= :fechaInicio
 		  AND v.fecha <= :fechaFin
 		  ${scopeWhereVentas}
+		  ${extraVentaWhere}
 		GROUP BY it.id_categoria, cat.nombre
 	`, {
 		replacements,

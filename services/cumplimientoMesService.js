@@ -1247,6 +1247,19 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         replacements.ciudad = String(normalizedFilters.ciudad);
     }
 
+    // Filtro por vendedor (soporta array multi o string legacy)
+    const vendedoresGeneral = normalizedFilters.vendedores && normalizedFilters.vendedores.length > 0
+        ? normalizedFilters.vendedores.map((v) => String(v).trim()).filter(Boolean)
+        : (normalizedFilters.vendedor
+            ? String(normalizedFilters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
+            : null);
+
+    if (vendedoresGeneral && vendedoresGeneral.length > 0) {
+        const placeholders = vendedoresGeneral.map((_, i) => `:fVendedor${i}`).join(',');
+        vendedoresGeneral.forEach((v, i) => { replacements[`fVendedor${i}`] = v; });
+        ventasWhere.push(`vd.codigo_vendedor IN (${placeholders})`);
+    }
+
     const proveedoresGeneral = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
@@ -1311,6 +1324,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
                 MAX(TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', ''))) AS reporte_prov_con_obs,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
             FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
@@ -1418,9 +1432,33 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
+    if (normalizedFilters.ciudad) {
+        where.push('CAST(dv.id_ciudad_original AS TEXT) = :ciudadFiltro');
+        replacements.ciudadFiltro = String(normalizedFilters.ciudad);
+    }
+
+    // Filtro por vendedor(es) — soporta array multi o string legacy
+    const vendedoresFiltro = Array.isArray(normalizedFilters.vendedores) && normalizedFilters.vendedores.length
+        ? normalizedFilters.vendedores.map((v) => String(v).trim()).filter(Boolean)
+        : (normalizedFilters.vendedor
+            ? String(normalizedFilters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
+            : null);
+    if (vendedoresFiltro && vendedoresFiltro.length) {
+        const placeholders = vendedoresFiltro.map((_, i) => `:fVendedor${i}`).join(',');
+        vendedoresFiltro.forEach((v, i) => { replacements[`fVendedor${i}`] = v; });
+        // Necesita JOIN a vendedor para usar codigo_vendedor
+        where.push(`vd_c.id_vendedor = v.id_vendedor`);
+        where.push(`vd_c.codigo_vendedor IN (${placeholders})`);
+    }
+
     if (scopeWhereVenta) {
         where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
     }
+
+    // Si hay filtro de vendedor, también hace falta JOIN a vendedor
+    const joinVendedor = vendedoresFiltro && vendedoresFiltro.length
+        ? 'JOIN vendedor vd_c ON vd_c.id_vendedor = v.id_vendedor'
+        : '';
 
     // Construir WHERE clause de ventas
     const whereCondition = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
@@ -1436,6 +1474,7 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
         FROM venta v
         LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
+        ${joinVendedor}
         ${whereCondition}
         GROUP BY COALESCE(dv.id_ciudad_original, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
         ORDER BY venta DESC
@@ -1452,13 +1491,14 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
     // (Antes: JOIN encadenado con venta/cliente multiplicaba la cuota_mes
     //  por el número de ventas del vendor → totales inflados xN.)
     const queryCuotas = `
-        WITH ventas_vendor_ciudad AS (
+        WITH         ventas_vendor_ciudad AS (
             SELECT
                 v.id_vendedor,
                 COALESCE(dv.id_ciudad_original, 0) AS id_ciudad,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_vc
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            ${joinVendedor}
             ${whereCondition}
             GROUP BY v.id_vendedor, COALESCE(dv.id_ciudad_original, 0)
         ),
