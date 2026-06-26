@@ -1,5 +1,6 @@
 const { QueryTypes, Op } = require('sequelize');
 const { sequelize, rango_dias_model } = require('../models');
+const { getVendedorScopeFromAuth, buildScopeWhere, buildScopeWhereVenta } = require('../utils/scopeHelper');
 const { getResumenPeriodoLaboral } = require('../utils/calendarioLaboralColombia');
 
 const round = (value, decimals = 2) => {
@@ -1221,10 +1222,15 @@ const getProductosPorVendedor = async (codigoVendedor, filters = {}) => {
  * @returns {Promise<{detallePorLinea: Array,
  *   periodo: {fechaInicio: string, fechaFin: string}}>}
  */
-const getLineasGeneral = async (filters = {}) => {
+const getLineasGeneral = async (filters = {}, auth = null) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
     const ventasWhere = [];
+
+    // Scope role-aware desde JWT
+    const scope = await getVendedorScopeFromAuth(auth);
+    const scopeWhereCuota = buildScopeWhere(scope, 'vcp.id_vendedor', replacements);
+    const scopeWhereVenta = buildScopeWhereVenta(scope, 'v.id_vendedor', replacements);
 
     if (normalizedFilters.fechaInicio) {
         ventasWhere.push('v.fecha >= :fechaInicio');
@@ -1250,6 +1256,11 @@ const getLineasGeneral = async (filters = {}) => {
         ventasWhere.push(`(${provCond})`);
     }
 
+    // Aplicar scope de rol al WHERE de ventas
+    if (scopeWhereVenta) {
+        ventasWhere.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
+    }
+
     replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
@@ -1257,7 +1268,7 @@ const getLineasGeneral = async (filters = {}) => {
 
     const query = `
         WITH cuotas_agregadas AS (
-            -- Obtener TODOS los proveedores con cuota
+            -- Obtener proveedores con cuota (filtrados por scope si no es admin)
             SELECT
                 vcp.id_proveedor,
                 COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_proveedor,
@@ -1273,6 +1284,7 @@ const getLineasGeneral = async (filters = {}) => {
             WHERE vcp.estado = true
               AND cp.fecha_inicio <= :cuotaFechaFin
               AND cp.fecha_fin >= :cuotaFechaInicio
+              ${scopeWhereCuota}
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (

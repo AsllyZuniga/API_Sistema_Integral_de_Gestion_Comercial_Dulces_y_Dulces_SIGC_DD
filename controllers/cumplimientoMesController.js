@@ -203,7 +203,7 @@ module.exports = {
 
     async getLineas(req, res) {
         try {
-            const data = await cumplimientoMesService.getLineasGeneral(getFilters(req.query));
+            const data = await cumplimientoMesService.getLineasGeneral(getFilters(req.query), req.auth);
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);
