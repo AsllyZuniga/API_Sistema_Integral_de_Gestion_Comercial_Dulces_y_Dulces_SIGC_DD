@@ -50,7 +50,12 @@ const getItemsVendidosPorRol = async ({
     fechaFin,
     idRol,
     idUsuario = null,
-    idVendedor = null
+    idVendedor = null,
+    // Filtros adicionales (multi-selector del front)
+    codVendedor = null,
+    codProveedor = null,
+    codCategoria = null,
+    codCiudad = null
 }) => {
     const validacion = validarFechasObligatorias(fechaInicio, fechaFin);
     if (validacion) return validacion;
@@ -100,6 +105,51 @@ const getItemsVendidosPorRol = async ({
         return { error: 'Rol no autorizado para este endpoint', code: 'ROL_NO_AUTORIZADO' };
     }
 
+    // Filtros adicionales del usuario (multi)
+    // Para vendedor: si el usuario pasó codVendedor[] se filtra por
+    // codigo_vendedor (string), por lo que se hace JOIN a vendedor.
+    const toArr = (val) => {
+        if (val == null || val === '') return [];
+        const raw = Array.isArray(val) ? val : String(val).split(',');
+        return raw.map((v) => String(v).trim()).filter(Boolean);
+    };
+    const vendedoresFiltro = toArr(codVendedor);
+    const proveedoresFiltro = toArr(codProveedor);
+    const categoriasFiltro = toArr(codCategoria);
+    const ciudadesFiltro = toArr(codCiudad);
+
+    const joinVendedor = vendedoresFiltro.length
+        ? 'JOIN vendedor vdv ON vdv.id_vendedor = v.id_vendedor'
+        : '';
+
+    if (vendedoresFiltro.length) {
+        const placeholders = vendedoresFiltro.map((_, i) => `:fVend${i}`).join(',');
+        vendedoresFiltro.forEach((vv, i) => { replacements[`fVend${i}`] = vv; });
+        filtrosVenta.push(`vdv.codigo_vendedor IN (${placeholders})`);
+    }
+
+    if (proveedoresFiltro.length) {
+        // Match contra dv.reporte_prov_con_obs (exacto o prefijo)
+        const clauses = proveedoresFiltro.map((p, i) => {
+            replacements[`fProvE${i}`] = p;
+            replacements[`fProvL${i}`] = `${p}%`;
+            return `(TRIM(dv.reporte_prov_con_obs) = :fProvE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fProvL${i})`;
+        });
+        filtrosVenta.push(`(${clauses.join(' OR ')})`);
+    }
+
+    if (categoriasFiltro.length) {
+        const placeholders = categoriasFiltro.map((_, i) => `:fCat${i}`).join(',');
+        categoriasFiltro.forEach((c, i) => { replacements[`fCat${i}`] = c; });
+        filtrosVenta.push(`i.id_categoria IN (${placeholders})`);
+    }
+
+    if (ciudadesFiltro.length) {
+        const placeholders = ciudadesFiltro.map((_, i) => `:fCiu${i}`).join(',');
+        ciudadesFiltro.forEach((c, i) => { replacements[`fCiu${i}`] = c; });
+        filtrosVenta.push(`dv.id_ciudad_original IN (${placeholders})`);
+    }
+
     const whereVenta = filtrosVenta.join(' AND ');
 
     // SQL crudo (en lugar del ORM) para tener control exacto del
@@ -120,6 +170,7 @@ const getItemsVendidosPorRol = async ({
         INNER JOIN venta v ON v.id_venta = dv.id_venta
         INNER JOIN item i ON i.id_item = dv.id_item
         LEFT JOIN proveedor p ON p.id_proveedor = i.id_proveedor
+        ${joinVendedor}
         WHERE ${whereVenta}
         GROUP BY i.id_proveedor, p.nombre, i.codigo_item, i.descripcion
     `;

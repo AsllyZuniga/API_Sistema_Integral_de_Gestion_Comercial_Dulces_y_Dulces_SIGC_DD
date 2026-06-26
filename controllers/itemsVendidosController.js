@@ -39,7 +39,11 @@ module.exports = {
                 fechaFin,
                 idRol,
                 idUsuario: req.auth?.idUsuario,
-                idVendedor: req.auth?.idVendedor
+                idVendedor: req.auth?.idVendedor,
+                codVendedor: req.query.codVendedor,
+                codProveedor: req.query.codProveedor ?? req.query.proveedor,
+                codCategoria: req.query.codCategoria ?? req.query.categoria,
+                codCiudad: req.query.codCiudad ?? req.query.ciudad
             });
 
             if (resultado?.error) {
