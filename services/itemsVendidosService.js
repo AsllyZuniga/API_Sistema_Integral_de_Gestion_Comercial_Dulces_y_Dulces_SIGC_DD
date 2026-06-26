@@ -35,13 +35,14 @@ const validarFechasObligatorias = (fechaInicio, fechaFin) => {
  *   - 2 (supervisor): ve items vendidos por su equipo (vendedor.id_supervisor = idUsuario)
  *   - 3 (vendedor): ve solo los items que él vendió
  *
- * Paginación: solo admin y supervisor (page/limit). Vendedor devuelve todos los items.
+ * Issue #3: ya no pagina. Devuelve siempre TODAS las filas agregadas por
+ * (proveedor, codigo_item) en una sola respuesta. La paginación se reservó
+ * para vistas de vendedores y clientes (no para items).
  *
  * @param {object} options
  *   - fechaInicio, fechaFin (YYYY-MM-DD, obligatorios)
  *   - idRol ('1' | '2' | '3')
  *   - idUsuario, idVendedor (del token JWT)
- *   - page, limit (solo admin/supervisor)
  * @returns {Promise<{rows: Array, paginacion: object} | {error: string, code: string}>}
  */
 const getItemsVendidosPorRol = async ({
@@ -49,9 +50,7 @@ const getItemsVendidosPorRol = async ({
     fechaFin,
     idRol,
     idUsuario = null,
-    idVendedor = null,
-    page = 1,
-    limit = 10
+    idVendedor = null
 }) => {
     const validacion = validarFechasObligatorias(fechaInicio, fechaFin);
     if (validacion) return validacion;
@@ -77,7 +76,7 @@ const getItemsVendidosPorRol = async ({
         if (!idsEquipo.length) {
             return {
                 rows: [],
-                paginacion: { page: Number(page) || 1, limit: Number(limit) || 10, total: 0, paginado: true }
+                paginacion: { total: 0, paginado: false }
             };
         }
         // Se generan placeholders manuales (:idVend0, :idVend1, ...)
@@ -101,12 +100,11 @@ const getItemsVendidosPorRol = async ({
         return { error: 'Rol no autorizado para este endpoint', code: 'ROL_NO_AUTORIZADO' };
     }
 
-    const usarPaginacion = idRol === '1' || idRol === '2';
     const whereVenta = filtrosVenta.join(' AND ');
 
     // SQL crudo (en lugar del ORM) para tener control exacto del
-    // GROUP BY y del conteo de filas agrupadas: con el ORM el count
-    // y los rows no se sincronizan bien cuando hay agregación + LIMIT.
+    // GROUP BY. Sin LIMIT/OFFSET: la respuesta es la lista completa
+    // agregada por (proveedor, item).
     //
     // El LEFT JOIN a proveedor preserva los items sin proveedor
     // asignado (quedan con nombre vacío). TRIM elimina espacios
@@ -133,20 +131,7 @@ const getItemsVendidosPorRol = async ({
     });
     const total = Number(countRows[0]?.total || 0);
 
-    let paginacion;
-    let rowsQuery = `${baseSelect} ORDER BY LOWER(COALESCE(p.nombre, '')) ASC, LOWER(i.descripcion) ASC`;
-
-    if (usarPaginacion) {
-        const safePage = Math.max(parseInt(page, 10) || 1, 1);
-        const safeLimit = Math.max(Math.min(parseInt(limit, 10) || 10, 100), 1);
-        const offset = (safePage - 1) * safeLimit;
-        replacements.limit = safeLimit;
-        replacements.offset = offset;
-        rowsQuery += ' LIMIT :limit OFFSET :offset';
-        paginacion = { page: safePage, limit: safeLimit, total, paginado: true };
-    } else {
-        paginacion = { total, paginado: false };
-    }
+    const rowsQuery = `${baseSelect} ORDER BY LOWER(COALESCE(p.nombre, '')) ASC, LOWER(i.descripcion) ASC`;
 
     const rows = await sequelize.query(rowsQuery, {
         replacements,
@@ -164,7 +149,7 @@ const getItemsVendidosPorRol = async ({
             unidades_cajas: Number(r.unidades_cajas || 0),
             subtotal: Number(r.subtotal || 0)
         })),
-        paginacion
+        paginacion: { total, paginado: false }
     };
 };
 

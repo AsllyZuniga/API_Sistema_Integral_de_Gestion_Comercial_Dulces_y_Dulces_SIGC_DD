@@ -39,9 +39,7 @@ module.exports = {
                 fechaFin,
                 idRol,
                 idUsuario: req.auth?.idUsuario,
-                idVendedor: req.auth?.idVendedor,
-                page: req.query.page,
-                limit: req.query.limit
+                idVendedor: req.auth?.idVendedor
             });
 
             if (resultado?.error) {
