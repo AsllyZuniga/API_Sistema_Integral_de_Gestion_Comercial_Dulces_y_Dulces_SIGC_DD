@@ -878,6 +878,78 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
     };
 };
 
+/**
+ * Distribución semanal de ventas por ciudad consolidado y role-aware desde JWT.
+ * Mismo shape que `getCiudadesPorVendedor` (per-vendor) pero filtrado por scope:
+ *   - Admin: ve todas las ciudades del sistema
+ *   - Supervisor: ve las ciudades donde vendió su equipo
+ *   - Vendedor: ve solo las ciudades donde él vendió
+ *
+ * @param {object} [filters={}] fechaInicio, fechaFin, etc.
+ * @param {{idUsuario?: number, idVendedor?: number, rol?: number|string} | null} [auth=null]
+ * @returns {Promise<{detallePorCiudad: Array,
+ *   resumen: {totalVenta: number, ciudadesCount: number},
+ *   periodo: object}>}
+ */
+const getCiudadesGeneralSemana = async (filters = {}, auth = null) => {
+    const normalizedFilters = normalizePeriodFilters(filters);
+    const replacements = {};
+    const where = [];
+    const scope = await getVendedorScopeFromAuth(auth);
+    const scopeWhereVenta = buildScopeWhereVenta(scope, 'v.id_vendedor', replacements);
+
+    if (normalizedFilters.fechaInicio) {
+        where.push('v.fecha >= :fechaInicio');
+        replacements.fechaInicio = formatDateOnly(normalizedFilters.fechaInicio);
+    }
+    if (normalizedFilters.fechaFin) {
+        where.push('v.fecha <= :fechaFin');
+        replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
+    }
+    if (normalizedFilters.ciudad) {
+        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
+        replacements.ciudad = String(normalizedFilters.ciudad);
+    }
+    if (scopeWhereVenta) {
+        where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    const query = `
+        SELECT
+            COALESCE(dv.id_ciudad_original, 0) AS id_ciudad,
+            COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
+            SUM(${signedNcAmountSql('v')}) AS venta
+        FROM venta v
+        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
+        ${whereClause}
+        GROUP BY dv.id_ciudad_original, COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
+        ORDER BY venta DESC
+    `;
+
+    const detallePorCiudad = await sequelize.query(query, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+
+    const totalVenta = detallePorCiudad.reduce((sum, r) => sum + toNumber(r.venta), 0);
+    const resumen = {
+        totalVenta: round(totalVenta, 2),
+        ciudadesCount: detallePorCiudad.length
+    };
+
+    return {
+        periodo: {
+            fechaInicio: normalizedFilters.fechaInicioFormatted,
+            fechaFin: normalizedFilters.fechaFinFormatted
+        },
+        resumen,
+        detallePorCiudad
+    };
+};
+
 module.exports = {
     getCumplimientoSemanaFront,
     getCumplimientoSemanaPorCodigo,
@@ -885,5 +957,6 @@ module.exports = {
     getLineaEspecificaPorVendedor,
     getCiudadesPorVendedor,
     getProductosPorVendedor,
-    getLineasGeneralSemana
+    getLineasGeneralSemana,
+    getCiudadesGeneralSemana
 };

@@ -212,7 +212,10 @@ module.exports = {
 
     async getCiudadesGlobal(req, res) {
         try {
-            const data = await cumplimientoMesService.getCumplimientoPorCiudadGlobal(getFilters(req.query));
+            const data = await cumplimientoMesService.getCumplimientoPorCiudadGlobal(
+                getFilters(req.query),
+                req.auth
+            );
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);

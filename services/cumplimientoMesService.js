@@ -1399,10 +1399,14 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
  *   diasHabiles: number},
  *   periodo: {fechaInicio: string, fechaFin: string}}>}
  */
-const getCumplimientoPorCiudadGlobal = async (filters = {}) => {
+const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = {};
     const where = [];
+
+    // Scope role-aware desde JWT
+    const scope = await getVendedorScopeFromAuth(auth);
+    const scopeWhereVenta = buildScopeWhereVenta(scope, 'v.id_vendedor', replacements);
 
     if (normalizedFilters.fechaInicio) {
         where.push('v.fecha >= :fechaInicio');
@@ -1414,8 +1418,12 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}) => {
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
+    if (scopeWhereVenta) {
+        where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
+    }
+
     // Construir WHERE clause de ventas
-    const whereCondition = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+    const whereCondition = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
     // Query para obtener ventas por ciudad (de todos los vendedores)
     // Usa id_ciudad_original de detalle_venta para mantener la ciudad al momento
@@ -1467,6 +1475,7 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}) => {
             JOIN vendedor vd ON vd.id_usuario = cm.id_usuario
             WHERE cm.fecha_inicio <= :cuotaFechaFin
               AND cm.fecha_fin >= :cuotaFechaInicio
+              ${buildScopeWhere(scope, 'vd.id_vendedor', replacements)}
             GROUP BY vd.id_vendedor
         )
         SELECT
