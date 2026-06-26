@@ -187,7 +187,13 @@ const getVendedoresConClientesItems = async (options = {}) => {
         id_supervisor = null,
         id_vendedor = null,
         fechaInicio = null,
-        fechaFin = null
+        fechaFin = null,
+        // Filtros adicionales del usuario (multi-selector del front).
+        // Aceptan arrays (repetidos) o strings comma-separated.
+        codVendedor = null,
+        codProveedor = null,
+        codCategoria = null,
+        codCiudad = null
     } = options;
 
     const {
@@ -217,9 +223,160 @@ const getVendedoresConClientesItems = async (options = {}) => {
     // Esto excluye vendedores que NO tienen ninguna venta en el rango seleccionado.
     let idsVendedoresConVentas = null;
     if (fechaInicio || fechaFin) {
+        const whereVentaPre = { ...fechaWhere };
+
+        // Filtro por codigos de vendedor del usuario (multi)
+        const toArr = (val) => {
+            if (val == null || val === '') return [];
+            const raw = Array.isArray(val) ? val : String(val).split(',');
+            return raw.map((v) => String(v).trim()).filter(Boolean);
+        };
+        const vendedoresFiltro = toArr(codVendedor);
+        if (vendedoresFiltro.length) {
+            const Sequelize = require('sequelize');
+            const { vendedor_model } = require('../models');
+            const vs = await vendedor_model.findAll({
+                attributes: ['id_vendedor'],
+                where: { codigo_vendedor: { [Sequelize.Op.in]: vendedoresFiltro } },
+                raw: true
+            });
+            const ids = vs.map(v => v.id_vendedor);
+            if (id_vendedor) {
+                if (!ids.includes(id_vendedor)) ids.length = 0;
+                else ids.length = 1;
+            }
+            if (!ids.length) {
+                return {
+                    vendedores: [],
+                    paginacionVendedores: {
+                        page: vendedoresPage,
+                        limit: vendedoresLimit,
+                        total: 0
+                    }
+                };
+            }
+            whereVentaPre.id_vendedor = { [Sequelize.Op.in]: ids };
+        } else if (id_vendedor) {
+            whereVentaPre.id_vendedor = id_vendedor;
+        } else if (id_supervisor) {
+            const equipo = await vendedor_model.findAll({
+                attributes: ['id_vendedor'],
+                where: { id_supervisor },
+                raw: true
+            });
+            const ids = equipo.map(v => v.id_vendedor);
+            if (!ids.length) {
+                return {
+                    vendedores: [],
+                    paginacionVendedores: {
+                        page: vendedoresPage,
+                        limit: vendedoresLimit,
+                        total: 0
+                    }
+                };
+            }
+            whereVentaPre.id_vendedor = { [Sequelize.Op.in]: ids };
+        }
+
+        // Filtro por proveedor (reporta_prov_con_obs LIKE prefijo)
+        const proveedoresFiltro = toArr(codProveedor);
+        if (proveedoresFiltro.length) {
+            const Sequelize = require('sequelize');
+            const whereLike = { [Sequelize.Op.or]: proveedoresFiltro.map((p) => ({
+                reporte_prov_con_obs: { [Sequelize.Op.like]: `${p}%` }
+            })) };
+            const dvModel = require('../models').detalle_venta_model;
+            const dvs = await dvModel.findAll({
+                attributes: ['id_venta'],
+                where: { [Sequelize.Op.and]: [whereLike, { reporte_prov_con_obs: { [Sequelize.Op.ne]: null } }] },
+                raw: true
+            });
+            const idsVenta = [...new Set(dvs.map(d => d.id_venta))];
+            if (!idsVenta.length) {
+                return {
+                    vendedores: [],
+                    paginacionVendedores: {
+                        page: vendedoresPage,
+                        limit: vendedoresLimit,
+                        total: 0
+                    }
+                };
+            }
+            whereVentaPre.id_venta = { [Sequelize.Op.in]: idsVenta };
+        }
+
+        // Filtro por categoria
+        const categoriasFiltro = toArr(codCategoria);
+        if (categoriasFiltro.length) {
+            const Sequelize = require('sequelize');
+            const itModel = require('../models').item_model;
+            const items = await itModel.findAll({
+                attributes: ['id_item'],
+                where: { id_categoria: { [Sequelize.Op.in]: categoriasFiltro } },
+                raw: true
+            });
+            const idsItem = items.map(i => i.id_item);
+            if (!idsItem.length) {
+                return {
+                    vendedores: [],
+                    paginacionVendedores: {
+                        page: vendedoresPage,
+                        limit: vendedoresLimit,
+                        total: 0
+                    }
+                };
+            }
+            const dvModel = require('../models').detalle_venta_model;
+            const dvs = await dvModel.findAll({
+                attributes: ['id_venta'],
+                where: { id_item: { [Sequelize.Op.in]: idsItem } },
+                raw: true
+            });
+            const idsVenta = [...new Set(dvs.map(d => d.id_venta))];
+            if (!idsVenta.length) {
+                return {
+                    vendedores: [],
+                    paginacionVendedores: {
+                        page: vendedoresPage,
+                        limit: vendedoresLimit,
+                        total: 0
+                    }
+                };
+            }
+            whereVentaPre.id_venta = whereVentaPre.id_venta
+                ? { [Sequelize.Op.and]: [whereVentaPre.id_venta, { [Sequelize.Op.in]: idsVenta }] }
+                : { [Sequelize.Op.in]: idsVenta };
+        }
+
+        // Filtro por ciudad (id_ciudad_original en detalle_venta)
+        const ciudadesFiltro = toArr(codCiudad);
+        if (ciudadesFiltro.length) {
+            const Sequelize = require('sequelize');
+            const dvModel = require('../models').detalle_venta_model;
+            const dvs = await dvModel.findAll({
+                attributes: ['id_venta'],
+                where: { id_ciudad_original: { [Sequelize.Op.in]: ciudadesFiltro } },
+                raw: true
+            });
+            const idsVenta = [...new Set(dvs.map(d => d.id_venta))];
+            if (!idsVenta.length) {
+                return {
+                    vendedores: [],
+                    paginacionVendedores: {
+                        page: vendedoresPage,
+                        limit: vendedoresLimit,
+                        total: 0
+                    }
+                };
+            }
+            whereVentaPre.id_venta = whereVentaPre.id_venta
+                ? { [Sequelize.Op.and]: [whereVentaPre.id_venta, { [Sequelize.Op.in]: idsVenta }] }
+                : { [Sequelize.Op.in]: idsVenta };
+        }
+
         const vendedoresConVentas = await venta_model.findAll({
             attributes: ['id_vendedor'],
-            where: { ...fechaWhere },
+            where: { ...whereVentaPre },
             group: ['id_vendedor'],
             raw: true
         });

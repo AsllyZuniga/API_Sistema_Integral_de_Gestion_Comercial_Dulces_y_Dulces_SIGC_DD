@@ -424,7 +424,11 @@ module.exports = {
                 vendedoresLimit,
                 ...filtros,
                 fechaInicio,
-                fechaFin
+                fechaFin,
+                codVendedor: req.query.codVendedor ?? req.query.vendedor,
+                codProveedor: req.query.codProveedor ?? req.query.proveedor,
+                codCategoria: req.query.codCategoria ?? req.query.categoria,
+                codCiudad: req.query.codCiudad ?? req.query.ciudad
             });
 
             return res.status(200).json({
