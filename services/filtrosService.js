@@ -35,10 +35,6 @@ const getMonthRange = (baseDate = new Date()) => {
     return { start, end };
 };
 
-/**
- * Normaliza los query params: arrays por repetido (`?k=v1&k=v2`)
- * o comma-separated (`?k=v1,v2`). Devuelve siempre arrays limpios.
- */
 const parseArrayParam = (value) => {
     if (value == null || value === '') return [];
     const raw = Array.isArray(value) ? value : String(value).split(',');
@@ -72,11 +68,6 @@ const normalizeParams = (query = {}) => {
     };
 };
 
-/**
- * Construye un fragmento `<col> IN (placeholders)` cuando hay
- * valores; vacío en caso contrario. Reutiliza `replacements` para los
- * bindings. El caller se encarga de anteponer ` AND ` al unir.
- */
 const buildArrayCondition = (column, values, replacements, prefix) => {
     if (!values || values.length === 0) return '';
     const placeholders = values.map((_, i) => `:${prefix}${i}`).join(',');
@@ -84,77 +75,66 @@ const buildArrayCondition = (column, values, replacements, prefix) => {
     return `${column} IN (${placeholders})`;
 };
 
+const buildProveedorCondition = (values, replacements, prefix) => {
+    if (!values || values.length === 0) return '';
+    const clauses = values.map((p, i) => {
+        replacements[`${prefix}E${i}`] = p;
+        replacements[`${prefix}L${i}`] = `${p}%`;
+        return `(TRIM(dv.reporte_prov_con_obs) = :${prefix}E${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :${prefix}L${i})`;
+    });
+    return `(${clauses.join(' OR ')})`;
+};
+
 /**
- * Devuelve las opciones de los 4 filtros (vendedor, proveedor,
- * categoría, ciudad) en cascada a partir de los filtros que ya
- * están aplicados.
+ * Construye el fragmento WHERE (sin el `WHERE` inicial) aplicando:
+ *   - rango de fechas
+ *   - scope JWT (admin/equipo/propio)
+ *   - filtros seleccionados, EXCLUYENDO el que se pasa en `exclude`
+ *     (clave: 'vendedor' | 'proveedor' | 'categoria' | 'ciudad').
  *
- * Reglas:
- *   - AND entre filtros distintos, OR dentro del mismo filtro.
- *   - Scope role-aware desde JWT (admin/equipo/propio).
- *   - Para vendedor: si el usuario es rol 3 se ignora el `codVendedor`
- *     del query y se fuerza su propio código.
- *   - Para ciudad se usa `detalle_venta.id_ciudad_original` (no
- *     `cliente.id_ciudad`) para ser consistente con los endpoints
- *     role-aware de ciudades.
- *   - Para proveedor se usa `detalle_venta.reporte_prov_con_obs`
- *     (que es lo que el front muestra y filtra en las tablas).
- *   - Para categoría se usa `item.id_categoria`.
+ * Para el filtro de vendedor: para rol 3 (Vendedor) se ignora
+ * `params.codVendedor` y se fuerza su propio `codVendedor` del JWT,
+ * EXCEPTO cuando `exclude === 'vendedor'` (en ese caso no se aplica
+ * la condición de vendor para que su propio dropdown muestre a los
+ * demás miembros del equipo? no, sigue mostrando solo a sí mismo
+ * porque el scope JWT ya lo restringe a su id_vendedor).
  *
- * @param {object} params  query params ya normalizados
- * @param {object} auth    payload del JWT ({idUsuario, idVendedor,
- *   codVendedor, rol})
- * @returns {Promise<{vendedores: Array, proveedores: Array,
- *   categorias: Array, ciudades: Array}>}
+ * Reglas AND entre filtros distintos, OR dentro del mismo filtro.
  */
-const getOpcionesFiltros = async (params, auth) => {
-    const replacements = {
-        fechaInicio: params.fechaInicio,
-        fechaFin: params.fechaFin
-    };
-
-    const scope = await getVendedorScopeFromAuth(auth);
-    const scopeWhereVenta = buildScopeWhereVenta(scope, 'v.id_vendedor', replacements);
-
-    // Para rol vendedor: forzar su propio codigo_vendedor.
-    let codVendedorFiltro = params.codVendedor;
-    const rol = Number(auth?.rol);
-    if (rol === 3) {
-        const ownCode = String(auth?.codVendedor || '').trim();
-        codVendedorFiltro = ownCode ? [ownCode] : [];
-    }
-
+const buildBaseWhere = (params, replacements, scopeWhereVenta, exclude) => {
     const conditions = ['v.fecha >= :fechaInicio', 'v.fecha <= :fechaFin'];
+
+    replacements.fechaInicio = params.fechaInicio;
+    replacements.fechaFin = params.fechaFin;
 
     if (scopeWhereVenta) {
         conditions.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
     }
 
-    // Para vendedor usamos vd.codigo_vendedor (string) que es el ID
-    // que se ve y se filtra en el front.
-    if (codVendedorFiltro && codVendedorFiltro.length > 0) {
-        const cond = buildArrayCondition(
-            'vd.codigo_vendedor',
-            codVendedorFiltro,
-            replacements,
-            'fvend'
-        );
+    if (exclude !== 'vendedor') {
+        let codVendedorFiltro = params.codVendedor;
+        const rol = Number(params.rol);
+        if (rol === 3) {
+            const ownCode = String(params.ownCodVendedor || '').trim();
+            codVendedorFiltro = ownCode ? [ownCode] : [];
+        }
+        if (codVendedorFiltro && codVendedorFiltro.length > 0) {
+            const cond = buildArrayCondition(
+                'vd.codigo_vendedor',
+                codVendedorFiltro,
+                replacements,
+                'fvend'
+            );
+            if (cond) conditions.push(cond);
+        }
+    }
+
+    if (exclude !== 'proveedor' && params.codProveedor && params.codProveedor.length > 0) {
+        const cond = buildProveedorCondition(params.codProveedor, replacements, 'fprov');
         if (cond) conditions.push(cond);
     }
 
-    if (params.codProveedor && params.codProveedor.length > 0) {
-        // Para proveedor se matchea por `dv.reporte_prov_con_obs` con
-        // exacto O prefijo (mismo patrón que `buildProveedorCondition`
-        // en cumplimientoMesService).
-        const clauses = params.codProveedor.map((p, i) => {
-            replacements[`fprovE${i}`] = p;
-            replacements[`fprovL${i}`] = `${p}%`;
-            return `(TRIM(dv.reporte_prov_con_obs) = :fprovE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fprovL${i})`;
-        });
-        conditions.push(`(${clauses.join(' OR ')})`);
-    }
-
-    if (params.codCategoria && params.codCategoria.length > 0) {
+    if (exclude !== 'categoria' && params.codCategoria && params.codCategoria.length > 0) {
         const cond = buildArrayCondition(
             'CAST(cat.id_categoria AS TEXT)',
             params.codCategoria,
@@ -164,7 +144,7 @@ const getOpcionesFiltros = async (params, auth) => {
         if (cond) conditions.push(cond);
     }
 
-    if (params.codCiudad && params.codCiudad.length > 0) {
+    if (exclude !== 'ciudad' && params.codCiudad && params.codCiudad.length > 0) {
         const cond = buildArrayCondition(
             'CAST(dv.id_ciudad_original AS TEXT)',
             params.codCiudad,
@@ -174,97 +154,140 @@ const getOpcionesFiltros = async (params, auth) => {
         if (cond) conditions.push(cond);
     }
 
-    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+    return conditions.join(' AND ');
+};
 
-    const query = `
-        SELECT DISTINCT
-            vd.id_vendedor,
-            vd.codigo_vendedor,
-            vd.nombre AS vendedor_nombre,
-            TRIM(dv.reporte_prov_con_obs) AS proveedor,
-            pr.id_proveedor,
-            pr.nombre AS proveedor_nombre,
-            cat.id_categoria,
-            cat.nombre AS categoria_nombre,
-            ci.id_ciudad,
-            ci.nombre AS ciudad_nombre
-        FROM venta v
-        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
-        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-        LEFT JOIN item i ON i.id_item = dv.id_item
-        LEFT JOIN proveedor pr ON pr.id_proveedor = i.id_proveedor
-        LEFT JOIN categoria cat ON cat.id_categoria = i.id_categoria
-        LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
-        ${whereClause}
-    `;
+const buildFromClause = () => `
+    FROM venta v
+    JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+    JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+    LEFT JOIN item i ON i.id_item = dv.id_item
+    LEFT JOIN proveedor pr ON pr.id_proveedor = i.id_proveedor
+    LEFT JOIN categoria cat ON cat.id_categoria = i.id_categoria
+    LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
+`;
 
-    const rows = await sequelize.query(query, {
-        replacements,
-        type: QueryTypes.SELECT
-    });
+const runDistinctQuery = async (selectExpr, where, sharedReplacements) => {
+    const replacements = { ...sharedReplacements };
+    const query = `SELECT DISTINCT ${selectExpr} ${buildFromClause()} WHERE ${where}`;
+    return sequelize.query(query, { replacements, type: QueryTypes.SELECT });
+};
 
-    // Construcción de las 4 listas. Para vendedor, supervisor solo
-    // ve a los miembros de su equipo (ya filtrado por scope JWT).
-    // Para ciudad sin nombre usar 'SIN CIUDAD'. Para proveedor usar
-    // `reporte_prov_con_obs` como value (lo que ve el front en la
-    // tabla) y `pr.nombre` como label secundario si existe.
-    const vendedorMap = new Map();
-    const proveedorMap = new Map();
-    const categoriaMap = new Map();
-    const ciudadMap = new Map();
+/**
+ * Devuelve las opciones de los 4 desplegables en cascada.
+ *
+ * Self-exclusion: la lista del filtro X NO se filtra por X, solo
+ * por los OTROS filtros + scope + fecha. Así el usuario siempre ve
+ * TODAS las opciones compatibles con su selección actual (puede
+ * agregar más).
+ *
+ * Roles:
+ *   - admin: scope 'all' (sin restricción)
+ *   - supervisor: solo ve su equipo (scope='team' filtrado por JWT)
+ *   - vendedor: scope 'self' (filtrosActivos.codVendedor se ignora,
+ *     se fuerza su propio codVendedor)
+ */
+const getOpcionesFiltros = async (params, auth) => {
+    // 1ra pasada: scope JWT (no depende del filtro que se excluya)
+    const scope = await getVendedorScopeFromAuth(auth);
+    const baseReplacements = {};
+    const scopeWhereVenta = buildScopeWhereVenta(scope, 'v.id_vendedor', baseReplacements);
 
-    rows.forEach((r) => {
-        if (r.id_vendedor != null && r.codigo_vendedor) {
-            const key = String(r.codigo_vendedor);
-            if (!vendedorMap.has(key)) {
-                vendedorMap.set(key, {
-                    value: key,
-                    label: `${key} - ${(r.vendedor_nombre || '').trim()}`
-                });
-            }
-        }
-        const prov = r.proveedor ? String(r.proveedor).trim() : '';
-        if (prov) {
-            if (!proveedorMap.has(prov)) {
-                proveedorMap.set(prov, {
-                    value: prov,
-                    label: (r.proveedor_nombre || prov).trim()
-                });
-            }
-        }
-        if (r.id_categoria != null) {
-            const key = String(r.id_categoria);
-            if (!categoriaMap.has(key)) {
-                categoriaMap.set(key, {
-                    value: key,
-                    label: `${key} - ${(r.categoria_nombre || '').trim()}`
-                });
-            }
-        }
-        if (r.id_ciudad != null) {
-            const key = String(r.id_ciudad);
-            if (!ciudadMap.has(key)) {
-                ciudadMap.set(key, {
-                    value: key,
-                    label: (r.ciudad_nombre || '').trim() || 'SIN CIUDAD'
-                });
-            }
-        }
-    });
+    // Inyectar datos de auth para el manejo de self en buildBaseWhere
+    const enrichedParams = {
+        ...params,
+        rol: auth?.rol,
+        ownCodVendedor: auth?.codVendedor
+    };
+
+    // 4 queries, una por lista, cada una excluyendo su propio filtro
+    const [
+        vendedoresRows,
+        proveedoresRows,
+        categoriasRows,
+        ciudadesRows
+    ] = await Promise.all([
+        runDistinctQuery(
+            'vd.id_vendedor, vd.codigo_vendedor, vd.nombre AS vendedor_nombre',
+            buildBaseWhere(enrichedParams, baseReplacements, scopeWhereVenta, 'vendedor'),
+            baseReplacements
+        ),
+        runDistinctQuery(
+            `TRIM(dv.reporte_prov_con_obs) AS proveedor,
+             pr.id_proveedor, pr.nombre AS proveedor_nombre`,
+            buildBaseWhere(enrichedParams, baseReplacements, scopeWhereVenta, 'proveedor'),
+            baseReplacements
+        ),
+        runDistinctQuery(
+            'cat.id_categoria, cat.nombre AS categoria_nombre',
+            buildBaseWhere(enrichedParams, baseReplacements, scopeWhereVenta, 'categoria'),
+            baseReplacements
+        ),
+        runDistinctQuery(
+            'ci.id_ciudad, ci.nombre AS ciudad_nombre',
+            buildBaseWhere(enrichedParams, baseReplacements, scopeWhereVenta, 'ciudad'),
+            baseReplacements
+        )
+    ]);
 
     const sortByLabel = (a, b) =>
         String(a.label).localeCompare(String(b.label), 'es', { sensitivity: 'base' });
+
+    const vendedores = vendedoresRows
+        .filter((r) => r.id_vendedor != null && r.codigo_vendedor)
+        .map((r) => ({
+            value: String(r.codigo_vendedor),
+            label: `${String(r.codigo_vendedor).trim()} - ${(r.vendedor_nombre || '').trim()}`
+        }));
+
+    const proveedores = proveedoresRows
+        .map((r) => String(r.proveedor || '').trim())
+        .filter(Boolean)
+        .map((valor) => {
+            // Buscar el nombre "limpio" del mismo row (join con pr.nombre)
+            const match = proveedoresRows.find((x) => String(x.proveedor || '').trim() === valor);
+            return {
+                value: valor,
+                label: (match?.proveedor_nombre || valor).trim()
+            };
+        });
+
+    const categorias = categoriasRows
+        .filter((r) => r.id_categoria != null)
+        .map((r) => ({
+            value: String(r.id_categoria),
+            label: `${r.id_categoria} - ${(r.categoria_nombre || '').trim()}`
+        }));
+
+    const ciudades = ciudadesRows
+        .filter((r) => r.id_ciudad != null)
+        .map((r) => ({
+            value: String(r.id_ciudad),
+            label: (r.ciudad_nombre || '').trim() || 'SIN CIUDAD'
+        }));
 
     return {
         periodo: {
             fechaInicio: params.fechaInicioFormatted,
             fechaFin: params.fechaFinFormatted
         },
-        vendedores: Array.from(vendedorMap.values()).sort(sortByLabel),
-        proveedores: Array.from(proveedorMap.values()).sort(sortByLabel),
-        categorias: Array.from(categoriaMap.values()).sort(sortByLabel),
-        ciudades: Array.from(ciudadMap.values()).sort(sortByLabel)
+        vendedores: dedupeByValue(vendedores).sort(sortByLabel),
+        proveedores: dedupeByValue(proveedores).sort(sortByLabel),
+        categorias: dedupeByValue(categorias).sort(sortByLabel),
+        ciudades: dedupeByValue(ciudades).sort(sortByLabel)
     };
+};
+
+const dedupeByValue = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const item of arr) {
+        if (!item || !item.value) continue;
+        if (seen.has(item.value)) continue;
+        seen.add(item.value);
+        out.push(item);
+    }
+    return out;
 };
 
 module.exports = {
