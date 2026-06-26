@@ -273,22 +273,63 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 
 	// Filtro adicional por vendedor(es) seleccionado(s) por el usuario.
 	// Acepta `vendedores[]` (array) o `vendedor` (string comma-separated).
-	const vendedoresFiltro = Array.isArray(filters.vendedores) && filters.vendedores.length
-		? filters.vendedores.map((v) => String(v).trim()).filter(Boolean)
-		: (filters.vendedor
-			? String(filters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
-			: null);
+	const toArr = (val) => {
+		if (val == null || val === '') return null;
+		const raw = Array.isArray(val) ? val : String(val).split(',');
+		const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+		return arr.length ? arr : null;
+	};
+	const vendedoresFiltro = toArr(filters.vendedores) || toArr(filters.vendedor);
+	const proveedoresFiltro = toArr(filters.proveedores) || toArr(filters.proveedor);
+	const categoriasFiltro = toArr(filters.categorias) || toArr(filters.categoria);
+	const ciudadesFiltro = toArr(filters.ciudades) || toArr(filters.ciudad);
 	let extraCuotaWhere = '';
 	let extraVentaWhere = '';
+	let joinCuota = '';
+	let joinVenta = '';
 	if (vendedoresFiltro && vendedoresFiltro.length) {
 		const placeholdersCuota = vendedoresFiltro.map((_, i) => `:fVendedorCuota${i}`).join(',');
 		vendedoresFiltro.forEach((v, i) => { replacements[`fVendedorCuota${i}`] = v; });
-		// Para cuotas: filtrar por codigo_vendedor de la tabla vcc JOIN vendedor
-		// (id_vendedor match). Requiere JOIN adicional.
 		extraCuotaWhere = ` AND vd_cc.codigo_vendedor IN (${placeholdersCuota}) `;
 		const placeholdersVenta = vendedoresFiltro.map((_, i) => `:fVendedorVenta${i}`).join(',');
 		vendedoresFiltro.forEach((v, i) => { replacements[`fVendedorVenta${i}`] = v; });
 		extraVentaWhere = ` AND vd_v.codigo_vendedor IN (${placeholdersVenta}) `;
+		joinCuota = 'JOIN vendedor vd_cc ON vd_cc.id_vendedor = vcc.id_vendedor';
+		joinVenta = 'JOIN vendedor vd_v ON vd_v.id_vendedor = v.id_vendedor';
+	}
+
+	// Filtro por categoria(s) - reduce el universo tanto en la parte de
+	// cuota como en la de acumulado. En la parte de cuota filtra
+	// vcc.id_categoria; en la parte de acumulado filtra it.id_categoria.
+	if (categoriasFiltro && categoriasFiltro.length) {
+		const placeholdersCuota = categoriasFiltro.map((_, i) => `:fCatCuota${i}`).join(',');
+		categoriasFiltro.forEach((c, i) => { replacements[`fCatCuota${i}`] = c; });
+		extraCuotaWhere += ` AND cat.id_categoria IN (${placeholdersCuota}) `;
+		const placeholdersVenta = categoriasFiltro.map((_, i) => `:fCatVenta${i}`).join(',');
+		categoriasFiltro.forEach((c, i) => { replacements[`fCatVenta${i}`] = c; });
+		extraVentaWhere += ` AND it.id_categoria IN (${placeholdersVenta}) `;
+	}
+
+	// Filtro por proveedor(es) - match contra dv.reporte_prov_con_obs LIKE prefijo
+	// (mismo patron que buildProveedorCondition en cumplimientoMesService).
+	// Aplica solo a la parte de acumulado (las cuotas son por categoria
+	// del vendor, no por proveedor).
+	let extraProvVenta = '';
+	if (proveedoresFiltro && proveedoresFiltro.length) {
+		const clauses = proveedoresFiltro.map((p, i) => {
+			replacements[`fProvE${i}`] = p;
+			replacements[`fProvL${i}`] = `${p}%`;
+			return `(TRIM(dv.reporte_prov_con_obs) = :fProvE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fProvL${i})`;
+		});
+		extraProvVenta = ` AND (${clauses.join(' OR ')}) `;
+	}
+
+	// Filtro por ciudad - id_ciudad_original de detalle_venta
+	let extraCiuVenta = '';
+	if (ciudadesFiltro && ciudadesFiltro.length) {
+		const placeholders = ciudadesFiltro.map((_, i) => `:fCiuVenta${i}`).join(',');
+		ciudadesFiltro.forEach((c, i) => { replacements[`fCiuVenta${i}`] = c; });
+		extraCiuVenta = ` AND dv.id_ciudad_original IN (${placeholders}) `;
 	}
 
 	// PARTE 1: Categorías CON cuota (filtradas por scope)
@@ -302,7 +343,7 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 			SUM(vcc.cuota) AS cuota
 		FROM vendedor_cuota_categoria vcc
 		JOIN categoria cat ON cat.id_categoria = vcc.id_categoria
-		${vendedoresFiltro && vendedoresFiltro.length ? 'JOIN vendedor vd_cc ON vd_cc.id_vendedor = vcc.id_vendedor' : ''}
+		${joinCuota}
 		WHERE vcc.fecha_inicio <= :fechaFin::date
 		  AND vcc.fecha_fin >= :fechaInicio::date
 		  ${scopeWhereCuotas}
@@ -323,11 +364,13 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		JOIN item it ON it.id_item = dv.id_item
 		JOIN venta v ON v.id_venta = dv.id_venta
 		JOIN categoria cat ON cat.id_categoria = it.id_categoria
-		${vendedoresFiltro && vendedoresFiltro.length ? 'JOIN vendedor vd_v ON vd_v.id_vendedor = v.id_vendedor' : ''}
+		${joinVenta}
 		WHERE v.fecha >= :fechaInicio
 		  AND v.fecha <= :fechaFin
 		  ${scopeWhereVentas}
 		  ${extraVentaWhere}
+		  ${extraProvVenta}
+		  ${extraCiuVenta}
 		GROUP BY it.id_categoria, cat.nombre
 	`, {
 		replacements,
