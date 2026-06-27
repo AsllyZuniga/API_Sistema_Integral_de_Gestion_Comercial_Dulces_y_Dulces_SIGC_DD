@@ -35,13 +35,14 @@ const validarFechasObligatorias = (fechaInicio, fechaFin) => {
  *   - 2 (supervisor): ve items vendidos por su equipo (vendedor.id_supervisor = idUsuario)
  *   - 3 (vendedor): ve solo los items que él vendió
  *
- * Paginación: solo admin y supervisor (page/limit). Vendedor devuelve todos los items.
+ * Issue #3: ya no pagina. Devuelve siempre TODAS las filas agregadas por
+ * (proveedor, codigo_item) en una sola respuesta. La paginación se reservó
+ * para vistas de vendedores y clientes (no para items).
  *
  * @param {object} options
  *   - fechaInicio, fechaFin (YYYY-MM-DD, obligatorios)
  *   - idRol ('1' | '2' | '3')
  *   - idUsuario, idVendedor (del token JWT)
- *   - page, limit (solo admin/supervisor)
  * @returns {Promise<{rows: Array, paginacion: object} | {error: string, code: string}>}
  */
 const getItemsVendidosPorRol = async ({
@@ -50,8 +51,11 @@ const getItemsVendidosPorRol = async ({
     idRol,
     idUsuario = null,
     idVendedor = null,
-    page = 1,
-    limit = 10
+    // Filtros adicionales (multi-selector del front)
+    codVendedor = null,
+    codProveedor = null,
+    codCategoria = null,
+    codCiudad = null
 }) => {
     const validacion = validarFechasObligatorias(fechaInicio, fechaFin);
     if (validacion) return validacion;
@@ -77,7 +81,7 @@ const getItemsVendidosPorRol = async ({
         if (!idsEquipo.length) {
             return {
                 rows: [],
-                paginacion: { page: Number(page) || 1, limit: Number(limit) || 10, total: 0, paginado: true }
+                paginacion: { total: 0, paginado: false }
             };
         }
         // Se generan placeholders manuales (:idVend0, :idVend1, ...)
@@ -101,12 +105,56 @@ const getItemsVendidosPorRol = async ({
         return { error: 'Rol no autorizado para este endpoint', code: 'ROL_NO_AUTORIZADO' };
     }
 
-    const usarPaginacion = idRol === '1' || idRol === '2';
+    // Filtros adicionales del usuario (multi)
+    // Para vendedor: si el usuario pasó codVendedor[] se filtra por
+    // codigo_vendedor (string), por lo que se hace JOIN a vendedor.
+    const toArr = (val) => {
+        if (val == null || val === '') return [];
+        const raw = Array.isArray(val) ? val : String(val).split(',');
+        return raw.map((v) => String(v).trim()).filter(Boolean);
+    };
+    const vendedoresFiltro = toArr(codVendedor);
+    const proveedoresFiltro = toArr(codProveedor);
+    const categoriasFiltro = toArr(codCategoria);
+    const ciudadesFiltro = toArr(codCiudad);
+
+    const joinVendedor = vendedoresFiltro.length
+        ? 'JOIN vendedor vdv ON vdv.id_vendedor = v.id_vendedor'
+        : '';
+
+    if (vendedoresFiltro.length) {
+        const placeholders = vendedoresFiltro.map((_, i) => `:fVend${i}`).join(',');
+        vendedoresFiltro.forEach((vv, i) => { replacements[`fVend${i}`] = vv; });
+        filtrosVenta.push(`vdv.codigo_vendedor IN (${placeholders})`);
+    }
+
+    if (proveedoresFiltro.length) {
+        // Match contra dv.reporte_prov_con_obs (exacto o prefijo)
+        const clauses = proveedoresFiltro.map((p, i) => {
+            replacements[`fProvE${i}`] = p;
+            replacements[`fProvL${i}`] = `${p}%`;
+            return `(TRIM(dv.reporte_prov_con_obs) = :fProvE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fProvL${i})`;
+        });
+        filtrosVenta.push(`(${clauses.join(' OR ')})`);
+    }
+
+    if (categoriasFiltro.length) {
+        const placeholders = categoriasFiltro.map((_, i) => `:fCat${i}`).join(',');
+        categoriasFiltro.forEach((c, i) => { replacements[`fCat${i}`] = c; });
+        filtrosVenta.push(`i.id_categoria IN (${placeholders})`);
+    }
+
+    if (ciudadesFiltro.length) {
+        const placeholders = ciudadesFiltro.map((_, i) => `:fCiu${i}`).join(',');
+        ciudadesFiltro.forEach((c, i) => { replacements[`fCiu${i}`] = c; });
+        filtrosVenta.push(`dv.id_ciudad_original IN (${placeholders})`);
+    }
+
     const whereVenta = filtrosVenta.join(' AND ');
 
     // SQL crudo (en lugar del ORM) para tener control exacto del
-    // GROUP BY y del conteo de filas agrupadas: con el ORM el count
-    // y los rows no se sincronizan bien cuando hay agregación + LIMIT.
+    // GROUP BY. Sin LIMIT/OFFSET: la respuesta es la lista completa
+    // agregada por (proveedor, item).
     //
     // El LEFT JOIN a proveedor preserva los items sin proveedor
     // asignado (quedan con nombre vacío). TRIM elimina espacios
@@ -122,6 +170,7 @@ const getItemsVendidosPorRol = async ({
         INNER JOIN venta v ON v.id_venta = dv.id_venta
         INNER JOIN item i ON i.id_item = dv.id_item
         LEFT JOIN proveedor p ON p.id_proveedor = i.id_proveedor
+        ${joinVendedor}
         WHERE ${whereVenta}
         GROUP BY i.id_proveedor, p.nombre, i.codigo_item, i.descripcion
     `;
@@ -133,20 +182,7 @@ const getItemsVendidosPorRol = async ({
     });
     const total = Number(countRows[0]?.total || 0);
 
-    let paginacion;
-    let rowsQuery = `${baseSelect} ORDER BY LOWER(COALESCE(p.nombre, '')) ASC, LOWER(i.descripcion) ASC`;
-
-    if (usarPaginacion) {
-        const safePage = Math.max(parseInt(page, 10) || 1, 1);
-        const safeLimit = Math.max(Math.min(parseInt(limit, 10) || 10, 100), 1);
-        const offset = (safePage - 1) * safeLimit;
-        replacements.limit = safeLimit;
-        replacements.offset = offset;
-        rowsQuery += ' LIMIT :limit OFFSET :offset';
-        paginacion = { page: safePage, limit: safeLimit, total, paginado: true };
-    } else {
-        paginacion = { total, paginado: false };
-    }
+    const rowsQuery = `${baseSelect} ORDER BY LOWER(COALESCE(p.nombre, '')) ASC, LOWER(i.descripcion) ASC`;
 
     const rows = await sequelize.query(rowsQuery, {
         replacements,
@@ -164,7 +200,7 @@ const getItemsVendidosPorRol = async ({
             unidades_cajas: Number(r.unidades_cajas || 0),
             subtotal: Number(r.subtotal || 0)
         })),
-        paginacion
+        paginacion: { total, paginado: false }
     };
 };
 

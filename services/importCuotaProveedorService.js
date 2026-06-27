@@ -511,7 +511,7 @@ async function importFromBuffer(fileContent, fecha_inicio, fecha_fin) {
                 const cuotasCreadasChunk = await models.cuotaProveedor_model.bulkCreate(
                     chunk.map(q => {
                         const { _meta, ...rest } = q;
-                        return rest;
+                        return { ...rest, id_proveedor: _meta.id_proveedor };
                     }),
                     { returning: true }
                 );

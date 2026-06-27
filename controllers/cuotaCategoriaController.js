@@ -2,51 +2,59 @@ const cuotaCategoriaService = require('../services/cuotaCategoria');
 const { parseDateRange } = require('../utils/dateHelper');
 
 const getFilters = (query) => {
+    let base;
     try {
-        // Intentar parsear fechas desde mesAnio o fechaInicio/fechaFin
         const { fechaInicio, fechaFin } = parseDateRange(
             query.mesAnio,
             query.fechaInicio,
             query.fechaFin
         );
-        return { fechaInicio, fechaFin };
+        base = { fechaInicio, fechaFin };
     } catch (error) {
-        // Si hay error en parsing, retornar las fechas tal como vienen
-        // (para mantener compatibilidad)
-        return {
+        base = {
             fechaInicio: query.fechaInicio,
             fechaFin: query.fechaFin
         };
     }
+
+    // Pasar todos los filtros relevantes al service para que los
+    // endpoints role-aware los honren (vendedor/proveedor/categoria/ciudad).
+    const toArr = (val) => {
+        if (val == null || val === '') return undefined;
+        const raw = Array.isArray(val) ? val : String(val).split(',');
+        const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+        return arr.length ? arr : undefined;
+    };
+
+    const vendedores = toArr(query.vendedor);
+    const proveedores = toArr(query.proveedor);
+    const categorias = toArr(query.categoria);
+    const ciudades = toArr(query.ciudad);
+
+    return {
+        ...base,
+        vendedor: vendedores ? vendedores.join(',') : undefined,
+        vendedores,
+        proveedor: proveedores ? proveedores[0] : undefined,
+        proveedores,
+        categoria: categorias ? categorias[0] : undefined,
+        categorias,
+        ciudad: ciudades ? ciudades[0] : undefined,
+        ciudades
+    };
 };
 
 module.exports = {
+    /**
+     * GET /cuota-categoria/general
+     * Endpoint role-aware: filtra por rol desde el JWT.
+     */
     async general(req, res) {
         try {
-            const data = await cuotaCategoriaService.getCuotaCategoriaGeneral(getFilters(req.query));
-            return res.status(200).send(data);
-        } catch (error) {
-            return res.status(400).send(error);
-        }
-    },
-
-    async byVendedor(req, res) {
-        try {
-            const data = await cuotaCategoriaService.getCuotaCategoriaPorVendedor(req.params.codigoVendedor, getFilters(req.query));
-            if (!data) {
-                return res.status(404).send({
-                    message: 'Vendedor no encontrado'
-                });
-            }
-            return res.status(200).send(data);
-        } catch (error) {
-            return res.status(400).send(error);
-        }
-    },
-
-    async todosVendedores(req, res) {
-        try {
-            const data = await cuotaCategoriaService.getCuotaCategoriaTodosVendedores(getFilters(req.query));
+            const data = await cuotaCategoriaService.getCuotaCategoriaGeneral(
+                getFilters(req.query),
+                req.auth
+            );
             return res.status(200).send(data);
         } catch (error) {
             return res.status(400).send(error);

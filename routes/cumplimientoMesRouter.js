@@ -6,8 +6,9 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 // Rutas específicas sin parámetros (PRIMERO)
 router.get('/front/me', requireAuthJWT, cumplimientoMesController.listFrontMe);
 router.get('/front', cumplimientoMesController.listFront);
-router.get('/ciudades-global', cumplimientoMesController.getCiudadesGlobal);
-router.get('/lineas', cumplimientoMesController.getLineas);
+router.get('/ciudades-global', requireAuthJWT, cumplimientoMesController.getCiudadesGlobal);
+// Issue #2: /lineas ahora es role-aware desde JWT (admin ve todas, supervisor ve su equipo, vendedor ve solo suyas)
+router.get('/lineas', requireAuthJWT, cumplimientoMesController.getLineas);
 
 // Rutas con parámetros anidados
 router.get('/vendedor/:codigoVendedor/linea/:codigoLinea', cumplimientoMesController.getLineaEspecificaPorVendedor);

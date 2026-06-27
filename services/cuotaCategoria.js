@@ -60,6 +60,107 @@ const normalizePeriodFilters = (filters = {}) => {
 	};
 };
 
+/**
+ * Determina el alcance (scope) de visibilidad a partir del JWT.
+ *
+ *   - Sin auth o rol 1 (Admin)        → { tipo: 'all' }
+ *   - rol 2 (Supervisor)             → { tipo: 'team', idsVendedor: [..] }
+ *   - rol 3 (Vendedor)               → { tipo: 'self', idVendedor }
+ *
+ * El array devuelto por 'team' puede estar vacío si el supervisor no
+ * tiene vendedores asignados (en ese caso el resultado será detalle=[]).
+ *
+ * @param {{idUsuario?: number, idVendedor?: number, rol?: number|string} | null | undefined} auth
+ * @returns {Promise<{tipo: 'all'} | {tipo: 'team', idsVendedor: number[]}
+ *   | {tipo: 'self', idVendedor: number | null}>}
+ */
+const getVendedorScopeFromAuth = async (auth) => {
+	if (!auth) return { tipo: 'all' };
+
+	const rol = Number(auth.rol);
+	if (rol === 1) return { tipo: 'all' };
+
+	if (rol === 2) {
+		const equipo = await sequelize.query(`
+			SELECT id_vendedor
+			FROM vendedor
+			WHERE id_supervisor = :idUsuario
+			  AND id_vendedor IS NOT NULL
+		`, {
+			replacements: { idUsuario: auth.idUsuario },
+			type: QueryTypes.SELECT
+		});
+		return { tipo: 'team', idsVendedor: equipo.map((v) => v.id_vendedor) };
+	}
+
+	// rol 3 (Vendedor) u otro: solo sus propios datos
+	const ownVendedor = await sequelize.query(`
+		SELECT id_vendedor FROM vendedor WHERE id_usuario = :idUsuario LIMIT 1
+	`, {
+		replacements: { idUsuario: auth.idUsuario },
+		type: QueryTypes.SELECT,
+		plain: true
+	});
+	return { tipo: 'self', idVendedor: ownVendedor?.id_vendedor ?? null };
+};
+
+/**
+ * Construye los placeholders y el fragmento SQL para filtrar por scope.
+ *
+ *   - tipo 'all'  → sin filtro (devuelve '')
+ *   - tipo 'team' → 'AND vcc.id_vendedor IN (:scope0, :scope1, ...)'
+ *   - tipo 'self' → 'AND vcc.id_vendedor = :scope0'   (o vacío si null)
+ *
+ * Los bindings se agregan a `replacements` bajo las claves scope0..scopeN.
+ *
+ * @param {{tipo: 'all'|'team'|'self', idsVendedor?: number[], idVendedor?: number|null}} scope
+ * @param {string} column nombre de la columna a filtrar (default 'vcc.id_vendedor')
+ * @param {object} [replacements={}] objeto al que se agregan los bindings
+ * @returns {string} fragmento SQL (puede empezar con ' AND ...' o ser vacío)
+ */
+const buildScopeWhere = (scope, column = 'vcc.id_vendedor', replacements = {}) => {
+	if (scope.tipo === 'all') return '';
+	if (scope.tipo === 'team') {
+		if (!scope.idsVendedor || scope.idsVendedor.length === 0) {
+			// Equipo vacío: forzar resultado vacío
+			return ` AND ${column} = -1`;
+		}
+		const placeholders = scope.idsVendedor
+			.map((_, i) => `:scopeV${i}`)
+			.join(',');
+		scope.idsVendedor.forEach((id, i) => { replacements[`scopeV${i}`] = id; });
+		return ` AND ${column} IN (${placeholders})`;
+	}
+	if (scope.tipo === 'self') {
+		if (!scope.idVendedor) {
+			return ` AND ${column} = -1`;
+		}
+		replacements.scopeV0 = scope.idVendedor;
+		return ` AND ${column} = :scopeV0`;
+	}
+	return '';
+};
+
+const buildScopeWhereVentas = (scope, column = 'v.id_vendedor', replacements = {}) => {
+	if (scope.tipo === 'all') return '';
+	if (scope.tipo === 'team') {
+		if (!scope.idsVendedor || scope.idsVendedor.length === 0) {
+			return ` AND ${column} = -1`;
+		}
+		const placeholders = scope.idsVendedor
+			.map((_, i) => `:scopeVV${i}`)
+			.join(',');
+		scope.idsVendedor.forEach((id, i) => { replacements[`scopeVV${i}`] = id; });
+		return ` AND ${column} IN (${placeholders})`;
+	}
+	if (scope.tipo === 'self') {
+		if (!scope.idVendedor) return ` AND ${column} = -1`;
+		replacements.scopeVV0 = scope.idVendedor;
+		return ` AND ${column} = :scopeVV0`;
+	}
+	return '';
+};
+
 const calculateRangoFromPeriod = (fechaInicio, fechaFin) => {
 	const resumen = getResumenPeriodoLaboral({
 		fechaInicio,
@@ -145,23 +246,96 @@ const buildCuotaCategoriaPayload = async (rows, period, extra = {}) => {
 };
 
 /**
- * Cumplimiento de cuotas por categoría para el período (todos los
- * vendedores sumados). Devuelve el detalle por categoría con
- * cuota, acumulado, porcentaje de cumplimiento, proyectado y totales.
+ * Cumplimiento de cuotas por categoría para el período, con filtrado
+ * automático por rol a partir del JWT.
+ *
+ *   - Admin (rol 1)         → todas las categorías de todos los vendedores
+ *   - Supervisor (rol 2)    → categorías de su equipo (vendedor.id_supervisor)
+ *   - Vendedor (rol 3)      → solo sus categorías
  *
  * Si no se pasan fechas en filters, se usa el mes actual.
  *
  * @param {object} [filters={}] fechaInicio, fechaFin
- * @returns {Promise<{detalle: Array, total: object, periodo: object}>}
+ * @param {{idUsuario?: number, idVendedor?: number, rol?: number|string} | null} [auth=null]
+ * @returns {Promise<{detalle: Array, total: object, periodo: object, scope?: object}>}
  */
-const getCuotaCategoriaGeneral = async (filters = {}) => {
+const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 	const period = normalizePeriodFilters(filters);
+	const scope = await getVendedorScopeFromAuth(auth);
 	const replacements = {
 		fechaInicio: period.fechaInicio,
 		fechaFin: period.fechaFin
 	};
 
-	// PARTE 1: Categorías CON cuota
+	// Filtros SQL derivados del scope
+	const scopeWhereCuotas = buildScopeWhere(scope, 'vcc.id_vendedor', replacements);
+	const scopeWhereVentas = buildScopeWhereVentas(scope, 'v.id_vendedor', replacements);
+
+	// Filtro adicional por vendedor(es) seleccionado(s) por el usuario.
+	// Acepta `vendedores[]` (array) o `vendedor` (string comma-separated).
+	const toArr = (val) => {
+		if (val == null || val === '') return null;
+		const raw = Array.isArray(val) ? val : String(val).split(',');
+		const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+		return arr.length ? arr : null;
+	};
+	const vendedoresFiltro = toArr(filters.vendedores) || toArr(filters.vendedor);
+	const proveedoresFiltro = toArr(filters.proveedores) || toArr(filters.proveedor);
+	const categoriasFiltro = toArr(filters.categorias) || toArr(filters.categoria);
+	const ciudadesFiltro = toArr(filters.ciudades) || toArr(filters.ciudad);
+	let extraCuotaWhere = '';
+	let extraVentaWhere = '';
+	let joinCuota = '';
+	let joinVenta = '';
+	if (vendedoresFiltro && vendedoresFiltro.length) {
+		const placeholdersCuota = vendedoresFiltro.map((_, i) => `:fVendedorCuota${i}`).join(',');
+		vendedoresFiltro.forEach((v, i) => { replacements[`fVendedorCuota${i}`] = v; });
+		extraCuotaWhere = ` AND vd_cc.codigo_vendedor IN (${placeholdersCuota}) `;
+		const placeholdersVenta = vendedoresFiltro.map((_, i) => `:fVendedorVenta${i}`).join(',');
+		vendedoresFiltro.forEach((v, i) => { replacements[`fVendedorVenta${i}`] = v; });
+		extraVentaWhere = ` AND vd_v.codigo_vendedor IN (${placeholdersVenta}) `;
+		joinCuota = 'JOIN vendedor vd_cc ON vd_cc.id_vendedor = vcc.id_vendedor';
+		joinVenta = 'JOIN vendedor vd_v ON vd_v.id_vendedor = v.id_vendedor';
+	}
+
+	// Filtro por categoria(s) - reduce el universo tanto en la parte de
+	// cuota como en la de acumulado. En la parte de cuota filtra
+	// vcc.id_categoria; en la parte de acumulado filtra it.id_categoria.
+	if (categoriasFiltro && categoriasFiltro.length) {
+		const placeholdersCuota = categoriasFiltro.map((_, i) => `:fCatCuota${i}`).join(',');
+		categoriasFiltro.forEach((c, i) => { replacements[`fCatCuota${i}`] = c; });
+		extraCuotaWhere += ` AND cat.id_categoria IN (${placeholdersCuota}) `;
+		const placeholdersVenta = categoriasFiltro.map((_, i) => `:fCatVenta${i}`).join(',');
+		categoriasFiltro.forEach((c, i) => { replacements[`fCatVenta${i}`] = c; });
+		extraVentaWhere += ` AND it.id_categoria IN (${placeholdersVenta}) `;
+	}
+
+	// Filtro por proveedor(es) - match contra dv.reporte_prov_con_obs LIKE prefijo
+	// (mismo patron que buildProveedorCondition en cumplimientoMesService).
+	// Aplica solo a la parte de acumulado (las cuotas son por categoria
+	// del vendor, no por proveedor).
+	let extraProvVenta = '';
+	if (proveedoresFiltro && proveedoresFiltro.length) {
+		const clauses = proveedoresFiltro.map((p, i) => {
+			replacements[`fProvE${i}`] = p;
+			replacements[`fProvL${i}`] = `${p}%`;
+			return `(TRIM(dv.reporte_prov_con_obs) = :fProvE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fProvL${i})`;
+		});
+		extraProvVenta = ` AND (${clauses.join(' OR ')}) `;
+	}
+
+	// Filtro por ciudad - id_ciudad_original de detalle_venta
+	let extraCiuVenta = '';
+	if (ciudadesFiltro && ciudadesFiltro.length) {
+		const placeholders = ciudadesFiltro.map((_, i) => `:fCiuVenta${i}`).join(',');
+		ciudadesFiltro.forEach((c, i) => { replacements[`fCiuVenta${i}`] = c; });
+		extraCiuVenta = ` AND dv.id_ciudad_original IN (${placeholders}) `;
+	}
+
+	// PARTE 1: Categorías CON cuota (filtradas por scope)
+	// CAST ::date porque vcc.fecha_inicio/fin son timestamp with time zone
+	// y los replacements llegan como texto plano (PG no hace cast implícito
+	// en prepared statements).
 	const cuotasPorCategoria = await sequelize.query(`
 		SELECT
 			vcc.id_categoria,
@@ -169,15 +343,18 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 			SUM(vcc.cuota) AS cuota
 		FROM vendedor_cuota_categoria vcc
 		JOIN categoria cat ON cat.id_categoria = vcc.id_categoria
-		WHERE vcc.fecha_inicio <= :fechaFin
-		  AND vcc.fecha_fin >= :fechaInicio
+		${joinCuota}
+		WHERE vcc.fecha_inicio <= :fechaFin::date
+		  AND vcc.fecha_fin >= :fechaInicio::date
+		  ${scopeWhereCuotas}
+		  ${extraCuotaWhere}
 		GROUP BY vcc.id_categoria, cat.nombre
 	`, {
 		replacements,
 		type: QueryTypes.SELECT
 	});
 
-	// PARTE 2: Acumulado por todas las categorías (para cubrir cuotas y sin cuota)
+	// PARTE 2: Acumulado de ventas (filtrado por scope)
 	const acumuladoPorCategoria = await sequelize.query(`
 		SELECT
 			it.id_categoria,
@@ -187,8 +364,13 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 		JOIN item it ON it.id_item = dv.id_item
 		JOIN venta v ON v.id_venta = dv.id_venta
 		JOIN categoria cat ON cat.id_categoria = it.id_categoria
+		${joinVenta}
 		WHERE v.fecha >= :fechaInicio
 		  AND v.fecha <= :fechaFin
+		  ${scopeWhereVentas}
+		  ${extraVentaWhere}
+		  ${extraProvVenta}
+		  ${extraCiuVenta}
 		GROUP BY it.id_categoria, cat.nombre
 	`, {
 		replacements,
@@ -208,7 +390,7 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 
 	// UNIÓN: Todas las categorías (cuota + sin cuota con venta)
 	const todasIds = new Set([...cuotaIndex.keys(), ...acumuladoIndex.keys()]);
-	
+
 	const rows = Array.from(todasIds).map((idCategoria) => {
 		const cuotaData = cuotaIndex.get(idCategoria);
 		const acumData = acumuladoIndex.get(idCategoria);
@@ -220,11 +402,10 @@ const getCuotaCategoriaGeneral = async (filters = {}) => {
 		};
 	}).sort((a, b) => a.categoria.localeCompare(b.categoria));
 
-	if (rows.length === 0) {
-		return buildCuotaCategoriaPayload([], period);
-	}
+	const payload = await buildCuotaCategoriaPayload(rows, period);
 
-	return buildCuotaCategoriaPayload(rows, period);
+	// Devolver el scope para que el front sepa qué se le está mostrando
+	return { ...payload, scope: { tipo: scope.tipo } };
 };
 
 /**
@@ -826,9 +1007,12 @@ const deleteByDateRange = async (fechaInicio, fechaFin) => {
 };
 
 module.exports = {
+	// Endpoint público único, role-aware desde JWT
 	getCuotaCategoriaGeneral,
+	// Mantener por compatibilidad con el script de validación interna
+	// (NO se expone en routes/cuotaCategoriaRouter.js)
 	getCuotaCategoriaPorVendedor,
-	getCuotaCategoriaTodosVendedores,
+	// Herramientas internas (no expuestas en router)
 	validateCuotasMarzo,
 	compareCuotasCSVvsBD,
 	deleteById,
