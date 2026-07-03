@@ -129,13 +129,9 @@ const getItemsVendidosPorRol = async ({
     }
 
     if (proveedoresFiltro.length) {
-        // Match contra dv.reporte_prov_con_obs (exacto o prefijo)
-        const clauses = proveedoresFiltro.map((p, i) => {
-            replacements[`fProvE${i}`] = p;
-            replacements[`fProvL${i}`] = `${p}%`;
-            return `(TRIM(dv.reporte_prov_con_obs) = :fProvE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fProvL${i})`;
-        });
-        filtrosVenta.push(`(${clauses.join(' OR ')})`);
+        const placeholders = proveedoresFiltro.map((_, i) => `:fProv${i}`).join(',');
+        proveedoresFiltro.forEach((p, i) => { replacements[`fProv${i}`] = p; });
+        filtrosVenta.push(`p.id_proveedor IN (${placeholders})`);
     }
 
     if (categoriasFiltro.length) {

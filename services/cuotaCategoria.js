@@ -310,18 +310,12 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		extraVentaWhere += ` AND it.id_categoria IN (${placeholdersVenta}) `;
 	}
 
-	// Filtro por proveedor(es) - match contra dv.reporte_prov_con_obs LIKE prefijo
-	// (mismo patron que buildProveedorCondition en cumplimientoMesService).
-	// Aplica solo a la parte de acumulado (las cuotas son por categoria
-	// del vendor, no por proveedor).
+	// Filtro por proveedor(es) - match exacto via item.id_proveedor
 	let extraProvVenta = '';
 	if (proveedoresFiltro && proveedoresFiltro.length) {
-		const clauses = proveedoresFiltro.map((p, i) => {
-			replacements[`fProvE${i}`] = p;
-			replacements[`fProvL${i}`] = `${p}%`;
-			return `(TRIM(dv.reporte_prov_con_obs) = :fProvE${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :fProvL${i})`;
-		});
-		extraProvVenta = ` AND (${clauses.join(' OR ')}) `;
+		const placeholders = proveedoresFiltro.map((_, i) => `:fProv${i}`).join(',');
+		proveedoresFiltro.forEach((p, i) => { replacements[`fProv${i}`] = p; });
+		extraProvVenta = ` AND it.id_proveedor IN (${placeholders}) `;
 	}
 
 	// Filtro por ciudad - id_ciudad_original de detalle_venta

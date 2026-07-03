@@ -77,12 +77,9 @@ const buildArrayCondition = (column, values, replacements, prefix) => {
 
 const buildProveedorCondition = (values, replacements, prefix) => {
     if (!values || values.length === 0) return '';
-    const clauses = values.map((p, i) => {
-        replacements[`${prefix}E${i}`] = p;
-        replacements[`${prefix}L${i}`] = `${p}%`;
-        return `(TRIM(dv.reporte_prov_con_obs) = :${prefix}E${i} OR TRIM(dv.reporte_prov_con_obs) LIKE :${prefix}L${i})`;
-    });
-    return `(${clauses.join(' OR ')})`;
+    const placeholders = values.map((_, i) => `:${prefix}${i}`).join(',');
+    values.forEach((v, i) => { replacements[`${prefix}${i}`] = v; });
+    return `pr.id_proveedor IN (${placeholders})`;
 };
 
 /**
@@ -241,16 +238,11 @@ const getOpcionesFiltros = async (params, auth) => {
         }));
 
     const proveedores = proveedoresRows
-        .map((r) => String(r.proveedor || '').trim())
-        .filter(Boolean)
-        .map((valor) => {
-            // Buscar el nombre "limpio" del mismo row (join con pr.nombre)
-            const match = proveedoresRows.find((x) => String(x.proveedor || '').trim() === valor);
-            return {
-                value: valor,
-                label: (match?.proveedor_nombre || valor).trim()
-            };
-        });
+        .filter((r) => r.id_proveedor != null)
+        .map((r) => ({
+            value: String(r.id_proveedor),
+            label: (r.proveedor_nombre || String(r.proveedor || '').trim()).trim()
+        }));
 
     const categorias = categoriasRows
         .filter((r) => r.id_categoria != null)

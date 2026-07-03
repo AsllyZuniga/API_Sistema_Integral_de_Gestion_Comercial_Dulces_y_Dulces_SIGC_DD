@@ -100,6 +100,15 @@ module.exports = sequelize => {
       primaryKey: false,
       field: "reporte_prov_con_obs",
       autoIncrement: false
+    },
+    id_ciudad_original: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Ciudad original al momento de la importación',
+      primaryKey: false,
+      field: "id_ciudad_original",
+      autoIncrement: false
     }
   };
   const options = {

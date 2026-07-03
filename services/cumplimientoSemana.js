@@ -432,14 +432,11 @@ const getRangoDias = async (filters = {}) => {
     };
 };
 
-const buildProveedorCondition = (proveedores, replacements, detalleAlias = 'dv') => {
+const buildProveedorCondition = (proveedores, replacements) => {
     if (!proveedores || proveedores.length === 0) return null;
-    const clauses = proveedores.map((p, i) => {
-        replacements[`semProvExacto${i}`] = p;
-        replacements[`semProvLike${i}`] = `${p}%`;
-        return `(TRIM(${detalleAlias}.reporte_prov_con_obs) = :semProvExacto${i} OR TRIM(${detalleAlias}.reporte_prov_con_obs) LIKE :semProvLike${i})`;
-    });
-    return clauses.join(' OR ');
+    const placeholders = proveedores.map((_, i) => `:fProv${i}`).join(',');
+    proveedores.forEach((p, i) => { replacements[`fProv${i}`] = p; });
+    return `it.id_proveedor IN (${placeholders})`;
 };
 
 const buildVentasFilters = (filters = {}, replacements = {}) => {
@@ -470,6 +467,7 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
             EXISTS (
                 SELECT 1
                 FROM detalle_venta dv
+                JOIN item it ON it.id_item = dv.id_item
                 WHERE dv.id_venta = v.id_venta
                   AND (${provCond})
             )
