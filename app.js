@@ -106,6 +106,7 @@ app.use("/api/canale", canalRouter);
 app.use("/api/categoria", categoriaRouter);
 app.use("/api/ciudad", ciudadRouter);
 app.use("/api/cliente", clienteRouter);
+app.use("/api/clientes", clienteRouter);
 app.use("/api/cuota-dia", cuotaDiaRouter);
 app.use("/api/cuota-categoria", cuotaCategoriaRouter);
 app.use("/api/cuota-categoria-import", cuotaCategoriaImportRouter);

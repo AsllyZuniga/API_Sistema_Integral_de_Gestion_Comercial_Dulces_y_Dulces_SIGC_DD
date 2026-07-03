@@ -80,7 +80,7 @@ async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
     if (categoriasFiltro.length) {
         const placeholders = categoriasFiltro.map((_, i) => `:fc${i}`).join(',');
         categoriasFiltro.forEach((c, i) => { replacements[`fc${i}`] = c; });
-        conditions.push(`i.id_categoria IN (${placeholders})`);
+        conditions.push(`it.id_categoria IN (${placeholders})`);
     }
 
     if (ciudadesFiltro.length) {
