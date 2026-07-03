@@ -14,21 +14,23 @@ const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,
-        vendedor: query.vendedor
+        vendedor: query.vendedor || query.codVendedor
     };
 
-    if (query.proveedor) {
-        const list = Array.isArray(query.proveedor)
-            ? query.proveedor
-            : String(query.proveedor).split(',');
+    const proveedorRaw = query.proveedor || query.codProveedor;
+    if (proveedorRaw) {
+        const list = Array.isArray(proveedorRaw)
+            ? proveedorRaw
+            : String(proveedorRaw).split(',');
         filters.proveedores = list.map(p => p.trim()).filter(Boolean);
         filters.proveedor = filters.proveedores[0];
     }
 
-    if (query.categoria) {
-        const list = Array.isArray(query.categoria)
-            ? query.categoria
-            : String(query.categoria).split(',');
+    const categoriaRaw = query.categoria || query.codCategoria;
+    if (categoriaRaw) {
+        const list = Array.isArray(categoriaRaw)
+            ? categoriaRaw
+            : String(categoriaRaw).split(',');
         filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
     }
 

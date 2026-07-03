@@ -24,10 +24,10 @@ const getFilters = (query) => {
         return arr.length ? arr : undefined;
     };
 
-    const vendedores = toArr(query.vendedor);
-    const proveedores = toArr(query.proveedor);
-    const categorias = toArr(query.categoria);
-    const ciudades = toArr(query.ciudad);
+    const vendedores = toArr(query.vendedor) || toArr(query.codVendedor);
+    const proveedores = toArr(query.proveedor) || toArr(query.codProveedor);
+    const categorias = toArr(query.categoria) || toArr(query.codCategoria);
+    const ciudades = toArr(query.ciudad) || toArr(query.codCiudad);
 
     const filters = {
         fechaInicio: query.fechaInicio,
