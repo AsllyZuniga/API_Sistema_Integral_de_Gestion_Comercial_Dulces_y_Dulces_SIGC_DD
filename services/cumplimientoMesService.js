@@ -874,6 +874,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         ),
         ventas_por_proveedor AS (
             SELECT
+                MAX(it.id_proveedor) AS id_proveedor,
                 MAX(TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1))) AS codigo_reporte,
                 UPPER(TRIM(REGEXP_REPLACE(
                     REGEXP_REPLACE(
@@ -901,7 +902,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         )
         -- Cuotas con sus ventas (LEFT JOIN: cuota sin venta = venta 0)
         SELECT
-            cq.id_proveedor,
+            COALESCE(vp.id_proveedor, cq.id_proveedor) AS id_proveedor,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS nombre_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS reporte_prov_con_obs,
@@ -913,7 +914,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         UNION ALL
         -- Ventas sin cuota asignada (proveedor no está en vendedorCuotaProveedor)
         SELECT
-            NULL AS id_proveedor,
+            vp.id_proveedor,
             vp.reporte_prov_con_obs AS codigo_linea,
             vp.reporte_prov_con_obs AS nombre_linea,
             vp.reporte_prov_con_obs AS reporte_prov_con_obs,
@@ -1311,6 +1312,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         ventas_por_proveedor AS (
             -- Agregar ventas por proveedor (normalizado, sin código prefijo)
             SELECT
+                MAX(it.id_proveedor) AS id_proveedor,
                 MAX(TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1))) AS codigo_reporte,
                 UPPER(TRIM(REGEXP_REPLACE(
                     REGEXP_REPLACE(
@@ -1338,7 +1340,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         )
         -- PARTE 1: Proveedores CON cuota (con o sin venta)
         SELECT
-            cq.id_proveedor,
+            COALESCE(vp.id_proveedor, cq.id_proveedor) AS id_proveedor,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS nombre_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS reporte_prov_con_obs,
@@ -1350,7 +1352,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         UNION ALL
         -- PARTE 2: Proveedores SIN cuota pero CON venta
         SELECT
-            NULL AS id_proveedor,
+            vp.id_proveedor,
             vp.reporte_prov_con_obs AS codigo_linea,
             vp.reporte_prov_con_obs AS nombre_linea,
             vp.reporte_prov_con_obs AS reporte_prov_con_obs,

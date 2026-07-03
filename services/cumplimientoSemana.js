@@ -793,6 +793,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         ),
         ventas_por_proveedor AS (
             SELECT
+                MAX(it.id_proveedor) AS id_proveedor,
                 UPPER(TRIM(REGEXP_REPLACE(
                     REGEXP_REPLACE(
                         TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')),
@@ -817,7 +818,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
                     )))
         )
         SELECT
-            cq.id_proveedor,
+            COALESCE(vp.id_proveedor, cq.id_proveedor) AS id_proveedor,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS nombre_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS reporte_prov_con_obs,
@@ -828,7 +829,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
             ON vp.nombre_norm = cq.nombre_norm
         UNION ALL
         SELECT
-            NULL AS id_proveedor,
+            vp.id_proveedor,
             vp.reporte_prov_con_obs AS codigo_linea,
             vp.reporte_prov_con_obs AS nombre_linea,
             vp.reporte_prov_con_obs AS reporte_prov_con_obs,
