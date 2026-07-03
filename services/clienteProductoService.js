@@ -37,20 +37,60 @@ const toDateOnly = (value) => {
     return date;
 };
 
+const toArr = (val) => {
+    if (val == null || val === '') return [];
+    const raw = Array.isArray(val) ? val : String(val).split(',');
+    return raw.map((v) => String(v).trim()).filter(Boolean);
+};
+
 // Devuelve los productos comprados por cada cliente asociados a un vendedor específico
 async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
     const replacements = { idVendedor };
-    let whereClause = 'WHERE v.id_vendedor = :idVendedor';
+    const conditions = ['v.id_vendedor = :idVendedor'];
+    const joins = [];
 
     if (filters.fechaInicio) {
-        whereClause += ' AND v.fecha >= :fechaInicio';
+        conditions.push('v.fecha >= :fechaInicio');
         replacements.fechaInicio = toDateOnly(filters.fechaInicio);
     }
 
     if (filters.fechaFin) {
-        whereClause += ' AND v.fecha <= :fechaFin';
+        conditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = toDateOnly(filters.fechaFin);
     }
+
+    const vendedoresFiltro = toArr(filters.codVendedor);
+    const proveedoresFiltro = toArr(filters.codProveedor);
+    const categoriasFiltro = toArr(filters.codCategoria);
+    const ciudadesFiltro = toArr(filters.codCiudad);
+
+    if (vendedoresFiltro.length) {
+        joins.push('JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor');
+        const placeholders = vendedoresFiltro.map((_, i) => `:fv${i}`).join(',');
+        vendedoresFiltro.forEach((v, i) => { replacements[`fv${i}`] = v; });
+        conditions.push(`vd.codigo_vendedor IN (${placeholders})`);
+    }
+
+    if (proveedoresFiltro.length) {
+        const placeholders = proveedoresFiltro.map((_, i) => `:fp${i}`).join(',');
+        proveedoresFiltro.forEach((p, i) => { replacements[`fp${i}`] = p; });
+        conditions.push(`EXISTS (SELECT 1 FROM proveedor pr WHERE pr.id_proveedor = it.id_proveedor AND pr.id_proveedor IN (${placeholders}))`);
+    }
+
+    if (categoriasFiltro.length) {
+        const placeholders = categoriasFiltro.map((_, i) => `:fc${i}`).join(',');
+        categoriasFiltro.forEach((c, i) => { replacements[`fc${i}`] = c; });
+        conditions.push(`i.id_categoria IN (${placeholders})`);
+    }
+
+    if (ciudadesFiltro.length) {
+        const placeholders = ciudadesFiltro.map((_, i) => `:fci${i}`).join(',');
+        ciudadesFiltro.forEach((c, i) => { replacements[`fci${i}`] = c; });
+        conditions.push(`dv.id_ciudad_original IN (${placeholders})`);
+    }
+
+    const whereClause = 'WHERE ' + conditions.join(' AND ');
+    const joinClause = joins.length ? joins.join(' ') : '';
 
     const query = `
         SELECT
@@ -69,6 +109,7 @@ async function getProductosPorClientePorVendedor(idVendedor, filters = {}) {
         JOIN cliente c ON v.id_cliente = c.id_cliente
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         JOIN item it ON it.id_item = dv.id_item
+        ${joinClause}
         ${whereClause}
         ORDER BY v.fecha DESC, v.id_venta, it.descripcion
     `;

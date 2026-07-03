@@ -19,18 +19,24 @@ module.exports = {
     async productosPorClientePorVendedor(req, res) {
         try {
             const { idVendedor } = req.params;
-            const { fechaInicio, fechaFin } = req.query;
-            console.log('ID Vendedor recibido:', idVendedor); // Log para verificar el parámetro
+            const {
+                fechaInicio, fechaFin,
+                codVendedor, codProveedor, codCategoria, codCiudad
+            } = req.query;
+            console.log('ID Vendedor recibido:', idVendedor);
 
             if (!idVendedor) {
                 return res.status(400).send({ error: 'El parámetro idVendedor es requerido.' });
             }
 
-            const filters = { fechaInicio, fechaFin };
+            const filters = {
+                fechaInicio, fechaFin,
+                codVendedor, codProveedor, codCategoria, codCiudad
+            };
             const data = await clienteProductoService.getProductosPorClientePorVendedor(idVendedor, filters);
             res.status(200).send(data);
         } catch (error) {
-            console.error('Error en productosPorClientePorVendedor:', error); // Log para capturar errores
+            console.error('Error en productosPorClientePorVendedor:', error);
             res.status(400).send({ error: 'Ocurrió un error al procesar la solicitud.', details: error.message });
         }
     },

@@ -660,7 +660,8 @@ class ImportadorVentasOptimizado {
             costo_promedio_total: this.normalizarValor(fila['Costo promedio total']),
             descuento: this.normalizarValor(fila['Valor descuentos']),
             subtotal: this.normalizarValor(fila['Valor subtotal']),
-            reporte_prov_con_obs: fila['REPORTE PROV CON OBS']?.trim() || null
+            reporte_prov_con_obs: fila['REPORTE PROV CON OBS']?.trim() || null,
+            id_ciudad_original: ciudad?.id_ciudad ?? null
         };
 
         // Si es NC (Nota de Crédito), asegurarse de que los valores negativos se mantengan
