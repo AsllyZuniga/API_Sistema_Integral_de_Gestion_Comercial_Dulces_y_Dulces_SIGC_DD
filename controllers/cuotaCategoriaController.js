@@ -22,7 +22,8 @@ const getFilters = (query) => {
     const toArr = (val) => {
         if (val == null || val === '') return undefined;
         const raw = Array.isArray(val) ? val : String(val).split(',');
-        const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+        const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+        const arr = [...new Set(flat)];
         return arr.length ? arr : undefined;
     };
 

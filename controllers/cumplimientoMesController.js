@@ -20,14 +20,15 @@ const getFilters = (query) => {
     const toArr = (val) => {
         if (val == null || val === '') return undefined;
         const raw = Array.isArray(val) ? val : String(val).split(',');
-        const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+        const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+        const arr = [...new Set(flat)];
         return arr.length ? arr : undefined;
     };
 
-    const vendedores = toArr(query.vendedor) || toArr(query.codVendedor);
-    const proveedores = toArr(query.proveedor) || toArr(query.codProveedor);
-    const categorias = toArr(query.categoria) || toArr(query.codCategoria);
-    const ciudades = toArr(query.ciudad) || toArr(query.codCiudad);
+    const vendedores = toArr(query.vendedor);
+    const proveedores = toArr(query.proveedor);
+    const categorias = toArr(query.categoria);
+    const ciudades = toArr(query.ciudad);
 
     const filters = {
         fechaInicio: query.fechaInicio,

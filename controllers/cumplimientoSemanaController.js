@@ -17,24 +17,22 @@ const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,
-        vendedor: query.vendedor || query.codVendedor,
-        ciudad: query.ciudad || query.codCiudad
+        vendedor: query.vendedor,
+        ciudad: query.ciudad
     };
 
-    const proveedorRaw = query.proveedor || query.codProveedor;
-    if (proveedorRaw) {
-        const list = Array.isArray(proveedorRaw)
-            ? proveedorRaw
-            : String(proveedorRaw).split(',');
+    if (query.proveedor) {
+        const list = Array.isArray(query.proveedor)
+            ? query.proveedor
+            : String(query.proveedor).split(',');
         filters.proveedores = list.map(p => p.trim()).filter(Boolean);
         filters.proveedor = filters.proveedores[0];
     }
 
-    const categoriaRaw = query.categoria || query.codCategoria;
-    if (categoriaRaw) {
-        const list = Array.isArray(categoriaRaw)
-            ? categoriaRaw
-            : String(categoriaRaw).split(',');
+    if (query.categoria) {
+        const list = Array.isArray(query.categoria)
+            ? query.categoria
+            : String(query.categoria).split(',');
         filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
     }
 

@@ -189,385 +189,234 @@ const getVendedoresConClientesItems = async (options = {}) => {
         fechaInicio = null,
         fechaFin = null,
         // Filtros adicionales del usuario (multi-selector del front).
-        // Aceptan arrays (repetidos) o strings comma-separated.
+        // Aceptan arrays (parámetros repetidos) o strings separados por coma.
         codVendedor = null,
         codProveedor = null,
         codCategoria = null,
         codCiudad = null
     } = options;
 
-    const {
-        Sequelize,
-        cliente_model,
-        venta_model,
-        detalle_venta_model,
-        item_model
-    } = require('../models');
+    const { sequelize, Sequelize } = require('../models');
+    const { QueryTypes } = require('sequelize');
 
-    const fechaWhere = {};
+    const page = Math.max(parseInt(vendedoresPage, 10) || 1, 1);
+    const limit = Math.max(Math.min(parseInt(vendedoresLimit, 10) || 10, 100), 1);
+    const offset = (page - 1) * limit;
+
+    const toArr = (val) => {
+        if (val == null || val === '') return [];
+        const raw = Array.isArray(val) ? val : String(val).split(',');
+        const flat = raw
+            .flatMap((v) => String(v).split(',').map((s) => s.trim()))
+            .filter(Boolean);
+        return [...new Set(flat)];
+    };
+
+    const replacements = {};
+    const where = [];
+
+    const addInCondition = (columnSql, values, prefix) => {
+        const list = toArr(values);
+        if (!list.length) return;
+        const placeholders = list.map((_, i) => `:${prefix}${i}`).join(',');
+        list.forEach((value, i) => {
+            replacements[`${prefix}${i}`] = String(value).trim();
+        });
+        where.push(`${columnSql} IN (${placeholders})`);
+    };
 
     if (fechaInicio && fechaFin) {
-        fechaWhere.fecha = { [Sequelize.Op.between]: [fechaInicio, fechaFin] };
+        replacements.fechaInicio = fechaInicio;
+        replacements.fechaFin = fechaFin;
+        where.push('v.fecha BETWEEN :fechaInicio AND :fechaFin');
     } else if (fechaInicio) {
-        fechaWhere.fecha = { [Sequelize.Op.gte]: fechaInicio };
+        replacements.fechaInicio = fechaInicio;
+        where.push('v.fecha >= :fechaInicio');
     } else if (fechaFin) {
-        fechaWhere.fecha = { [Sequelize.Op.lte]: fechaFin };
+        replacements.fechaFin = fechaFin;
+        where.push('v.fecha <= :fechaFin');
     }
 
-    const offset = (vendedoresPage - 1) * vendedoresLimit;
+    // Scope por rol/token. Se cruza con los filtros del usuario; no los reemplaza.
+    if (id_supervisor) {
+        replacements.idSupervisorScope = id_supervisor;
+        where.push('vd.id_supervisor = :idSupervisorScope');
+    }
 
-    const whereVendedor = {};
-    if (id_supervisor) whereVendedor.id_supervisor = id_supervisor;
+    if (id_vendedor) {
+        replacements.idVendedorScope = id_vendedor;
+        where.push('v.id_vendedor = :idVendedorScope');
+    }
 
-    // 0. Si hay filtro de fechas, pre-calcular IDs de vendedores con ventas en el rango.
-    // Esto excluye vendedores que NO tienen ninguna venta en el rango seleccionado.
-    let idsVendedoresConVentas = null;
-    if (fechaInicio || fechaFin) {
-        const whereVentaPre = { ...fechaWhere };
+    // Filtros multi: OR dentro del mismo filtro mediante IN, AND entre filtros distintos.
+    addInCondition('vd.codigo_vendedor', codVendedor, 'codVend');
+    addInCondition('CAST(i.id_proveedor AS TEXT)', codProveedor, 'codProv');
+    addInCondition('CAST(i.id_categoria AS TEXT)', codCategoria, 'codCat');
+    addInCondition('CAST(dv.id_ciudad_original AS TEXT)', codCiudad, 'codCiu');
 
-        // Filtro por codigos de vendedor del usuario (multi)
-        const toArr = (val) => {
-            if (val == null || val === '') return [];
-            const raw = Array.isArray(val) ? val : String(val).split(',');
-            return raw.map((v) => String(v).trim()).filter(Boolean);
+    const whereSql = where.length ? where.join(' AND ') : '1=1';
+
+    const fromSql = `
+        FROM vendedor vd
+        INNER JOIN venta v ON v.id_vendedor = vd.id_vendedor
+        INNER JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        INNER JOIN item i ON i.id_item = dv.id_item
+    `;
+
+    const countSql = `
+        SELECT COUNT(*)::int AS total
+        FROM (
+            SELECT DISTINCT vd.id_vendedor
+            ${fromSql}
+            WHERE ${whereSql}
+        ) vendedores_filtrados
+    `;
+
+    const countRows = await sequelize.query(countSql, {
+        replacements,
+        type: QueryTypes.SELECT
+    });
+    const totalVendedores = Number(countRows[0]?.total || 0);
+
+    if (!totalVendedores) {
+        return {
+            vendedores: [],
+            paginacionVendedores: { page, limit, total: 0 }
         };
-        const vendedoresFiltro = toArr(codVendedor);
-        if (vendedoresFiltro.length) {
-            const Sequelize = require('sequelize');
-            const { vendedor_model } = require('../models');
-            const vs = await vendedor_model.findAll({
-                attributes: ['id_vendedor'],
-                where: { codigo_vendedor: { [Sequelize.Op.in]: vendedoresFiltro } },
-                raw: true
-            });
-            const ids = vs.map(v => v.id_vendedor);
-            if (id_vendedor) {
-                if (!ids.includes(id_vendedor)) ids.length = 0;
-                else ids.length = 1;
-            }
-            if (!ids.length) {
-                return {
-                    vendedores: [],
-                    paginacionVendedores: {
-                        page: vendedoresPage,
-                        limit: vendedoresLimit,
-                        total: 0
-                    }
-                };
-            }
-            whereVentaPre.id_vendedor = { [Sequelize.Op.in]: ids };
-        } else if (id_vendedor) {
-            whereVentaPre.id_vendedor = id_vendedor;
-        } else if (id_supervisor) {
-            const equipo = await vendedor_model.findAll({
-                attributes: ['id_vendedor'],
-                where: { id_supervisor },
-                raw: true
-            });
-            const ids = equipo.map(v => v.id_vendedor);
-            if (!ids.length) {
-                return {
-                    vendedores: [],
-                    paginacionVendedores: {
-                        page: vendedoresPage,
-                        limit: vendedoresLimit,
-                        total: 0
-                    }
-                };
-            }
-            whereVentaPre.id_vendedor = { [Sequelize.Op.in]: ids };
-        }
-
-        // Filtro por proveedor (reporta_prov_con_obs LIKE prefijo)
-        const proveedoresFiltro = toArr(codProveedor);
-        if (proveedoresFiltro.length) {
-            const Sequelize = require('sequelize');
-            const whereLike = { [Sequelize.Op.or]: proveedoresFiltro.map((p) => ({
-                reporte_prov_con_obs: { [Sequelize.Op.like]: `${p}%` }
-            })) };
-            const dvModel = require('../models').detalle_venta_model;
-            const dvs = await dvModel.findAll({
-                attributes: ['id_venta'],
-                where: { [Sequelize.Op.and]: [whereLike, { reporte_prov_con_obs: { [Sequelize.Op.ne]: null } }] },
-                raw: true
-            });
-            const idsVenta = [...new Set(dvs.map(d => d.id_venta))];
-            if (!idsVenta.length) {
-                return {
-                    vendedores: [],
-                    paginacionVendedores: {
-                        page: vendedoresPage,
-                        limit: vendedoresLimit,
-                        total: 0
-                    }
-                };
-            }
-            whereVentaPre.id_venta = { [Sequelize.Op.in]: idsVenta };
-        }
-
-        // Filtro por categoria
-        const categoriasFiltro = toArr(codCategoria);
-        if (categoriasFiltro.length) {
-            const Sequelize = require('sequelize');
-            const itModel = require('../models').item_model;
-            const items = await itModel.findAll({
-                attributes: ['id_item'],
-                where: { id_categoria: { [Sequelize.Op.in]: categoriasFiltro } },
-                raw: true
-            });
-            const idsItem = items.map(i => i.id_item);
-            if (!idsItem.length) {
-                return {
-                    vendedores: [],
-                    paginacionVendedores: {
-                        page: vendedoresPage,
-                        limit: vendedoresLimit,
-                        total: 0
-                    }
-                };
-            }
-            const dvModel = require('../models').detalle_venta_model;
-            const dvs = await dvModel.findAll({
-                attributes: ['id_venta'],
-                where: { id_item: { [Sequelize.Op.in]: idsItem } },
-                raw: true
-            });
-            const idsVenta = [...new Set(dvs.map(d => d.id_venta))];
-            if (!idsVenta.length) {
-                return {
-                    vendedores: [],
-                    paginacionVendedores: {
-                        page: vendedoresPage,
-                        limit: vendedoresLimit,
-                        total: 0
-                    }
-                };
-            }
-            whereVentaPre.id_venta = whereVentaPre.id_venta
-                ? { [Sequelize.Op.and]: [whereVentaPre.id_venta, { [Sequelize.Op.in]: idsVenta }] }
-                : { [Sequelize.Op.in]: idsVenta };
-        }
-
-        // Filtro por ciudad (id_ciudad_original en detalle_venta)
-        const ciudadesFiltro = toArr(codCiudad);
-        if (ciudadesFiltro.length) {
-            const Sequelize = require('sequelize');
-            const dvModel = require('../models').detalle_venta_model;
-            const dvs = await dvModel.findAll({
-                attributes: ['id_venta'],
-                where: { id_ciudad_original: { [Sequelize.Op.in]: ciudadesFiltro } },
-                raw: true
-            });
-            const idsVenta = [...new Set(dvs.map(d => d.id_venta))];
-            if (!idsVenta.length) {
-                return {
-                    vendedores: [],
-                    paginacionVendedores: {
-                        page: vendedoresPage,
-                        limit: vendedoresLimit,
-                        total: 0
-                    }
-                };
-            }
-            whereVentaPre.id_venta = whereVentaPre.id_venta
-                ? { [Sequelize.Op.and]: [whereVentaPre.id_venta, { [Sequelize.Op.in]: idsVenta }] }
-                : { [Sequelize.Op.in]: idsVenta };
-        }
-
-        const vendedoresConVentas = await venta_model.findAll({
-            attributes: ['id_vendedor'],
-            where: { ...whereVentaPre },
-            group: ['id_vendedor'],
-            raw: true
-        });
-        idsVendedoresConVentas = vendedoresConVentas.map(v => v.id_vendedor);
-
-        if (!idsVendedoresConVentas.length) {
-            return {
-                vendedores: [],
-                paginacionVendedores: {
-                    page: vendedoresPage,
-                    limit: vendedoresLimit,
-                    total: 0
-                }
-            };
-        }
     }
 
-    // Combinar id_vendedor (filtro por token/rol) con el filtro de ventas en rango
-    if (id_vendedor && idsVendedoresConVentas !== null) {
-        // Intersección: el id_vendedor debe estar en la lista
-        if (!idsVendedoresConVentas.includes(id_vendedor)) {
-            return {
-                vendedores: [],
-                paginacionVendedores: {
-                    page: vendedoresPage,
-                    limit: vendedoresLimit,
-                    total: 0
-                }
-            };
-        }
-        whereVendedor.id_vendedor = id_vendedor;
-    } else if (id_vendedor) {
-        whereVendedor.id_vendedor = id_vendedor;
-    } else if (idsVendedoresConVentas !== null) {
-        whereVendedor.id_vendedor = { [Sequelize.Op.in]: idsVendedoresConVentas };
-    }
+    const vendedoresSql = `
+        SELECT DISTINCT
+            vd.id_vendedor,
+            TRIM(vd.codigo_vendedor) AS codigo_vendedor,
+            TRIM(vd.nombre) AS nombre
+        ${fromSql}
+        WHERE ${whereSql}
+        ORDER BY LOWER(TRIM(vd.nombre)) ASC
+        LIMIT :vendedoresLimit OFFSET :vendedoresOffset
+    `;
 
-    // 1. Obtener vendedores paginados (sin las relaciones complejas aún)
-    const { count: totalVendedores, rows: vendedores } = await vendedor_model.findAndCountAll({
-        where: Object.keys(whereVendedor).length ? whereVendedor : undefined,
-        offset,
-        limit: vendedoresLimit,
-        attributes: ['id_vendedor', 'codigo_vendedor', 'nombre'],
-        order: [[Sequelize.fn('LOWER', Sequelize.col('nombre')), 'ASC']],
-        distinct: true
+    const vendedores = await sequelize.query(vendedoresSql, {
+        replacements: {
+            ...replacements,
+            vendedoresLimit: limit,
+            vendedoresOffset: offset
+        },
+        type: QueryTypes.SELECT
     });
 
-    const vendedoresConClientes = [];
+    const idsVendedoresPagina = vendedores.map((v) => v.id_vendedor).filter((id) => id != null);
 
-    // 2. Para cada vendedor, obtener clientes únicos asociados (con paginación)
-    for (const vendedor of vendedores) {
-        // 2a. Obtener TODOS los clientes que tienen al menos una venta con este vendedor
-        //     dentro del rango de fechas seleccionado (sin paginación)
-        const clientesData = await cliente_model.findAll({
-            attributes: [
-                'id_cliente',
-                'nro_documento',
-                'razon_social'
-            ],
-            include: [
-                {
-                    model: venta_model,
-                    as: 'ventas',
-                    where: {
-                        id_vendedor: vendedor.id_vendedor,
-                        ...fechaWhere
-                    },
-                    attributes: [],
-                    required: true
-                }
-            ],
-            group: ['cliente_model.id_cliente'],
-            subQuery: false,
-            order: [[Sequelize.fn('LOWER', Sequelize.col('cliente_model.razon_social')), 'ASC']],
-            raw: true,
-            distinct: true
+    if (!idsVendedoresPagina.length) {
+        return {
+            vendedores: [],
+            paginacionVendedores: { page, limit, total: totalVendedores }
+        };
+    }
+
+    const paginaPlaceholders = idsVendedoresPagina.map((_, i) => `:vendPagina${i}`).join(',');
+    const replacementsPagina = { ...replacements };
+    idsVendedoresPagina.forEach((id, i) => {
+        replacementsPagina[`vendPagina${i}`] = id;
+    });
+
+    const wherePaginaSql = `${whereSql} AND v.id_vendedor IN (${paginaPlaceholders})`;
+
+    const clientesSql = `
+        SELECT
+            v.id_vendedor,
+            c.id_cliente,
+            TRIM(c.nro_documento) AS nro_documento,
+            TRIM(c.razon_social) AS razon_social,
+            COUNT(DISTINCT v.id_venta)::int AS "totalCompras"
+        FROM vendedor vd
+        INNER JOIN venta v ON v.id_vendedor = vd.id_vendedor
+        INNER JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        INNER JOIN item i ON i.id_item = dv.id_item
+        INNER JOIN cliente c ON c.id_cliente = v.id_cliente
+        WHERE ${wherePaginaSql}
+        GROUP BY v.id_vendedor, c.id_cliente, c.nro_documento, c.razon_social
+        ORDER BY v.id_vendedor, LOWER(TRIM(c.razon_social)) ASC
+    `;
+
+    const itemsSql = `
+        SELECT
+            v.id_vendedor,
+            v.id_cliente,
+            i.id_item,
+            TRIM(i.descripcion) AS descripcion,
+            TRIM(i.codigo_item) AS codigo_item,
+            COALESCE(SUM(dv.cantidad), 0)::float AS "cantidadTotal",
+            COUNT(dv.id_detalle)::int AS veces,
+            COALESCE(AVG(dv.precio_unitario), 0)::float AS precio_unitario,
+            COALESCE(SUM(dv.subtotal), 0)::float AS subtotal
+        FROM vendedor vd
+        INNER JOIN venta v ON v.id_vendedor = vd.id_vendedor
+        INNER JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        INNER JOIN item i ON i.id_item = dv.id_item
+        WHERE ${wherePaginaSql}
+        GROUP BY v.id_vendedor, v.id_cliente, i.id_item, i.descripcion, i.codigo_item
+        ORDER BY v.id_vendedor, v.id_cliente, LOWER(TRIM(i.descripcion)) ASC
+    `;
+
+    const [clientesRows, itemsRows] = await Promise.all([
+        sequelize.query(clientesSql, {
+            replacements: replacementsPagina,
+            type: QueryTypes.SELECT
+        }),
+        sequelize.query(itemsSql, {
+            replacements: replacementsPagina,
+            type: QueryTypes.SELECT
+        })
+    ]);
+
+    const itemsPorVendedorCliente = new Map();
+    for (const item of itemsRows) {
+        const key = `${item.id_vendedor}|||${item.id_cliente}`;
+        if (!itemsPorVendedorCliente.has(key)) itemsPorVendedorCliente.set(key, []);
+        itemsPorVendedorCliente.get(key).push({
+            id_item: item.id_item,
+            descripcion: item.descripcion,
+            codigo_item: item.codigo_item,
+            cantidadTotal: Number(item.cantidadTotal || 0),
+            veces: Number(item.veces || 0),
+            precio_unitario: Number(item.precio_unitario || 0),
+            subtotal: Number(item.subtotal || 0)
         });
+    }
 
-        const totalClientes = clientesData.length;
-        const clientesIds = clientesData.map((cliente) => cliente.id_cliente);
-
-        // 2b. Calcular totalCompras por cliente dentro del rango de fechas
-        const comprasMap = new Map();
-        if (clientesIds.length) {
-            const ventasEnRango = await venta_model.findAll({
-                attributes: [
-                    'id_cliente',
-                    [Sequelize.fn('COUNT', Sequelize.col('id_venta')), 'totalCompras']
-                ],
-                where: {
-                    id_vendedor: vendedor.id_vendedor,
-                    id_cliente: { [Sequelize.Op.in]: clientesIds },
-                    ...fechaWhere
-                },
-                group: ['id_cliente'],
-                raw: true
-            });
-            ventasEnRango.forEach(v => {
-                comprasMap.set(String(v.id_cliente), parseInt(v.totalCompras) || 0);
-            });
-        }
-
-        // 2c. Obtener los items comprados en el rango de fechas
-        let itemsAgrupados = [];
-
-        if (clientesIds.length) {
-            itemsAgrupados = await detalle_venta_model.findAll({
-                attributes: [
-                    [Sequelize.col('venta.id_cliente'), 'id_cliente'],
-                    [Sequelize.col('item.id_item'), 'id_item'],
-                    [Sequelize.col('item.descripcion'), 'descripcion'],
-                    [Sequelize.col('item.codigo_item'), 'codigo_item'],
-                    [Sequelize.fn('SUM', Sequelize.col('detalle_venta_model.cantidad')), 'cantidadTotal'],
-                    [Sequelize.fn('COUNT', Sequelize.col('detalle_venta_model.id_detalle')), 'veces'],
-                    [Sequelize.fn('AVG', Sequelize.col('detalle_venta_model.precio_unitario')), 'precio_unitario'],
-                    [Sequelize.fn('SUM', Sequelize.col('detalle_venta_model.subtotal')), 'subtotal']
-                ],
-                include: [
-                    {
-                        model: venta_model,
-                        as: 'venta',
-                        attributes: [],
-                        required: true,
-                        where: {
-                            id_vendedor: vendedor.id_vendedor,
-                            id_cliente: { [Sequelize.Op.in]: clientesIds },
-                            ...fechaWhere
-                        }
-                    },
-                    {
-                        model: item_model,
-                        as: 'item',
-                        attributes: []
-                    }
-                ],
-                group: [
-                    'venta.id_cliente',
-                    'item.id_item',
-                    'item.descripcion',
-                    'item.codigo_item'
-                ],
-                subQuery: false,
-                raw: true
-            });
-        }
-
-        const itemsPorCliente = new Map();
-
-        for (const item of itemsAgrupados) {
-            const idClienteKey = String(item.id_cliente);
-            if (!itemsPorCliente.has(idClienteKey)) {
-                itemsPorCliente.set(idClienteKey, []);
-            }
-            itemsPorCliente.get(idClienteKey).push({
-                id_item: item.id_item,
-                descripcion: item.descripcion,
-                codigo_item: item.codigo_item,
-                cantidadTotal: parseFloat(item.cantidadTotal || 0),
-                veces: parseInt(item.veces),
-                precio_unitario: parseFloat(item.precio_unitario || 0),
-                subtotal: parseFloat(item.subtotal || 0)
-            });
-        }
-
-        const clientesConItems = clientesData.map((cliente) => {
-            const itemsCliente = itemsPorCliente.get(String(cliente.id_cliente)) || [];
-
-            return {
-                id_cliente: cliente.id_cliente,
-                nro_documento: cliente.nro_documento,
-                razon_social: cliente.razon_social,
-                totalCompras: comprasMap.get(String(cliente.id_cliente)) || 0,
-                items: itemsCliente,
-                totalItems: itemsCliente.length
-            };
+    const clientesPorVendedor = new Map();
+    for (const cliente of clientesRows) {
+        const idVendedorKey = String(cliente.id_vendedor);
+        const keyItems = `${cliente.id_vendedor}|||${cliente.id_cliente}`;
+        const items = itemsPorVendedorCliente.get(keyItems) || [];
+        if (!clientesPorVendedor.has(idVendedorKey)) clientesPorVendedor.set(idVendedorKey, []);
+        clientesPorVendedor.get(idVendedorKey).push({
+            id_cliente: cliente.id_cliente,
+            nro_documento: cliente.nro_documento,
+            razon_social: cliente.razon_social,
+            totalCompras: Number(cliente.totalCompras || 0),
+            items,
+            totalItems: items.length
         });
+    }
 
-        vendedoresConClientes.push({
+    const vendedoresConClientes = vendedores.map((vendedor) => {
+        const clientes = clientesPorVendedor.get(String(vendedor.id_vendedor)) || [];
+        return {
             id_vendedor: vendedor.id_vendedor,
             codigo_vendedor: vendedor.codigo_vendedor,
             nombre: vendedor.nombre,
-            clientes: clientesConItems,
-            totalClientes
-        });
-    }
+            clientes,
+            totalClientes: clientes.length
+        };
+    });
 
     return {
         vendedores: vendedoresConClientes,
         paginacionVendedores: {
-            page: vendedoresPage,
-            limit: vendedoresLimit,
+            page,
+            limit,
             total: totalVendedores
         }
     };

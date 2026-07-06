@@ -14,24 +14,22 @@ const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,
-        vendedor: query.vendedor || query.codVendedor
+        vendedor: query.vendedor
     };
 
     const proveedorRaw = query.proveedor || query.codProveedor;
     if (proveedorRaw) {
-        const list = Array.isArray(proveedorRaw)
-            ? proveedorRaw
-            : String(proveedorRaw).split(',');
-        filters.proveedores = list.map(p => p.trim()).filter(Boolean);
+        const raw = Array.isArray(proveedorRaw) ? proveedorRaw : String(proveedorRaw).split(',');
+        const list = raw.flatMap(v => String(v).split(',').map(s => s.trim())).filter(Boolean);
+        filters.proveedores = [...new Set(list)];
         filters.proveedor = filters.proveedores[0];
     }
 
     const categoriaRaw = query.categoria || query.codCategoria;
     if (categoriaRaw) {
-        const list = Array.isArray(categoriaRaw)
-            ? categoriaRaw
-            : String(categoriaRaw).split(',');
-        filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
+        const raw = Array.isArray(categoriaRaw) ? categoriaRaw : String(categoriaRaw).split(',');
+        const list = raw.flatMap(v => String(v).split(',').map(s => extractCategoryId(s.trim()))).filter(Boolean);
+        filters.categorias = [...new Set(list)];
     }
 
     return filters;
