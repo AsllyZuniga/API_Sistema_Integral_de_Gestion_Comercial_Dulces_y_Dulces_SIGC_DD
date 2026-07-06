@@ -35,7 +35,8 @@
       "Bash(curl -s -X POST http://localhost:3000/admin/reset-passwords)",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"codigo\":\"0550\",\"password\":\"0550\"}')",
       "Bash(curl -s 'http://localhost:3000/cliente' -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3Nzg5MzgzMzAsImV4cCI6MTc3ODk4MTUzMH0.0l8Q-B5JFtHMb_4lHz6NAws8jHNIPXgBt5BCE09_NRI\")",
-      "Bash(curl -s 'http://localhost:3000/ciudad')"
+      "Bash(curl -s 'http://localhost:3000/ciudad')",
+      "Bash(ssh *)"
     ]
   },
   "prefersReducedMotion": false

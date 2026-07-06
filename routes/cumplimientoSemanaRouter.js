@@ -10,7 +10,7 @@ router.get('/front', controller.listFront);
 // Issue #2: /lineas role-aware desde JWT (consolidado, sin N+1)
 router.get('/lineas', requireAuthJWT, async (req, res) => {
     try {
-        const data = await cumplimientoSemanaService.getLineasGeneralSemana(req.query, req.auth);
+        const data = await cumplimientoSemanaService.getLineasGeneralSemana(controller.getFilters(req.query), req.auth);
         return res.status(200).send(data);
     } catch (error) {
         return res.status(400).send(error);
@@ -20,7 +20,7 @@ router.get('/lineas', requireAuthJWT, async (req, res) => {
 // Microtarea B5/B6: /ciudades role-aware desde JWT (consolidado, sin N+1)
 router.get('/ciudades', requireAuthJWT, async (req, res) => {
     try {
-        const data = await cumplimientoSemanaService.getCiudadesGeneralSemana(req.query, req.auth);
+        const data = await cumplimientoSemanaService.getCiudadesGeneralSemana(controller.getFilters(req.query), req.auth);
         return res.status(200).send(data);
     } catch (error) {
         return res.status(400).send(error);

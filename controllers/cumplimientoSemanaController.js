@@ -58,6 +58,8 @@ const getFilters = (query) => {
 };
 
 module.exports = {
+    getFilters,
+
     // Para el vendedor autenticado ("Mi cumplimiento semanal")
     async listFrontMe(req, res) {
         try {
