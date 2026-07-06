@@ -10,6 +10,12 @@ const extractCategoryId = (categoryStr) => {
     return match ? match[0] : categoryStr;
 };
 
+const toArr = (raw) => {
+    if (raw == null || raw === '') return [];
+    const list = Array.isArray(raw) ? raw : String(raw).split(',');
+    return [...new Set(list.flatMap(v => String(v).split(',').map(s => s.trim())).filter(Boolean))];
+};
+
 const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
@@ -17,11 +23,15 @@ const getFilters = (query) => {
         vendedor: query.vendedor
     };
 
+    const vendedorRaw = query.vendedor || query.codVendedor;
+    if (vendedorRaw) {
+        filters.vendedores = toArr(vendedorRaw);
+        filters.vendedor = filters.vendedores[0];
+    }
+
     const proveedorRaw = query.proveedor || query.codProveedor;
     if (proveedorRaw) {
-        const raw = Array.isArray(proveedorRaw) ? proveedorRaw : String(proveedorRaw).split(',');
-        const list = raw.flatMap(v => String(v).split(',').map(s => s.trim())).filter(Boolean);
-        filters.proveedores = [...new Set(list)];
+        filters.proveedores = toArr(proveedorRaw);
         filters.proveedor = filters.proveedores[0];
     }
 
@@ -30,6 +40,12 @@ const getFilters = (query) => {
         const raw = Array.isArray(categoriaRaw) ? categoriaRaw : String(categoriaRaw).split(',');
         const list = raw.flatMap(v => String(v).split(',').map(s => extractCategoryId(s.trim()))).filter(Boolean);
         filters.categorias = [...new Set(list)];
+    }
+
+    const ciudadRaw = query.ciudad || query.codCiudad;
+    if (ciudadRaw) {
+        filters.ciudades = toArr(ciudadRaw);
+        filters.ciudad = filters.ciudades[0];
     }
 
     return filters;

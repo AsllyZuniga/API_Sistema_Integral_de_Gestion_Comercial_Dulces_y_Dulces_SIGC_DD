@@ -20,9 +20,9 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondLinSem = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondLinSem) {
+        where.push(ciudadCondLinSem);
     }
     const proveedoresLinSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
@@ -170,13 +170,13 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
             )
         `);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondCiudSem = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondCiudSem) {
+        where.push(ciudadCondCiudSem);
     }
     let ciudadSelect = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
     let ciudadGroup = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
-    if (normalizedFilters.ciudad) {
+    if (ciudadCondCiudSem) {
         ciudadSelect = 'TRIM(ci.nombre) AS ciudad';
         ciudadGroup = 'TRIM(ci.nombre)';
     }
@@ -234,9 +234,9 @@ async function getProductosPorVendedor(codigoVendedor, filters = {}) {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondProdSem = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondProdSem) {
+        where.push(ciudadCondProdSem);
     }
     const proveedoresProdSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
@@ -439,6 +439,18 @@ const buildProveedorCondition = (proveedores, replacements) => {
     return `it.id_proveedor IN (${placeholders})`;
 };
 
+let ciudadCondPrefixCounter = 0;
+const buildCiudadCondition = (filters, replacements, columnSql = 'c.id_ciudad') => {
+    const ciudades = filters.ciudades && filters.ciudades.length > 0
+        ? filters.ciudades
+        : (filters.ciudad ? [String(filters.ciudad).trim()] : []);
+    if (!ciudades.length) return null;
+    const prefix = `semCiu${ciudadCondPrefixCounter++}_`;
+    const placeholders = ciudades.map((_, i) => `:${prefix}${i}`).join(',');
+    ciudades.forEach((c, i) => { replacements[`${prefix}${i}`] = String(c); });
+    return `CAST(${columnSql} AS TEXT) IN (${placeholders})`;
+};
+
 const buildVentasFilters = (filters = {}, replacements = {}) => {
     const conditions = [];
 
@@ -493,17 +505,30 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
     return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 };
 
+const toArr = (val) => {
+    if (val == null || val === '') return [];
+    const raw = Array.isArray(val) ? val : String(val).split(',');
+    const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+    return [...new Set(flat)];
+};
+
 const buildVendedorFilter = (filters = {}, replacements = {}) => {
-    if (!filters.vendedor) return '';
-    replacements.vendedor = String(filters.vendedor);
-    replacements.vendedorLike = `%${String(filters.vendedor).toLowerCase()}%`;
-    return `
-		AND (
-			CAST(vd.id_vendedor AS TEXT) = :vendedor
-			OR vd.codigo_vendedor = :vendedor
-			OR LOWER(vd.nombre) LIKE :vendedorLike
-		)
-	`;
+    const vendedores = filters.vendedores && filters.vendedores.length > 0
+        ? filters.vendedores
+        : toArr(filters.vendedor);
+    if (!vendedores.length) return '';
+
+    const clauses = vendedores.map((v, i) => {
+        replacements[`semVend${i}`] = String(v);
+        replacements[`semVendLike${i}`] = `%${String(v).toLowerCase()}%`;
+        return `(
+            CAST(vd.id_vendedor AS TEXT) = :semVend${i}
+            OR vd.codigo_vendedor = :semVend${i}
+            OR LOWER(vd.nombre) LIKE :semVendLike${i}
+        )`;
+    });
+
+    return `AND (${clauses.join(' OR ')})`;
 };
 
 const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
@@ -585,9 +610,9 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         dateConditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    if (normalizedFilters.ciudad) {
-        dateConditions.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondFront = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondFront) {
+        dateConditions.push(ciudadCondFront);
     }
 
     const proveedoresFront = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -707,7 +732,7 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
  * @returns {Promise<object|null>}
  */
 async function getCumplimientoSemanaPorCodigo(codigo, filters = {}) {
-    const data = await getCumplimientoSemanaFront({ ...filters, vendedor: codigo });
+    const data = await getCumplimientoSemanaFront({ ...filters, vendedor: codigo, vendedores: [codigo] });
     const codigoNormalizado = String(codigo || '').trim();
     return data.detalle.find((row) => String(row.codVendedor || '').trim() === codigoNormalizado) || null;
 }
@@ -742,9 +767,9 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         ventasWhere.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        ventasWhere.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondGeneral = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondGeneral) {
+        ventasWhere.push(ciudadCondGeneral);
     }
 
     const proveedoresGeneral = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -904,9 +929,9 @@ const getCiudadesGeneralSemana = async (filters = {}, auth = null) => {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondGeneralCiu = buildCiudadCondition(normalizedFilters, replacements, 'dv.id_ciudad_original');
+    if (ciudadCondGeneralCiu) {
+        where.push(ciudadCondGeneralCiu);
     }
     if (scopeWhereVenta) {
         where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));

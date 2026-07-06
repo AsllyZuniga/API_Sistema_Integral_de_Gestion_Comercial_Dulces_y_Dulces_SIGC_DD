@@ -58,10 +58,63 @@ const normalizePeriodFilters = (filters = {}) => {
     };
 };
 
+const toArr = (val) => {
+    if (val == null || val === '') return [];
+    const raw = Array.isArray(val) ? val : String(val).split(',');
+    const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+    return [...new Set(flat)];
+};
+
 const buildVendedorFilter = (filters = {}, replacements = {}) => {
-    if (!filters.vendedor) return '';
-    replacements.vendedor = String(filters.vendedor).trim();
-    return `AND vd.codigo_vendedor = :vendedor`;
+    const vendedores = filters.vendedores && filters.vendedores.length > 0
+        ? filters.vendedores
+        : toArr(filters.vendedor);
+    if (!vendedores.length) return '';
+    const placeholders = vendedores.map((_, i) => `:diaVend${i}`).join(',');
+    vendedores.forEach((v, i) => { replacements[`diaVend${i}`] = String(v).trim(); });
+    return `AND vd.codigo_vendedor IN (${placeholders})`;
+};
+
+/**
+ * Filtros multi (proveedor/categoria/ciudad) contra item/detalle_venta.
+ * Requiere JOIN a item (alias `i`) cuando proveedor o categoria se usan.
+ * Devuelve { joinItem, condiciones } para insertar en el FROM/WHERE del caller.
+ */
+const buildDetalleFilters = (filters = {}, replacements = {}) => {
+    const proveedores = filters.proveedores && filters.proveedores.length > 0
+        ? filters.proveedores
+        : toArr(filters.proveedor);
+    const categorias = filters.categorias && filters.categorias.length > 0
+        ? filters.categorias
+        : toArr(filters.categoria);
+    const ciudades = filters.ciudades && filters.ciudades.length > 0
+        ? filters.ciudades
+        : toArr(filters.ciudad);
+
+    const condiciones = [];
+    let joinItem = false;
+
+    if (proveedores.length) {
+        joinItem = true;
+        const placeholders = proveedores.map((_, i) => `:diaProv${i}`).join(',');
+        proveedores.forEach((p, i) => { replacements[`diaProv${i}`] = String(p).trim(); });
+        condiciones.push(`CAST(i.id_proveedor AS TEXT) IN (${placeholders})`);
+    }
+
+    if (categorias.length) {
+        joinItem = true;
+        const placeholders = categorias.map((_, i) => `:diaCat${i}`).join(',');
+        categorias.forEach((c, i) => { replacements[`diaCat${i}`] = String(c).trim(); });
+        condiciones.push(`CAST(i.id_categoria AS TEXT) IN (${placeholders})`);
+    }
+
+    if (ciudades.length) {
+        const placeholders = ciudades.map((_, i) => `:diaCiu${i}`).join(',');
+        ciudades.forEach((c, i) => { replacements[`diaCiu${i}`] = String(c).trim(); });
+        condiciones.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+    }
+
+    return { joinItem, condiciones };
 };
 
 /**
@@ -82,8 +135,12 @@ const getCumplimientoDiaFront = async (filters = {}) => {
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
-    const whereClause = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : '';
     const vendedorFilter = buildVendedorFilter(normalizedFilters, replacements);
+    const { joinItem, condiciones: detalleCondiciones } = buildDetalleFilters(normalizedFilters, replacements);
+    dateConditions.push(...detalleCondiciones);
+
+    const whereClause = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : '';
+    const itemJoin = joinItem ? 'JOIN item i ON i.id_item = dv.id_item' : '';
 
     const query = `
         WITH fecha_range AS (
@@ -95,14 +152,15 @@ const getCumplimientoDiaFront = async (filters = {}) => {
                 v.fecha,
                 TO_CHAR(v.fecha, 'YYYY-MM-DD') AS fecha_formateada,
                 SUM(
-                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' 
-                    THEN -ABS(COALESCE(dv.subtotal, 0)) 
-                    ELSE COALESCE(dv.subtotal, 0) 
+                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
+                    THEN -ABS(COALESCE(dv.subtotal, 0))
+                    ELSE COALESCE(dv.subtotal, 0)
                     END
                 ) AS venta_acum
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            ${itemJoin}
             ${whereClause}
             ${vendedorFilter}
             GROUP BY v.fecha, TO_CHAR(v.fecha, 'YYYY-MM-DD')
@@ -313,7 +371,12 @@ const getCumplimientoDiaSupervisor = async (idSupervisor, filters = {}) => {
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
+    const vendedorFilter = buildVendedorFilter(normalizedFilters, replacements);
+    const { joinItem, condiciones: detalleCondiciones } = buildDetalleFilters(normalizedFilters, replacements);
+    dateConditions.push(...detalleCondiciones);
+
     const whereClause = dateConditions.length > 0 ? `WHERE ${dateConditions.join(' AND ')}` : '';
+    const itemJoin = joinItem ? 'JOIN item i ON i.id_item = dv.id_item' : '';
 
     // Primero obtener todos los vendedores del supervisor
     const queryVendedores = `
@@ -366,7 +429,9 @@ const getCumplimientoDiaSupervisor = async (idSupervisor, filters = {}) => {
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            ${itemJoin}
             ${whereClause}
+            ${vendedorFilter}
             GROUP BY v.fecha, TO_CHAR(v.fecha, 'YYYY-MM-DD')
         ),
         cuotas_diarias AS (
@@ -468,6 +533,11 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
         replacements.fechaCuota = normalizedFilters.fechaFin;
     }
 
+    const vendedorFilter = buildVendedorFilter(normalizedFilters, replacements);
+    const { joinItem, condiciones: detalleCondiciones } = buildDetalleFilters(normalizedFilters, replacements);
+    const itemJoin = joinItem ? 'JOIN item i ON i.id_item = dv.id_item' : '';
+    const vtConditions = ['v.fecha >= :fechaInicio', 'v.fecha <= :fechaFin', ...detalleCondiciones];
+
     const query = `
         SELECT
             vd.id_vendedor,
@@ -485,16 +555,19 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
         LEFT JOIN (
             SELECT v.id_vendedor,
                 SUM(
-                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' 
-                    THEN -ABS(COALESCE(dv.subtotal, 0)) 
-                    ELSE COALESCE(dv.subtotal, 0) 
+                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
+                    THEN -ABS(COALESCE(dv.subtotal, 0))
+                    ELSE COALESCE(dv.subtotal, 0)
                     END
                 ) AS venta_acum
             FROM venta v
             LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin
+            ${itemJoin}
+            WHERE ${vtConditions.join(' AND ')}
             GROUP BY v.id_vendedor
         ) vt ON vt.id_vendedor = vd.id_vendedor
+        WHERE 1=1
+        ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
 

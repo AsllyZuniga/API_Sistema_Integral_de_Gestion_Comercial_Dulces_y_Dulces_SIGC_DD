@@ -13,6 +13,12 @@ const extractCategoryId = (categoryStr) => {
     return match ? match[0] : categoryStr;
 };
 
+const toArr = (raw) => {
+    if (raw == null || raw === '') return [];
+    const list = Array.isArray(raw) ? raw : String(raw).split(',');
+    return [...new Set(list.flatMap(v => String(v).split(',').map(s => s.trim())).filter(Boolean))];
+};
+
 const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
@@ -20,6 +26,12 @@ const getFilters = (query) => {
         vendedor: query.vendedor,
         ciudad: query.ciudad
     };
+
+    const vendedorRaw = query.vendedor || query.codVendedor;
+    if (vendedorRaw) {
+        filters.vendedores = toArr(vendedorRaw);
+        filters.vendedor = filters.vendedores[0];
+    }
 
     if (query.proveedor) {
         const list = Array.isArray(query.proveedor)
@@ -34,6 +46,12 @@ const getFilters = (query) => {
             ? query.categoria
             : String(query.categoria).split(',');
         filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
+    }
+
+    const ciudadRaw = query.ciudad || query.codCiudad;
+    if (ciudadRaw) {
+        filters.ciudades = toArr(ciudadRaw);
+        filters.ciudad = filters.ciudades[0];
     }
 
     return filters;
@@ -51,7 +69,8 @@ module.exports = {
             }
             const data = await cumplimientoSemanaService.getCumplimientoSemanaFront({
                 ...getFilters(req.query),
-                vendedor: codigoVendedor
+                vendedor: codigoVendedor,
+                vendedores: [codigoVendedor]
             });
             return res.status(200).send(data);
         } catch (error) {
