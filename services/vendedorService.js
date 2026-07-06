@@ -292,7 +292,7 @@ const getVendedoresConClientesItems = async (options = {}) => {
             TRIM(vd.nombre) AS nombre
         ${fromSql}
         WHERE ${whereSql}
-        ORDER BY LOWER(TRIM(vd.nombre)) ASC
+        ORDER BY nombre ASC
         LIMIT :vendedoresLimit OFFSET :vendedoresOffset
     `;
 
