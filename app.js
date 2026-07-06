@@ -89,7 +89,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Evita respuestas 304 con datos stale en reportes de cumplimiento.
-app.use(["/mes/cumplimiento", "/semana/cumplimiento", "/cuota-categoria"], (req, res, next) => {
+app.use(["/api/mes/cumplimiento", "/api/semana/cumplimiento", "/api/dia/cumplimiento", "/api/cuota-categoria"], (req, res, next) => {
   delete req.headers["if-none-match"];
   delete req.headers["if-modified-since"];
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
