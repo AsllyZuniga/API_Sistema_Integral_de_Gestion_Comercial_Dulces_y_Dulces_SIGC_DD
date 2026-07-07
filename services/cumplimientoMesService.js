@@ -1262,9 +1262,14 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         ? normalizedFilters.proveedores
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
 
+    let cuotaProveedorCond = '';
     if (proveedoresGeneral) {
-        const provCond = buildProveedorCondition(proveedoresGeneral, replacements, 'dv');
+        const provCond = buildProveedorCondition(proveedoresGeneral, replacements);
         ventasWhere.push(`(${provCond})`);
+
+        const cuotaPlaceholders = proveedoresGeneral.map((_, i) => `:cuotaProv${i}`).join(',');
+        proveedoresGeneral.forEach((p, i) => { replacements[`cuotaProv${i}`] = p; });
+        cuotaProveedorCond = `AND vcp.id_proveedor IN (${cuotaPlaceholders})`;
     }
 
     // Aplicar scope de rol al WHERE de ventas
@@ -1296,6 +1301,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
               AND cp.fecha_inicio <= :cuotaFechaFin
               AND cp.fecha_fin >= :cuotaFechaInicio
               ${scopeWhereCuota}
+              ${cuotaProveedorCond}
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (

@@ -3,7 +3,10 @@ const {
     usuario_model,
     cuotaMes_model,
     cuotaSemana_model,
-    cuotaDia_model
+    cuotaDia_model,
+    vendedorCuotaProveedor_model,
+    proveedor_model,
+    cuotaProveedor_model
 } = require('../models');
 
 const SUPERVISOR_ROL_ID = 2;
@@ -13,7 +16,15 @@ const includeRelations = [
     { model: usuario_model, as: 'supervisor' },
     { model: cuotaMes_model, as: 'cuotaMes' },
     { model: cuotaSemana_model, as: 'cuotaSemana' },
-    { model: cuotaDia_model, as: 'cuotaDia' }
+    { model: cuotaDia_model, as: 'cuotaDia' },
+    {
+        model: vendedorCuotaProveedor_model,
+        as: 'cuotasProveedor',
+        include: [
+            { model: proveedor_model, as: 'proveedor' },
+            { model: cuotaProveedor_model, as: 'cuotaProveedor' }
+        ]
+    }
 ];
 
 /**
