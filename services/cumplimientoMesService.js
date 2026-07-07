@@ -819,9 +819,14 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
         ? normalizedFilters.proveedores
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
 
+    let cuotaProveedorCondLinPorVend = '';
     if (proveedoresLineas) {
         const provCond = buildProveedorCondition(proveedoresLineas, replacements, 'dv');
         ventasWhere.push(`(${provCond})`);
+
+        const cuotaPlaceholders = proveedoresLineas.map((_, i) => `:cuotaProvLV${i}`).join(',');
+        proveedoresLineas.forEach((p, i) => { replacements[`cuotaProvLV${i}`] = p; });
+        cuotaProveedorCondLinPorVend = `AND vcp.id_proveedor IN (${cuotaPlaceholders})`;
     }
 
     if (normalizedFilters.categorias && normalizedFilters.categorias.length > 0) {
@@ -861,6 +866,7 @@ const getLineasPorVendedor = async (codigoVendedor, filters = {}) => {
               AND vcp.estado = true
               AND cp.fecha_inicio <= :cuotaFechaFin
               AND cp.fecha_fin >= :cuotaFechaInicio
+              ${cuotaProveedorCondLinPorVend}
         ),
         cuotas_deduplicadas AS (
             SELECT DISTINCT ON (nombre_norm)

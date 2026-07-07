@@ -40,7 +40,9 @@
       "Bash(git fetch *)",
       "Bash(npx tsc *)",
       "Bash(curl -s -o /dev/null -w \"http_code: %{http_code}\\\\n\" https://sigc.dulcesydulces.co/)",
-      "Bash(curl -s https://sigc.dulcesydulces.co/)"
+      "Bash(curl -s https://sigc.dulcesydulces.co/)",
+      "Bash(curl -s 'http://localhost:3000/api/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-06-01&fechaFin=2026-06-30' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3ODMzOTQ4OTMsImV4cCI6MTc4MzQzODA5M30.dZDTbDLnbp6tgJq_E54L05vB5rE7B-FNdkotoVTRg9g')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); rows=d.get\\('detallePorLinea',[]\\); print\\(len\\(rows\\)\\); [print\\(r.get\\('linea'\\), r.get\\('ventaAcum'\\)\\) for r in rows]\")"
     ]
   },
   "prefersReducedMotion": false
