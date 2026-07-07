@@ -533,9 +533,13 @@ const getCumplimientoMesFront = async (filters = {}) => {
         dateConditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    if (normalizedFilters.ciudad) {
-        dateConditions.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadesFront = normalizedFilters.ciudades && normalizedFilters.ciudades.length > 0
+        ? normalizedFilters.ciudades
+        : (normalizedFilters.ciudad ? [String(normalizedFilters.ciudad).trim()] : null);
+    if (ciudadesFront && ciudadesFront.length > 0) {
+        const placeholders = ciudadesFront.map((_, i) => `:frontCiudad${i}`).join(',');
+        dateConditions.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesFront.forEach((c, i) => { replacements[`frontCiudad${i}`] = String(c); });
     }
 
     const proveedoresFront = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -568,6 +572,13 @@ const getCumplimientoMesFront = async (filters = {}) => {
     const allConditions = [...dateConditions, ...detalleConditions];
     const whereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : '';
 
+    // Si hay ciudad, proveedor o categoría seleccionados, el universo de
+    // ventas se reduce: solo deben listarse vendedores con venta real bajo
+    // esos filtros, no todos los que tengan cuota asignada este mes.
+    const hayFiltroReductor = Boolean(
+        (ciudadesFront && ciudadesFront.length > 0) || detalleConditions.length > 0,
+    );
+
     const cuotaConditions = ['cm.id_usuario = vd.id_usuario'];
     if (normalizedFilters.fechaInicio) {
         cuotaConditions.push('cm.fecha_fin >= :cuotaFechaInicio');
@@ -591,7 +602,6 @@ const getCumplimientoMesFront = async (filters = {}) => {
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             ${detalleJoins}
-            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${whereClause}
             GROUP BY v.id_vendedor
         )
@@ -611,8 +621,8 @@ const getCumplimientoMesFront = async (filters = {}) => {
             ORDER BY cm.fecha_fin DESC NULLS LAST, cm."id_cuotaMes" DESC
             LIMIT 1
         ) cv ON true
-        LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
+        ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
+        WHERE (${hayFiltroReductor ? 'COALESCE(vf.venta_acum, 0) != 0' : '(COALESCE(cv.cuota_mes, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)'})
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
@@ -638,6 +648,11 @@ const getCumplimientoMesFront = async (filters = {}) => {
     }
     if (proveedoresFront) {
         detalleDetConditions.push(`(${buildProveedorCondition(proveedoresFront, detalleReplacements, 'dv')})`);
+    }
+    if (ciudadesFront && ciudadesFront.length > 0) {
+        const placeholders = ciudadesFront.map((_, i) => `:detCiudad${i}`).join(',');
+        detalleDetConditions.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesFront.forEach((c, i) => { detalleReplacements[`detCiudad${i}`] = String(c); });
     }
     const detalleDetWhere = detalleDetConditions.length > 0 ? `AND ${detalleDetConditions.join(' AND ')}` : '';
 
@@ -1247,9 +1262,13 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
 
-    if (normalizedFilters.ciudad) {
-        ventasWhere.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadesGeneral = normalizedFilters.ciudades && normalizedFilters.ciudades.length > 0
+        ? normalizedFilters.ciudades
+        : (normalizedFilters.ciudad ? [String(normalizedFilters.ciudad).trim()] : null);
+    if (ciudadesGeneral && ciudadesGeneral.length > 0) {
+        const placeholders = ciudadesGeneral.map((_, i) => `:lineasCiudad${i}`).join(',');
+        ventasWhere.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesGeneral.forEach((c, i) => { replacements[`lineasCiudad${i}`] = String(c); });
     }
 
     // Filtro por vendedor (soporta array multi o string legacy)
@@ -1288,6 +1307,14 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
     const ventasWhereClause = ventasWhere.length > 0 ? `WHERE ${ventasWhere.join(' AND ')}` : '';
+
+    // Si hay ciudad o vendedor(es) seleccionados, el universo de ventas se
+    // reduce: solo deben listarse proveedores con venta real bajo esos
+    // filtros, no todos los que tengan cuota asignada al scope.
+    const hayFiltroReductor = Boolean(
+        (ciudadesGeneral && ciudadesGeneral.length > 0) ||
+        (vendedoresGeneral && vendedoresGeneral.length > 0),
+    );
 
     const query = `
         WITH cuotas_agregadas AS (
@@ -1340,7 +1367,6 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
-            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhereClause}
             GROUP BY UPPER(TRIM(REGEXP_REPLACE(
                         REGEXP_REPLACE(
@@ -1350,7 +1376,8 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
                         ' +', ' ', 'g'
                     )))
         )
-        -- PARTE 1: Proveedores CON cuota (con o sin venta)
+        -- PARTE 1: Proveedores CON cuota (con o sin venta; si hay filtro de
+        -- ciudad, solo se listan los que tengan venta real en esa ciudad)
         SELECT
             COALESCE(cq.id_proveedor, vp.id_proveedor) AS id_proveedor,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
@@ -1359,7 +1386,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
             cq.suma_cuota AS cuota_proveedor_total,
             COALESCE(vp.venta_total, 0) AS venta
         FROM cuotas_deduplicadas cq
-        LEFT JOIN ventas_por_proveedor vp
+        ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_por_proveedor vp
             ON vp.nombre_norm = cq.nombre_norm
         UNION ALL
         -- PARTE 2: Proveedores SIN cuota pero CON venta
