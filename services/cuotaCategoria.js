@@ -383,8 +383,19 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		acumuladoIndex.set(Number(r.id_categoria), { categoria: r.categoria, acumulado: toNumber(r.acumulado) });
 	});
 
-	// UNIÓN: Todas las categorías (cuota + sin cuota con venta)
-	const todasIds = new Set([...cuotaIndex.keys(), ...acumuladoIndex.keys()]);
+	// Si hay ciudad o proveedor seleccionados, el universo de categorías se
+	// reduce: solo deben listarse categorías con venta real bajo esos
+	// filtros (acumuladoIndex), no todas las que tengan cuota asignada al
+	// scope (la cuota no está segmentada por ciudad/proveedor).
+	const hayFiltroReductor = Boolean(
+		(ciudadesFiltro && ciudadesFiltro.length) || (proveedoresFiltro && proveedoresFiltro.length),
+	);
+
+	// UNIÓN: todas las categorías (cuota + sin cuota con venta), o solo las
+	// que tienen venta real cuando hay un filtro reductor activo.
+	const todasIds = hayFiltroReductor
+		? new Set(acumuladoIndex.keys())
+		: new Set([...cuotaIndex.keys(), ...acumuladoIndex.keys()]);
 
 	const rows = Array.from(todasIds).map((idCategoria) => {
 		const cuotaData = cuotaIndex.get(idCategoria);

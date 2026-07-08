@@ -5,7 +5,7 @@ const cumplimientoSemanaService = require('../services/cumplimientoSemana');
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
 router.get('/front/me', requireAuthJWT, controller.listFrontMe);
-router.get('/front', controller.listFront);
+router.get('/front', requireAuthJWT, controller.listFront);
 
 // Issue #2: /lineas role-aware desde JWT (consolidado, sin N+1)
 router.get('/lineas', requireAuthJWT, async (req, res) => {

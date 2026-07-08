@@ -127,8 +127,56 @@ module.exports = {
 
     async listFront(req, res) {
         try {
-            const data = await cumplimientoMesService.getCumplimientoMesFront(getFilters(req.query));
-            return res.status(200).send(data);
+            const idRol = String(req.auth?.rol ?? '');
+            const idUsuario = req.auth?.idUsuario;
+            const codigoVendedor = String(req.auth?.codVendedor || '').trim();
+            const filters = getFilters(req.query);
+
+            // Admin: sin filtro de vendedor
+            if (idRol === '1') {
+                const data = await cumplimientoMesService.getCumplimientoMesFront(filters);
+                return res.status(200).send(data);
+            }
+
+            // Supervisor: solo vendedores asignados a su equipo
+            if (idRol === '2' && idUsuario) {
+                const vendedoresAsignados = await sequelize.query(`
+                    SELECT codigo_vendedor FROM vendedor
+                    WHERE id_supervisor = :idUsuario AND codigo_vendedor IS NOT NULL
+                `, {
+                    replacements: { idUsuario },
+                    type: QueryTypes.SELECT
+                });
+
+                const codigos = vendedoresAsignados.map(v => v.codigo_vendedor).filter(Boolean);
+
+                if (codigos.length === 0) {
+                    return res.status(200).send({
+                        periodo: filters,
+                        detalle: [],
+                        totales: { cuotaTotal: 0, ventaTotal: 0, porcCumplimiento: 0, proyeccionTotal: 0, porcCumplimientoProyectado: 0 }
+                    });
+                }
+
+                const data = await cumplimientoMesService.getCumplimientoMesFront({
+                    ...filters,
+                    vendedores: codigos
+                });
+                return res.status(200).send(data);
+            }
+
+            // Vendedor: solo sus propias ventas/cuotas
+            if (codigoVendedor) {
+                const data = await cumplimientoMesService.getCumplimientoMesFront({
+                    ...filters,
+                    vendedor: codigoVendedor
+                });
+                return res.status(200).send(data);
+            }
+
+            return res.status(403).send({
+                message: 'El usuario autenticado no tiene código de vendedor asociado'
+            });
         } catch (error) {
             return res.status(400).send(error);
         }

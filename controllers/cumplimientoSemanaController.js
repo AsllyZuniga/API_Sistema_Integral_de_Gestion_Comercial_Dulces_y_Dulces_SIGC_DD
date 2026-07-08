@@ -80,11 +80,56 @@ module.exports = {
         }
     },
 
-    // Para admins/supervisores (todos los vendedores)
+    // Para admins/supervisores/vendedores (role-aware)
     async listFront(req, res) {
         try {
-            const data = await cumplimientoSemanaService.getCumplimientoSemanaFront(getFilters(req.query));
-            return res.status(200).send(data);
+            const idRol = String(req.auth?.rol ?? '');
+            const idUsuario = req.auth?.idUsuario;
+            const codigoVendedor = String(req.auth?.codVendedor || '').trim();
+            const filters = getFilters(req.query);
+
+            // Admin: sin filtro de vendedor
+            if (idRol === '1') {
+                const data = await cumplimientoSemanaService.getCumplimientoSemanaFront(filters);
+                return res.status(200).send(data);
+            }
+
+            // Supervisor: solo vendedores de su equipo
+            if (idRol === '2' && idUsuario) {
+                const { sequelize } = require('../models');
+                const { QueryTypes } = require('sequelize');
+                const vendedoresAsignados = await sequelize.query(`
+                    SELECT codigo_vendedor FROM vendedor
+                    WHERE id_supervisor = :idUsuario AND codigo_vendedor IS NOT NULL
+                `, {
+                    replacements: { idUsuario },
+                    type: QueryTypes.SELECT
+                });
+                const codigos = vendedoresAsignados.map(v => v.codigo_vendedor).filter(Boolean);
+                if (codigos.length === 0) {
+                    return res.status(200).send({ periodo: filters, detalle: [] });
+                }
+                const data = await cumplimientoSemanaService.getCumplimientoSemanaFront({
+                    ...filters,
+                    vendedores: codigos,
+                    vendedor: codigos[0]
+                });
+                return res.status(200).send(data);
+            }
+
+            // Vendedor: solo sus datos
+            if (codigoVendedor) {
+                const data = await cumplimientoSemanaService.getCumplimientoSemanaFront({
+                    ...filters,
+                    vendedor: codigoVendedor,
+                    vendedores: [codigoVendedor]
+                });
+                return res.status(200).send(data);
+            }
+
+            return res.status(403).send({
+                message: 'El usuario autenticado no tiene código de vendedor asociado'
+            });
         } catch (error) {
             return res.status(400).send(error);
         }
