@@ -343,9 +343,14 @@ const getCategoriaIdByNombre = async (nombreCategoria) => {
     return row?.id_categoria;
 };
 
-const signedNcAmountSql = (alias) => `COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)`;
-const signedNcSubtotalSql = (alias) => `COALESCE(${alias}.subtotal, 0)`;
-const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `COALESCE(${detalleAlias}.subtotal, 0)`;
+// Nota: estas 3 funciones no restaban notas crédito pese al nombre
+// "signed" (a diferencia de sus equivalentes en cumplimientoMesService.js,
+// que sí aplican CASE WHEN NC THEN -ABS(...)). Esto inflaba los totales
+// semanales en cualquier rango con notas crédito. Se alinean con el
+// patrón ya usado en getCumplimientoSemanaFront (líneas 668-671).
+const signedNcAmountSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)) ELSE COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0) END`;
+const signedNcSubtotalSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.subtotal, 0)) ELSE COALESCE(${alias}.subtotal, 0) END`;
+const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `CASE WHEN UPPER(TRIM(${ventaAlias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${detalleAlias}.subtotal, 0)) ELSE COALESCE(${detalleAlias}.subtotal, 0) END`;
 
 const round = (value, decimals = 2) => {
     const factor = 10 ** decimals;
@@ -946,11 +951,17 @@ const getCiudadesGeneralSemana = async (filters = {}, auth = null) => {
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
+    // Nota: el JOIN a detalle_venta multiplica las filas de venta (una
+    // venta con N líneas de detalle aparece N veces). Sumar el monto de
+    // CABECERA (v.valor_neto/subtotal) aquí infla el total por ese fan-out
+    // — hay que sumar el subtotal POR LÍNEA (dv.subtotal), igual que el
+    // resto de queries de este archivo y que el equivalente mensual
+    // (getCumplimientoPorCiudadGlobal en cumplimientoMesService.js).
     const query = `
         SELECT
             COALESCE(dv.id_ciudad_original, 0) AS id_ciudad,
             COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
-            SUM(${signedNcAmountSql('v')}) AS venta
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
         FROM venta v
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
