@@ -615,9 +615,13 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         dateConditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    const ciudadCondFront = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
-    if (ciudadCondFront) {
-        dateConditions.push(ciudadCondFront);
+    const ciudadesFront = normalizedFilters.ciudades && normalizedFilters.ciudades.length > 0
+        ? normalizedFilters.ciudades
+        : (normalizedFilters.ciudad ? [String(normalizedFilters.ciudad).trim()] : null);
+    if (ciudadesFront && ciudadesFront.length > 0) {
+        const placeholders = ciudadesFront.map((_, i) => `:semFrontCiudad${i}`).join(',');
+        dateConditions.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesFront.forEach((c, i) => { replacements[`semFrontCiudad${i}`] = String(c); });
     }
 
     const proveedoresFront = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -644,12 +648,18 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
 
     let detalleJoins = '';
     if (detalleConditions.length > 0) {
-        detalleJoins = `JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            JOIN item it ON it.id_item = dv.id_item`;
+        detalleJoins = `JOIN item it ON it.id_item = dv.id_item`;
     }
 
     const allConditions = [...dateConditions, ...detalleConditions];
     const whereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : '';
+
+    // Si hay ciudad, proveedor o categoría seleccionados, el universo de
+    // ventas se reduce: solo deben listarse vendedores con venta real bajo
+    // esos filtros, no todos los que tengan cuota asignada esta semana.
+    const hayFiltroReductor = Boolean(
+        (ciudadesFront && ciudadesFront.length > 0) || detalleConditions.length > 0,
+    );
 
     const cuotaConditions = ['cs.id_usuario = vd.id_usuario'];
     if (normalizedFilters.fechaInicio) {
@@ -678,7 +688,6 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             ${detalleJoins}
-            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${whereClause}
             GROUP BY v.id_vendedor
         )
@@ -703,8 +712,8 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             ) cs_ranked
             WHERE cs_ranked.rn = 1
         ) cs ON true
-        LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
+        ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
+        WHERE (${hayFiltroReductor ? 'COALESCE(vf.venta_acum, 0) != 0' : '(COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)'})
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
@@ -772,9 +781,13 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         ventasWhere.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    const ciudadCondGeneral = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
-    if (ciudadCondGeneral) {
-        ventasWhere.push(ciudadCondGeneral);
+    const ciudadesGeneral = normalizedFilters.ciudades && normalizedFilters.ciudades.length > 0
+        ? normalizedFilters.ciudades
+        : (normalizedFilters.ciudad ? [String(normalizedFilters.ciudad).trim()] : null);
+    if (ciudadesGeneral && ciudadesGeneral.length > 0) {
+        const placeholders = ciudadesGeneral.map((_, i) => `:semLineasCiudad${i}`).join(',');
+        ventasWhere.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesGeneral.forEach((c, i) => { replacements[`semLineasCiudad${i}`] = String(c); });
     }
 
     const proveedoresGeneral = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -799,6 +812,11 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
     const ventasWhereClause = ventasWhere.length > 0 ? `WHERE ${ventasWhere.join(' AND ')}` : '';
+
+    // Si hay ciudad o vendedor(es) seleccionados, el universo de ventas se
+    // reduce: solo deben listarse proveedores con venta real bajo esos
+    // filtros, no todos los que tengan cuota asignada al scope.
+    const hayFiltroReductor = Boolean(ciudadesGeneral && ciudadesGeneral.length > 0);
 
     const query = `
         WITH cuotas_agregadas AS (
@@ -843,7 +861,6 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
-            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhereClause}
             GROUP BY UPPER(TRIM(REGEXP_REPLACE(
                         REGEXP_REPLACE(
@@ -861,7 +878,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
             cq.suma_cuota AS cuota_proveedor_total,
             COALESCE(vp.venta_total, 0) AS venta
         FROM cuotas_deduplicadas cq
-        LEFT JOIN ventas_por_proveedor vp
+        ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_por_proveedor vp
             ON vp.nombre_norm = cq.nombre_norm
         UNION ALL
         SELECT
