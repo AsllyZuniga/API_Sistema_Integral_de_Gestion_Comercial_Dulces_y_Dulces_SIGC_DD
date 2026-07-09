@@ -962,11 +962,56 @@ const getCiudadesGeneralSemana = async (filters = {}, auth = null) => {
     if (ciudadCondGeneralCiu) {
         where.push(ciudadCondGeneralCiu);
     }
+
+    // Filtro por vendedor(es) seleccionados en la UI — mismo patrón que
+    // getCumplimientoPorCiudadGlobal (equivalente mensual en cumplimientoMesService.js).
+    const vendedoresGeneralCiu = normalizedFilters.vendedores && normalizedFilters.vendedores.length > 0
+        ? normalizedFilters.vendedores
+        : (normalizedFilters.vendedor ? [String(normalizedFilters.vendedor).trim()] : null);
+    if (vendedoresGeneralCiu && vendedoresGeneralCiu.length) {
+        const placeholders = vendedoresGeneralCiu.map((_, i) => `:semCiuVend${i}`).join(',');
+        vendedoresGeneralCiu.forEach((v, i) => { replacements[`semCiuVend${i}`] = v; });
+        where.push(`vd.codigo_vendedor IN (${placeholders})`);
+    }
+
+    // Filtro por proveedor(es)/categoría(s) — mismo patrón que getCiudadesPorVendedor.
+    const proveedoresGeneralCiu = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+    const categoriasGeneralCiu = normalizedFilters.categorias && normalizedFilters.categorias.length > 0
+        ? normalizedFilters.categorias
+        : null;
+    if (proveedoresGeneralCiu) {
+        const provCond = buildProveedorCondition(proveedoresGeneralCiu, replacements);
+        where.push(`(${provCond})`);
+    }
+    if (categoriasGeneralCiu) {
+        const placeholders = categoriasGeneralCiu.map((_, i) => `:semCiuCat${i}`).join(',');
+        where.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        categoriasGeneralCiu.forEach((cat, i) => { replacements[`semCiuCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(categoriaId);
+        }
+    }
+
     if (scopeWhereVenta) {
         where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
     }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    // JOIN a vendedor/item solo cuando el filtro correspondiente los necesita,
+    // para no alterar el plan de la query cuando no aplica (mismo criterio
+    // que el resto de funciones "PorVendedor"/"General" de este archivo).
+    const joinVendedorGeneralCiu = vendedoresGeneralCiu && vendedoresGeneralCiu.length
+        ? 'JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor'
+        : '';
+    const joinItemGeneralCiu = (proveedoresGeneralCiu || categoriasGeneralCiu || normalizedFilters.categoria)
+        ? 'JOIN item it ON it.id_item = dv.id_item'
+        : '';
 
     // Nota: el JOIN a detalle_venta multiplica las filas de venta (una
     // venta con N líneas de detalle aparece N veces). Sumar el monto de
@@ -982,6 +1027,8 @@ const getCiudadesGeneralSemana = async (filters = {}, auth = null) => {
         FROM venta v
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
+        ${joinVendedorGeneralCiu}
+        ${joinItemGeneralCiu}
         ${whereClause}
         GROUP BY dv.id_ciudad_original, COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
         ORDER BY venta DESC
