@@ -1503,6 +1503,30 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
         where.push(`vd_c.codigo_vendedor IN (${placeholders})`);
     }
 
+    // Filtro por proveedor(es)/categoría(s) — mismo patrón que el resto de
+    // reportes "General" (getLineasGeneral, getCiudadesGeneralSemana).
+    const proveedoresFiltro = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+    const categoriasFiltro = normalizedFilters.categorias && normalizedFilters.categorias.length > 0
+        ? normalizedFilters.categorias
+        : null;
+    if (proveedoresFiltro) {
+        const provCond = buildProveedorCondition(proveedoresFiltro, replacements);
+        where.push(`(${provCond})`);
+    }
+    if (categoriasFiltro) {
+        const placeholders = categoriasFiltro.map((_, i) => `:ciudGlobalCat${i}`).join(',');
+        where.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        categoriasFiltro.forEach((cat, i) => { replacements[`ciudGlobalCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(categoriaId);
+        }
+    }
+
     if (scopeWhereVenta) {
         where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
     }
@@ -1510,6 +1534,10 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
     // Si hay filtro de vendedor, también hace falta JOIN a vendedor
     const joinVendedor = vendedoresFiltro && vendedoresFiltro.length
         ? 'JOIN vendedor vd_c ON vd_c.id_vendedor = v.id_vendedor'
+        : '';
+    // Si hay filtro de proveedor/categoría, hace falta JOIN a item
+    const joinItem = (proveedoresFiltro || categoriasFiltro || normalizedFilters.categoria)
+        ? 'JOIN item it ON it.id_item = dv.id_item'
         : '';
 
     // Construir WHERE clause de ventas
@@ -1527,6 +1555,7 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
         LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
         ${joinVendedor}
+        ${joinItem}
         ${whereCondition}
         GROUP BY COALESCE(dv.id_ciudad_original, 0), COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
         ORDER BY venta DESC
@@ -1551,6 +1580,7 @@ const getCumplimientoPorCiudadGlobal = async (filters = {}, auth = null) => {
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             ${joinVendedor}
+            ${joinItem}
             ${whereCondition}
             GROUP BY v.id_vendedor, COALESCE(dv.id_ciudad_original, 0)
         ),
