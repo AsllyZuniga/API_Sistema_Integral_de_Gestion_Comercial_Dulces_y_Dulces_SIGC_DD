@@ -38,8 +38,13 @@ const getMonthRange = (baseDate = new Date()) => {
 const parseArrayParam = (value) => {
     if (value == null || value === '') return [];
     const raw = Array.isArray(value) ? value : String(value).split(',');
+    // Cada elemento puede venir con comas propias (ej. value fusionado del
+    // frontend "1184,1386" cuando dos proveedores comparten nombre visible),
+    // no solo el query param completo — hay que expandir ambos niveles,
+    // igual que `toArr` en cumplimientoSemanaController.js/cumplimientoMesController.js.
     return raw
-        .map((v) => String(v).trim())
+        .flatMap((v) => String(v).split(','))
+        .map((v) => v.trim())
         .filter((v) => v.length > 0);
 };
 
