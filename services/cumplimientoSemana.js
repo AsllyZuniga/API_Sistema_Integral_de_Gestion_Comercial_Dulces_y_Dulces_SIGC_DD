@@ -790,6 +790,31 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         ciudadesGeneral.forEach((c, i) => { replacements[`semLineasCiudad${i}`] = String(c); });
     }
 
+    // Filtro por vendedor (soporta array multi o string legacy)
+    const vendedoresGeneral = normalizedFilters.vendedores && normalizedFilters.vendedores.length > 0
+        ? normalizedFilters.vendedores.map((v) => String(v).trim()).filter(Boolean)
+        : (normalizedFilters.vendedor
+            ? String(normalizedFilters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
+            : null);
+
+    let vendedorCuotaCond = '';
+    if (vendedoresGeneral && vendedoresGeneral.length > 0) {
+        const placeholders = vendedoresGeneral.map((_, i) => `:semLineasVendedor${i}`).join(',');
+        vendedoresGeneral.forEach((v, i) => { replacements[`semLineasVendedor${i}`] = v; });
+        ventasWhere.push(`vd.codigo_vendedor IN (${placeholders})`);
+
+        // La cuota (cuotas_agregadas) debe filtrarse por el mismo vendedor
+        // seleccionado, igual que la venta; si no, la cuota queda calculada
+        // sobre todos los vendedores del scope (bug: cuota de "todos" con
+        // venta de "uno solo").
+        const cuotaVendPlaceholders = vendedoresGeneral.map((_, i) => `:semCuotaVend${i}`).join(',');
+        vendedoresGeneral.forEach((v, i) => { replacements[`semCuotaVend${i}`] = v; });
+        vendedorCuotaCond = `
+              AND vcp.id_vendedor IN (
+                  SELECT id_vendedor FROM vendedor WHERE codigo_vendedor IN (${cuotaVendPlaceholders})
+              )`;
+    }
+
     const proveedoresGeneral = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
@@ -816,7 +841,10 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
     // Si hay ciudad o vendedor(es) seleccionados, el universo de ventas se
     // reduce: solo deben listarse proveedores con venta real bajo esos
     // filtros, no todos los que tengan cuota asignada al scope.
-    const hayFiltroReductor = Boolean(ciudadesGeneral && ciudadesGeneral.length > 0);
+    const hayFiltroReductor = Boolean(
+        (ciudadesGeneral && ciudadesGeneral.length > 0) ||
+        (vendedoresGeneral && vendedoresGeneral.length > 0),
+    );
 
     const query = `
         WITH cuotas_agregadas AS (
@@ -837,6 +865,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
               AND cp.fecha_fin >= :cuotaFechaInicio
               ${scopeWhereCuota}
               ${cuotaProveedorCond}
+              ${vendedorCuotaCond}
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (
@@ -858,6 +887,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
                 MAX(it.id_proveedor) AS id_proveedor,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
             FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor

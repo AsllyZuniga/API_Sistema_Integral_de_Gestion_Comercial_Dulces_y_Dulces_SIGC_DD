@@ -1278,10 +1278,22 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
             ? String(normalizedFilters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
             : null);
 
+    let vendedorCuotaCond = '';
     if (vendedoresGeneral && vendedoresGeneral.length > 0) {
         const placeholders = vendedoresGeneral.map((_, i) => `:fVendedor${i}`).join(',');
         vendedoresGeneral.forEach((v, i) => { replacements[`fVendedor${i}`] = v; });
         ventasWhere.push(`vd.codigo_vendedor IN (${placeholders})`);
+
+        // La cuota (cuotas_agregadas) debe filtrarse por el mismo vendedor
+        // seleccionado, igual que la venta; si no, la cuota queda calculada
+        // sobre todos los vendedores del scope (bug: cuota de "todos" con
+        // venta de "uno solo").
+        const cuotaVendPlaceholders = vendedoresGeneral.map((_, i) => `:cuotaVend${i}`).join(',');
+        vendedoresGeneral.forEach((v, i) => { replacements[`cuotaVend${i}`] = v; });
+        vendedorCuotaCond = `
+              AND vcp.id_vendedor IN (
+                  SELECT id_vendedor FROM vendedor WHERE codigo_vendedor IN (${cuotaVendPlaceholders})
+              )`;
     }
 
     const proveedoresGeneral = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -1336,6 +1348,7 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
               AND cp.fecha_fin >= :cuotaFechaInicio
               ${scopeWhereCuota}
               ${cuotaProveedorCond}
+              ${vendedorCuotaCond}
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (
