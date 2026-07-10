@@ -1310,6 +1310,18 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
         cuotaProveedorCond = `AND vcp.id_proveedor IN (${cuotaPlaceholders})`;
     }
 
+    // Filtro por categoría (soporta array multi o string legacy). Solo
+    // aplica al lado de ventas (ventas_por_proveedor ya hace JOIN a item),
+    // igual que en getLineasPorVendedor.
+    const categoriasGeneral = normalizedFilters.categorias && normalizedFilters.categorias.length > 0
+        ? normalizedFilters.categorias
+        : (normalizedFilters.categoria ? [String(normalizedFilters.categoria).trim()] : null);
+    if (categoriasGeneral && categoriasGeneral.length > 0) {
+        const placeholders = categoriasGeneral.map((_, i) => `:lineasCat${i}`).join(',');
+        ventasWhere.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        categoriasGeneral.forEach((cat, i) => { replacements[`lineasCat${i}`] = String(cat); });
+    }
+
     // Aplicar scope de rol al WHERE de ventas
     if (scopeWhereVenta) {
         ventasWhere.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
@@ -1320,12 +1332,13 @@ const getLineasGeneral = async (filters = {}, auth = null) => {
 
     const ventasWhereClause = ventasWhere.length > 0 ? `WHERE ${ventasWhere.join(' AND ')}` : '';
 
-    // Si hay ciudad o vendedor(es) seleccionados, el universo de ventas se
-    // reduce: solo deben listarse proveedores con venta real bajo esos
-    // filtros, no todos los que tengan cuota asignada al scope.
+    // Si hay ciudad, vendedor(es) o categoría(s) seleccionados, el universo
+    // de ventas se reduce: solo deben listarse proveedores con venta real
+    // bajo esos filtros, no todos los que tengan cuota asignada al scope.
     const hayFiltroReductor = Boolean(
         (ciudadesGeneral && ciudadesGeneral.length > 0) ||
-        (vendedoresGeneral && vendedoresGeneral.length > 0),
+        (vendedoresGeneral && vendedoresGeneral.length > 0) ||
+        (categoriasGeneral && categoriasGeneral.length > 0),
     );
 
     const query = `

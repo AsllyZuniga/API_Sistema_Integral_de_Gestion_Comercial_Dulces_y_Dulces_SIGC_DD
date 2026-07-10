@@ -253,7 +253,7 @@ const getOpcionesFiltros = async (params, auth) => {
         .filter((r) => r.id_categoria != null)
         .map((r) => ({
             value: String(r.id_categoria),
-            label: `${r.id_categoria} - ${(r.categoria_nombre || '').trim()}`
+            label: (r.categoria_nombre || '').trim()
         }));
 
     const ciudades = ciudadesRows
