@@ -950,6 +950,27 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         (categoriasGeneral && categoriasGeneral.length > 0),
     );
 
+    // Ciudad y categoría reducen implícitamente el universo de vendedores
+    // (solo los que vendieron bajo esos filtros), pero no alimentan
+    // vendedorCuotaCond (que solo reacciona a filtro explícito de vendedor).
+    // Sin esto, cuotas_agregadas suma cuota de TODOS los vendedores del
+    // scope aunque ventas_por_proveedor ya esté acotado a un subconjunto,
+    // inflando cuota_proveedor_total. Si ya hay filtro explícito de
+    // vendedor, vendedorCuotaCond ya restringe correctamente y esto es
+    // redundante (no se aplica para evitar duplicar filtros).
+    let vendedoresImplicitosCond = '';
+    if (!vendedorCuotaCond && ((ciudadesGeneral && ciudadesGeneral.length > 0) || (categoriasGeneral && categoriasGeneral.length > 0))) {
+        vendedoresImplicitosCond = `
+              AND vcp.id_vendedor IN (
+                  SELECT DISTINCT v.id_vendedor
+                  FROM venta v
+                  JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+                  JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+                  JOIN item it ON it.id_item = dv.id_item
+                  ${ventasWhereClause}
+              )`;
+    }
+
     const query = `
         WITH cuotas_agregadas AS (
             SELECT
@@ -970,6 +991,7 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
               ${scopeWhereCuota}
               ${cuotaProveedorCond}
               ${vendedorCuotaCond}
+              ${vendedoresImplicitosCond}
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (

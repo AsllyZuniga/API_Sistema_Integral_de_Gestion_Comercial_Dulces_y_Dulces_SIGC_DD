@@ -327,6 +327,29 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		extraCiuVenta = ` AND dv.id_ciudad_original IN (${placeholders}) `;
 	}
 
+	// Ciudad y categoría reducen implícitamente el universo de vendedores
+	// (solo los que vendieron bajo esos filtros), pero sin filtro explícito
+	// de vendedor, extraCuotaWhere/joinCuota no lo reflejan: la cuota
+	// quedaría sumada sobre TODOS los vendedores del scope aunque el
+	// acumulado ya esté acotado a un subconjunto, inflando `cuota`. Si ya
+	// hay filtro explícito de vendedor, extraCuotaWhere ya restringe
+	// correctamente y esto es redundante (no se aplica para no duplicar).
+	let vendedoresImplicitosWhere = '';
+	if (!joinCuota && ((ciudadesFiltro && ciudadesFiltro.length) || (categoriasFiltro && categoriasFiltro.length))) {
+		vendedoresImplicitosWhere = ` AND vcc.id_vendedor IN (
+			SELECT DISTINCT v.id_vendedor
+			FROM detalle_venta dv
+			JOIN item it ON it.id_item = dv.id_item
+			JOIN venta v ON v.id_venta = dv.id_venta
+			WHERE v.fecha >= :fechaInicio
+			  AND v.fecha <= :fechaFin
+			  ${scopeWhereVentas}
+			  ${extraVentaWhere}
+			  ${extraProvVenta}
+			  ${extraCiuVenta}
+		) `;
+	}
+
 	// PARTE 1: Categorías CON cuota (filtradas por scope)
 	// CAST ::date porque vcc.fecha_inicio/fin son timestamp with time zone
 	// y los replacements llegan como texto plano (PG no hace cast implícito
@@ -343,6 +366,7 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		  AND vcc.fecha_fin >= :fechaInicio::date
 		  ${scopeWhereCuotas}
 		  ${extraCuotaWhere}
+		  ${vendedoresImplicitosWhere}
 		GROUP BY vcc.id_categoria, cat.nombre
 	`, {
 		replacements,
