@@ -552,7 +552,7 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
             WHERE fecha_fin = :fechaCuota
             GROUP BY id_usuario
         ) cd ON cd.id_usuario = vd.id_usuario
-        LEFT JOIN (
+        JOIN (
             SELECT v.id_vendedor,
                 SUM(
                     CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
@@ -565,6 +565,12 @@ const getCumplimientoDiaVendedores = async (filters = {}) => {
             ${itemJoin}
             WHERE ${vtConditions.join(' AND ')}
             GROUP BY v.id_vendedor
+            HAVING SUM(
+                CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
+                THEN -ABS(COALESCE(dv.subtotal, 0))
+                ELSE COALESCE(dv.subtotal, 0)
+                END
+            ) != 0
         ) vt ON vt.id_vendedor = vd.id_vendedor
         WHERE 1=1
         ${vendedorFilter}
