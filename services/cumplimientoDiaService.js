@@ -264,6 +264,12 @@ const getCumplimientoDiaVendedor = async (codigoVendedor, filters = {}) => {
         type: QueryTypes.SELECT
     });
 
+    // FIX: aplicar proveedor/categoria/ciudad igual que getCumplimientoDiaVendedores,
+    // antes se ignoraban por completo para el vendedor individual.
+    const { joinItem, condiciones: detalleCondiciones } = buildDetalleFilters(normalizedFilters, replacements);
+    const itemJoin = joinItem ? 'JOIN item i ON i.id_item = dv.id_item' : '';
+    const detalleWhere = detalleCondiciones.length ? `AND ${detalleCondiciones.join(' AND ')}` : '';
+
     if (vendedorResult.length === 0) {
         return {
             codigoVendedor,
@@ -304,16 +310,18 @@ const getCumplimientoDiaVendedor = async (codigoVendedor, filters = {}) => {
         LEFT JOIN (
             SELECT
                 SUM(
-                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' 
-                    THEN -ABS(COALESCE(dv.subtotal, 0)) 
-                    ELSE COALESCE(dv.subtotal, 0) 
+                    CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%'
+                    THEN -ABS(COALESCE(dv.subtotal, 0))
+                    ELSE COALESCE(dv.subtotal, 0)
                     END
                 ) AS venta_acum
             FROM venta v
             LEFT JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            ${itemJoin}
             WHERE v.id_vendedor = :idVendedor
-              AND v.fecha >= :fechaInicio 
+              AND v.fecha >= :fechaInicio
               AND v.fecha <= :fechaFin
+              ${detalleWhere}
         ) vt ON true
     `;
 
