@@ -276,7 +276,8 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 	const toArr = (val) => {
 		if (val == null || val === '') return null;
 		const raw = Array.isArray(val) ? val : String(val).split(',');
-		const arr = raw.map((v) => String(v).trim()).filter(Boolean);
+		const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+		const arr = [...new Set(flat)];
 		return arr.length ? arr : null;
 	};
 	const vendedoresFiltro = toArr(filters.vendedores) || toArr(filters.vendedor);
@@ -326,6 +327,29 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		extraCiuVenta = ` AND dv.id_ciudad_original IN (${placeholders}) `;
 	}
 
+	// Ciudad y categoría reducen implícitamente el universo de vendedores
+	// (solo los que vendieron bajo esos filtros), pero sin filtro explícito
+	// de vendedor, extraCuotaWhere/joinCuota no lo reflejan: la cuota
+	// quedaría sumada sobre TODOS los vendedores del scope aunque el
+	// acumulado ya esté acotado a un subconjunto, inflando `cuota`. Si ya
+	// hay filtro explícito de vendedor, extraCuotaWhere ya restringe
+	// correctamente y esto es redundante (no se aplica para no duplicar).
+	let vendedoresImplicitosWhere = '';
+	if (!joinCuota && ((ciudadesFiltro && ciudadesFiltro.length) || (categoriasFiltro && categoriasFiltro.length))) {
+		vendedoresImplicitosWhere = ` AND vcc.id_vendedor IN (
+			SELECT DISTINCT v.id_vendedor
+			FROM detalle_venta dv
+			JOIN item it ON it.id_item = dv.id_item
+			JOIN venta v ON v.id_venta = dv.id_venta
+			WHERE v.fecha >= :fechaInicio
+			  AND v.fecha <= :fechaFin
+			  ${scopeWhereVentas}
+			  ${extraVentaWhere}
+			  ${extraProvVenta}
+			  ${extraCiuVenta}
+		) `;
+	}
+
 	// PARTE 1: Categorías CON cuota (filtradas por scope)
 	// CAST ::date porque vcc.fecha_inicio/fin son timestamp with time zone
 	// y los replacements llegan como texto plano (PG no hace cast implícito
@@ -342,6 +366,7 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		  AND vcc.fecha_fin >= :fechaInicio::date
 		  ${scopeWhereCuotas}
 		  ${extraCuotaWhere}
+		  ${vendedoresImplicitosWhere}
 		GROUP BY vcc.id_categoria, cat.nombre
 	`, {
 		replacements,
@@ -382,8 +407,19 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		acumuladoIndex.set(Number(r.id_categoria), { categoria: r.categoria, acumulado: toNumber(r.acumulado) });
 	});
 
-	// UNIÓN: Todas las categorías (cuota + sin cuota con venta)
-	const todasIds = new Set([...cuotaIndex.keys(), ...acumuladoIndex.keys()]);
+	// Si hay ciudad o proveedor seleccionados, el universo de categorías se
+	// reduce: solo deben listarse categorías con venta real bajo esos
+	// filtros (acumuladoIndex), no todas las que tengan cuota asignada al
+	// scope (la cuota no está segmentada por ciudad/proveedor).
+	const hayFiltroReductor = Boolean(
+		(ciudadesFiltro && ciudadesFiltro.length) || (proveedoresFiltro && proveedoresFiltro.length),
+	);
+
+	// UNIÓN: todas las categorías (cuota + sin cuota con venta), o solo las
+	// que tienen venta real cuando hay un filtro reductor activo.
+	const todasIds = hayFiltroReductor
+		? new Set(acumuladoIndex.keys())
+		: new Set([...cuotaIndex.keys(), ...acumuladoIndex.keys()]);
 
 	const rows = Array.from(todasIds).map((idCategoria) => {
 		const cuotaData = cuotaIndex.get(idCategoria);

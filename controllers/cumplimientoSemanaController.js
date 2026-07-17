@@ -13,35 +13,53 @@ const extractCategoryId = (categoryStr) => {
     return match ? match[0] : categoryStr;
 };
 
+const toArr = (raw) => {
+    if (raw == null || raw === '') return [];
+    const list = Array.isArray(raw) ? raw : String(raw).split(',');
+    return [...new Set(list.flatMap(v => String(v).split(',').map(s => s.trim())).filter(Boolean))];
+};
+
 const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,
-        vendedor: query.vendedor || query.codVendedor,
-        ciudad: query.ciudad || query.codCiudad
+        vendedor: query.vendedor,
+        ciudad: query.ciudad
     };
 
-    const proveedorRaw = query.proveedor || query.codProveedor;
-    if (proveedorRaw) {
-        const list = Array.isArray(proveedorRaw)
-            ? proveedorRaw
-            : String(proveedorRaw).split(',');
+    const vendedorRaw = query.vendedor || query.codVendedor;
+    if (vendedorRaw) {
+        filters.vendedores = toArr(vendedorRaw);
+        filters.vendedor = filters.vendedores[0];
+    }
+
+    if (query.proveedor) {
+        const list = Array.isArray(query.proveedor)
+            ? query.proveedor
+            : String(query.proveedor).split(',');
         filters.proveedores = list.map(p => p.trim()).filter(Boolean);
         filters.proveedor = filters.proveedores[0];
     }
 
-    const categoriaRaw = query.categoria || query.codCategoria;
-    if (categoriaRaw) {
-        const list = Array.isArray(categoriaRaw)
-            ? categoriaRaw
-            : String(categoriaRaw).split(',');
+    if (query.categoria) {
+        const list = Array.isArray(query.categoria)
+            ? query.categoria
+            : String(query.categoria).split(',');
         filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
+    }
+
+    const ciudadRaw = query.ciudad || query.codCiudad;
+    if (ciudadRaw) {
+        filters.ciudades = toArr(ciudadRaw);
+        filters.ciudad = filters.ciudades[0];
     }
 
     return filters;
 };
 
 module.exports = {
+    getFilters,
+
     // Para el vendedor autenticado ("Mi cumplimiento semanal")
     async listFrontMe(req, res) {
         try {
@@ -53,7 +71,8 @@ module.exports = {
             }
             const data = await cumplimientoSemanaService.getCumplimientoSemanaFront({
                 ...getFilters(req.query),
-                vendedor: codigoVendedor
+                vendedor: codigoVendedor,
+                vendedores: [codigoVendedor]
             });
             return res.status(200).send(data);
         } catch (error) {
@@ -61,11 +80,56 @@ module.exports = {
         }
     },
 
-    // Para admins/supervisores (todos los vendedores)
+    // Para admins/supervisores/vendedores (role-aware)
     async listFront(req, res) {
         try {
-            const data = await cumplimientoSemanaService.getCumplimientoSemanaFront(getFilters(req.query));
-            return res.status(200).send(data);
+            const idRol = String(req.auth?.rol ?? '');
+            const idUsuario = req.auth?.idUsuario;
+            const codigoVendedor = String(req.auth?.codVendedor || '').trim();
+            const filters = getFilters(req.query);
+
+            // Admin: sin filtro de vendedor
+            if (idRol === '1') {
+                const data = await cumplimientoSemanaService.getCumplimientoSemanaFront(filters);
+                return res.status(200).send(data);
+            }
+
+            // Supervisor: solo vendedores de su equipo
+            if (idRol === '2' && idUsuario) {
+                const { sequelize } = require('../models');
+                const { QueryTypes } = require('sequelize');
+                const vendedoresAsignados = await sequelize.query(`
+                    SELECT codigo_vendedor FROM vendedor
+                    WHERE id_supervisor = :idUsuario AND codigo_vendedor IS NOT NULL
+                `, {
+                    replacements: { idUsuario },
+                    type: QueryTypes.SELECT
+                });
+                const codigos = vendedoresAsignados.map(v => v.codigo_vendedor).filter(Boolean);
+                if (codigos.length === 0) {
+                    return res.status(200).send({ periodo: filters, detalle: [] });
+                }
+                const data = await cumplimientoSemanaService.getCumplimientoSemanaFront({
+                    ...filters,
+                    vendedores: codigos,
+                    vendedor: codigos[0]
+                });
+                return res.status(200).send(data);
+            }
+
+            // Vendedor: solo sus datos
+            if (codigoVendedor) {
+                const data = await cumplimientoSemanaService.getCumplimientoSemanaFront({
+                    ...filters,
+                    vendedor: codigoVendedor,
+                    vendedores: [codigoVendedor]
+                });
+                return res.status(200).send(data);
+            }
+
+            return res.status(403).send({
+                message: 'El usuario autenticado no tiene código de vendedor asociado'
+            });
         } catch (error) {
             return res.status(400).send(error);
         }

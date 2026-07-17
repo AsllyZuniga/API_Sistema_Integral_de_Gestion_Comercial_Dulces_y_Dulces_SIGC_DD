@@ -25,6 +25,17 @@ const formatDateOnly = (date) => {
     return `${year}-${month}-${day}`;
 };
 
+// El nombre de categoría en BD trae códigos internos antepuestos, ej.
+// "0001 - 1000-ACEITES VEGETALES" o "7710 - 0601 ALIVIO Y PROTECCION"
+// (código + megacategoría, a veces sin guion entre el segundo código y
+// el nombre). Se quitan todos los prefijos numéricos iniciales.
+const limpiarNombreCategoria = (nombre) => {
+    return String(nombre || '')
+        .replace(/^(\s*\d+\s*-\s*)+/u, '')
+        .replace(/^\d+\s+/u, '')
+        .trim();
+};
+
 const getMonthRange = (baseDate = new Date()) => {
     const year = baseDate.getFullYear();
     const month = baseDate.getMonth();
@@ -38,8 +49,13 @@ const getMonthRange = (baseDate = new Date()) => {
 const parseArrayParam = (value) => {
     if (value == null || value === '') return [];
     const raw = Array.isArray(value) ? value : String(value).split(',');
+    // Cada elemento puede venir con comas propias (ej. value fusionado del
+    // frontend "1184,1386" cuando dos proveedores comparten nombre visible),
+    // no solo el query param completo — hay que expandir ambos niveles,
+    // igual que `toArr` en cumplimientoSemanaController.js/cumplimientoMesController.js.
     return raw
-        .map((v) => String(v).trim())
+        .flatMap((v) => String(v).split(','))
+        .map((v) => v.trim())
         .filter((v) => v.length > 0);
 };
 
@@ -248,7 +264,7 @@ const getOpcionesFiltros = async (params, auth) => {
         .filter((r) => r.id_categoria != null)
         .map((r) => ({
             value: String(r.id_categoria),
-            label: `${r.id_categoria} - ${(r.categoria_nombre || '').trim()}`
+            label: limpiarNombreCategoria(r.categoria_nombre)
         }));
 
     const ciudades = ciudadesRows

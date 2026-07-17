@@ -111,7 +111,8 @@ const getItemsVendidosPorRol = async ({
     const toArr = (val) => {
         if (val == null || val === '') return [];
         const raw = Array.isArray(val) ? val : String(val).split(',');
-        return raw.map((v) => String(v).trim()).filter(Boolean);
+        const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+        return [...new Set(flat)];
     };
     const vendedoresFiltro = toArr(codVendedor);
     const proveedoresFiltro = toArr(codProveedor);
@@ -131,19 +132,19 @@ const getItemsVendidosPorRol = async ({
     if (proveedoresFiltro.length) {
         const placeholders = proveedoresFiltro.map((_, i) => `:fProv${i}`).join(',');
         proveedoresFiltro.forEach((p, i) => { replacements[`fProv${i}`] = p; });
-        filtrosVenta.push(`p.id_proveedor IN (${placeholders})`);
+        filtrosVenta.push(`CAST(p.id_proveedor AS TEXT) IN (${placeholders})`);
     }
 
     if (categoriasFiltro.length) {
         const placeholders = categoriasFiltro.map((_, i) => `:fCat${i}`).join(',');
         categoriasFiltro.forEach((c, i) => { replacements[`fCat${i}`] = c; });
-        filtrosVenta.push(`i.id_categoria IN (${placeholders})`);
+        filtrosVenta.push(`CAST(i.id_categoria AS TEXT) IN (${placeholders})`);
     }
 
     if (ciudadesFiltro.length) {
         const placeholders = ciudadesFiltro.map((_, i) => `:fCiu${i}`).join(',');
         ciudadesFiltro.forEach((c, i) => { replacements[`fCiu${i}`] = c; });
-        filtrosVenta.push(`dv.id_ciudad_original IN (${placeholders})`);
+        filtrosVenta.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
     }
 
     const whereVenta = filtrosVenta.join(' AND ');

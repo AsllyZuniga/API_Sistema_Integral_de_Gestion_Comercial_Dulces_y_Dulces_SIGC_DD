@@ -1,8 +1,9 @@
 var express = require('express');
 var router = express.Router();
 const clienteController = require('../controllers').clienteController;
+const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 router.get('/', clienteController.list);
-router.get('/productos-por-cliente', clienteController.productosPorCliente);
+router.get('/productos-por-cliente', requireAuthJWT, clienteController.productosPorCliente);
 router.get('/productos-por-cliente/vendedor/:idVendedor', clienteController.productosPorClientePorVendedor);
 router.get('/debug-productos-por-cliente/vendedor/:idVendedor', clienteController.debugProductosPorClientePorVendedor);
 router.get('/debug-ventas-por-vendedor/:idVendedor', clienteController.debugVentasPorVendedor);

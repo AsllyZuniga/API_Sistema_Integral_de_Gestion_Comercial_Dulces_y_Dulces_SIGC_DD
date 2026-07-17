@@ -11,69 +11,160 @@
 async function getLineasPorVendedor(codigoVendedor, filters = {}) {
     const normalizedFilters = normalizePeriodFilters(filters);
     const replacements = { codigoVendedor };
-    const where = ['vd.codigo_vendedor = :codigoVendedor'];
+
+    // Filtros que aplican SOLO al subquery de ventas (no afectan qué proveedores aparecen)
+    const ventasWhere = ['vd.codigo_vendedor = :codigoVendedor'];
     if (normalizedFilters.fechaInicio) {
-        where.push('v.fecha >= :fechaInicio');
+        ventasWhere.push('v.fecha >= :fechaInicio');
         replacements.fechaInicio = formatDateOnly(normalizedFilters.fechaInicio);
     }
     if (normalizedFilters.fechaFin) {
-        where.push('v.fecha <= :fechaFin');
+        ventasWhere.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondLinSem = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondLinSem) {
+        ventasWhere.push(ciudadCondLinSem);
     }
     const proveedoresLinSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
 
+    let cuotaProveedorCondLinSem = '';
     if (proveedoresLinSem) {
         const provCond = buildProveedorCondition(proveedoresLinSem, replacements, 'dv');
-        where.push(`(${provCond})`);
+        ventasWhere.push(`(${provCond})`);
+
+        const cuotaPlaceholders = proveedoresLinSem.map((_, i) => `:semCuotaProvLV${i}`).join(',');
+        proveedoresLinSem.forEach((p, i) => { replacements[`semCuotaProvLV${i}`] = p; });
+        cuotaProveedorCondLinSem = `AND vcp.id_proveedor IN (${cuotaPlaceholders})`;
     }
     if (normalizedFilters.categorias && normalizedFilters.categorias.length > 0) {
         const placeholders = normalizedFilters.categorias.map((_, i) => `:semLinCat${i}`).join(',');
-        where.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        ventasWhere.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
         normalizedFilters.categorias.forEach((cat, i) => { replacements[`semLinCat${i}`] = String(cat); });
     } else if (normalizedFilters.categoria) {
         const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
         if (categoriaId) {
-            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            ventasWhere.push('CAST(it.id_categoria AS TEXT) = :categoria');
             replacements.categoria = String(categoriaId);
         }
     }
+
+    replacements.cuotaFechaInicio = normalizedFilters.fechaInicio;
+    replacements.cuotaFechaFin = normalizedFilters.fechaFin;
+
+    // Cuota por proveedor (misma fuente que cuota mensual: cuotaProveedor +
+    // vendedorCuotaProveedor), no la cuota total del vendedor repetida en
+    // cada fila.
     const query = `
+        WITH cuotas_vendedor AS (
+            SELECT
+                vcp.id_proveedor,
+                COALESCE(TRIM(pr.nombre), 'SIN LINEA') AS nombre_proveedor,
+                TRIM(COALESCE(pr.codigo, '')) AS codigo_proveedor,
+                UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'),
+                    ' +', ' ', 'g'
+                ))) AS nombre_norm,
+                cp.cuota AS cuota_proveedor
+            FROM "vendedorCuotaProveedor" vcp
+            JOIN "cuotaProveedor" cp ON cp."id_cuotaProveedor" = vcp."id_cuotaProveedor"
+            JOIN vendedor vd ON vd.id_vendedor = vcp.id_vendedor
+            LEFT JOIN proveedor pr ON pr.id_proveedor = vcp.id_proveedor
+            WHERE vd.codigo_vendedor = :codigoVendedor
+              AND vcp.estado = true
+              AND cp.fecha_inicio <= :cuotaFechaFin
+              AND cp.fecha_fin >= :cuotaFechaInicio
+              ${cuotaProveedorCondLinSem}
+        ),
+        cuotas_deduplicadas AS (
+            SELECT DISTINCT ON (nombre_norm)
+                id_proveedor,
+                nombre_proveedor,
+                codigo_proveedor,
+                nombre_norm,
+                cuota_proveedor
+            FROM cuotas_vendedor
+            ORDER BY nombre_norm, cuota_proveedor DESC
+        ),
+        ventas_por_proveedor AS (
+            SELECT
+                MAX(TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1))) AS codigo_reporte,
+                UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')),
+                        '[^a-zA-Z0-9 ]', ' ', 'g'
+                    ),
+                    ' +', ' ', 'g'
+                ))) AS nombre_norm,
+                MAX(TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', ''))) AS reporte_prov_con_obs,
+                MAX(it.id_proveedor) AS id_proveedor,
+                SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
+            FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item it ON it.id_item = dv.id_item
+            LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
+            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
+            WHERE ${ventasWhere.join(' AND ')}
+            GROUP BY UPPER(TRIM(REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')),
+                            '[^a-zA-Z0-9 ]', ' ', 'g'
+                        ),
+                        ' +', ' ', 'g'
+                    )))
+        )
+        -- Cuotas con sus ventas (LEFT JOIN: cuota sin venta = venta 0)
         SELECT
-            TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')) AS codigo_linea,
-            TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')) AS nombre_linea,
-            TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')) AS reporte_prov_con_obs,
-            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
-        FROM venta v
-        JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
-        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-        JOIN item it ON it.id_item = dv.id_item
-        LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
-        LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
-        WHERE ${where.join(' AND ')}
-        GROUP BY TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', ''))
+            COALESCE(cq.id_proveedor, vp.id_proveedor) AS id_proveedor,
+            COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
+            COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS nombre_linea,
+            COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS reporte_prov_con_obs,
+            cq.cuota_proveedor,
+            COALESCE(vp.venta_total, 0) AS venta
+        FROM cuotas_deduplicadas cq
+        LEFT JOIN ventas_por_proveedor vp
+            ON vp.nombre_norm = cq.nombre_norm
+        UNION ALL
+        -- Ventas sin cuota asignada (proveedor no está en vendedorCuotaProveedor)
+        SELECT
+            vp.id_proveedor,
+            vp.reporte_prov_con_obs AS codigo_linea,
+            vp.reporte_prov_con_obs AS nombre_linea,
+            vp.reporte_prov_con_obs AS reporte_prov_con_obs,
+            0 AS cuota_proveedor,
+            vp.venta_total AS venta
+        FROM ventas_por_proveedor vp
+        WHERE NOT EXISTS (
+            SELECT 1 FROM cuotas_deduplicadas cq
+            WHERE vp.nombre_norm = cq.nombre_norm
+        )
         ORDER BY venta DESC
     `;
+
     const detallePorLinea = await sequelize.query(query, { replacements, type: QueryTypes.SELECT });
     const { diasCorridos, diasHabiles } = await getRangoDias(normalizedFilters);
-    // Usar cuota semanal
-    const cuotaSemana = await getCuotaSemanaPorVendedor(codigoVendedor, normalizedFilters);
+    const cuotaSemanaVendedor = await getCuotaSemanaPorVendedor(codigoVendedor, normalizedFilters);
+
     return {
         codigoVendedor,
+        cuotaVendedor: round(cuotaSemanaVendedor, 2),
         detallePorLinea: detallePorLinea.map((row) => {
             const ventaAcum = toNumber(row.venta);
+            const cuotaProveedor = toNumber(row.cuota_proveedor);
             const proyeccionVenta = diasCorridos > 0 ? (ventaAcum / diasCorridos) * diasHabiles : 0;
-            const porcCump = cuotaSemana > 0 ? (ventaAcum / cuotaSemana) * 100 : 0;
-            const porcCumProy = cuotaSemana > 0 ? (proyeccionVenta / cuotaSemana) * 100 : 0;
+            const porcCump = cuotaProveedor > 0 ? (ventaAcum / cuotaProveedor) * 100 : 0;
+            const porcCumProy = cuotaProveedor > 0 ? (proyeccionVenta / cuotaProveedor) * 100 : 0;
             return {
+                idProveedor: row.id_proveedor,
                 codigoLinea: row.codigo_linea,
                 linea: row.reporte_prov_con_obs,
                 reporteProvConObs: row.reporte_prov_con_obs,
+                cuotaProveedor: round(cuotaProveedor, 2),
+                cuotaProveedorTotal: round(cuotaProveedor, 2),
+                cuotaVendedor: round(cuotaSemanaVendedor, 2),
                 ventaAcum: round(ventaAcum, 2),
                 porcCump: round(porcCump, 4),
                 proyeccionVenta: round(proyeccionVenta, 2),
@@ -170,13 +261,13 @@ async function getCiudadesPorVendedor(codigoVendedor, filters = {}) {
             )
         `);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondCiudSem = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondCiudSem) {
+        where.push(ciudadCondCiudSem);
     }
     let ciudadSelect = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\') AS ciudad';
     let ciudadGroup = 'COALESCE(TRIM(ci.nombre), \'SIN CIUDAD\')';
-    if (normalizedFilters.ciudad) {
+    if (ciudadCondCiudSem) {
         ciudadSelect = 'TRIM(ci.nombre) AS ciudad';
         ciudadGroup = 'TRIM(ci.nombre)';
     }
@@ -234,9 +325,9 @@ async function getProductosPorVendedor(codigoVendedor, filters = {}) {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondProdSem = buildCiudadCondition(normalizedFilters, replacements, 'c.id_ciudad');
+    if (ciudadCondProdSem) {
+        where.push(ciudadCondProdSem);
     }
     const proveedoresProdSem = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
@@ -343,9 +434,14 @@ const getCategoriaIdByNombre = async (nombreCategoria) => {
     return row?.id_categoria;
 };
 
-const signedNcAmountSql = (alias) => `COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)`;
-const signedNcSubtotalSql = (alias) => `COALESCE(${alias}.subtotal, 0)`;
-const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `COALESCE(${detalleAlias}.subtotal, 0)`;
+// Nota: estas 3 funciones no restaban notas crédito pese al nombre
+// "signed" (a diferencia de sus equivalentes en cumplimientoMesService.js,
+// que sí aplican CASE WHEN NC THEN -ABS(...)). Esto inflaba los totales
+// semanales en cualquier rango con notas crédito. Se alinean con el
+// patrón ya usado en getCumplimientoSemanaFront (líneas 668-671).
+const signedNcAmountSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0)) ELSE COALESCE(${alias}.valor_neto, ${alias}.subtotal, 0) END`;
+const signedNcSubtotalSql = (alias) => `CASE WHEN UPPER(TRIM(${alias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${alias}.subtotal, 0)) ELSE COALESCE(${alias}.subtotal, 0) END`;
+const signedNcDetailSubtotalSql = (ventaAlias, detalleAlias) => `CASE WHEN UPPER(TRIM(${ventaAlias}.numero_documento)) LIKE 'NC%' THEN -ABS(COALESCE(${detalleAlias}.subtotal, 0)) ELSE COALESCE(${detalleAlias}.subtotal, 0) END`;
 
 const round = (value, decimals = 2) => {
     const factor = 10 ** decimals;
@@ -439,6 +535,18 @@ const buildProveedorCondition = (proveedores, replacements) => {
     return `it.id_proveedor IN (${placeholders})`;
 };
 
+let ciudadCondPrefixCounter = 0;
+const buildCiudadCondition = (filters, replacements, columnSql = 'c.id_ciudad') => {
+    const ciudades = filters.ciudades && filters.ciudades.length > 0
+        ? filters.ciudades
+        : (filters.ciudad ? [String(filters.ciudad).trim()] : []);
+    if (!ciudades.length) return null;
+    const prefix = `semCiu${ciudadCondPrefixCounter++}_`;
+    const placeholders = ciudades.map((_, i) => `:${prefix}${i}`).join(',');
+    ciudades.forEach((c, i) => { replacements[`${prefix}${i}`] = String(c); });
+    return `CAST(${columnSql} AS TEXT) IN (${placeholders})`;
+};
+
 const buildVentasFilters = (filters = {}, replacements = {}) => {
     const conditions = [];
 
@@ -493,17 +601,30 @@ const buildVentasFilters = (filters = {}, replacements = {}) => {
     return conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 };
 
+const toArr = (val) => {
+    if (val == null || val === '') return [];
+    const raw = Array.isArray(val) ? val : String(val).split(',');
+    const flat = raw.flatMap((v) => String(v).split(',').map((s) => s.trim())).filter(Boolean);
+    return [...new Set(flat)];
+};
+
 const buildVendedorFilter = (filters = {}, replacements = {}) => {
-    if (!filters.vendedor) return '';
-    replacements.vendedor = String(filters.vendedor);
-    replacements.vendedorLike = `%${String(filters.vendedor).toLowerCase()}%`;
-    return `
-		AND (
-			CAST(vd.id_vendedor AS TEXT) = :vendedor
-			OR vd.codigo_vendedor = :vendedor
-			OR LOWER(vd.nombre) LIKE :vendedorLike
-		)
-	`;
+    const vendedores = filters.vendedores && filters.vendedores.length > 0
+        ? filters.vendedores
+        : toArr(filters.vendedor);
+    if (!vendedores.length) return '';
+
+    const clauses = vendedores.map((v, i) => {
+        replacements[`semVend${i}`] = String(v);
+        replacements[`semVendLike${i}`] = `%${String(v).toLowerCase()}%`;
+        return `(
+            CAST(vd.id_vendedor AS TEXT) = :semVend${i}
+            OR vd.codigo_vendedor = :semVend${i}
+            OR LOWER(vd.nombre) LIKE :semVendLike${i}
+        )`;
+    });
+
+    return `AND (${clauses.join(' OR ')})`;
 };
 
 const enrichCumplimiento = (rows, diasCorridos, diasHabiles) => {
@@ -585,9 +706,13 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
         dateConditions.push('v.fecha <= :fechaFin');
         replacements.fechaFin = normalizedFilters.fechaFin;
     }
-    if (normalizedFilters.ciudad) {
-        dateConditions.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadesFront = normalizedFilters.ciudades && normalizedFilters.ciudades.length > 0
+        ? normalizedFilters.ciudades
+        : (normalizedFilters.ciudad ? [String(normalizedFilters.ciudad).trim()] : null);
+    if (ciudadesFront && ciudadesFront.length > 0) {
+        const placeholders = ciudadesFront.map((_, i) => `:semFrontCiudad${i}`).join(',');
+        dateConditions.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesFront.forEach((c, i) => { replacements[`semFrontCiudad${i}`] = String(c); });
     }
 
     const proveedoresFront = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
@@ -614,12 +739,18 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
 
     let detalleJoins = '';
     if (detalleConditions.length > 0) {
-        detalleJoins = `JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            JOIN item it ON it.id_item = dv.id_item`;
+        detalleJoins = `JOIN item it ON it.id_item = dv.id_item`;
     }
 
     const allConditions = [...dateConditions, ...detalleConditions];
     const whereClause = allConditions.length > 0 ? `WHERE ${allConditions.join(' AND ')}` : '';
+
+    // Si hay ciudad, proveedor o categoría seleccionados, el universo de
+    // ventas se reduce: solo deben listarse vendedores con venta real bajo
+    // esos filtros, no todos los que tengan cuota asignada esta semana.
+    const hayFiltroReductor = Boolean(
+        (ciudadesFront && ciudadesFront.length > 0) || detalleConditions.length > 0,
+    );
 
     const cuotaConditions = ['cs.id_usuario = vd.id_usuario'];
     if (normalizedFilters.fechaInicio) {
@@ -648,7 +779,6 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             ${detalleJoins}
-            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${whereClause}
             GROUP BY v.id_vendedor
         )
@@ -673,8 +803,8 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
             ) cs_ranked
             WHERE cs_ranked.rn = 1
         ) cs ON true
-        LEFT JOIN ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
-        WHERE (COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)
+        ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_filtradas vf ON vf.id_vendedor = vd.id_vendedor
+        WHERE (${hayFiltroReductor ? 'COALESCE(vf.venta_acum, 0) != 0' : '(COALESCE(cs.cuota_semana, 0) > 0 OR COALESCE(vf.venta_acum, 0) != 0)'})
         ${vendedorFilter}
         ORDER BY vd.nombre ASC
     `;
@@ -707,7 +837,7 @@ const getCumplimientoSemanaFront = async (filters = {}) => {
  * @returns {Promise<object|null>}
  */
 async function getCumplimientoSemanaPorCodigo(codigo, filters = {}) {
-    const data = await getCumplimientoSemanaFront({ ...filters, vendedor: codigo });
+    const data = await getCumplimientoSemanaFront({ ...filters, vendedor: codigo, vendedores: [codigo] });
     const codigoNormalizado = String(codigo || '').trim();
     return data.detalle.find((row) => String(row.codVendedor || '').trim() === codigoNormalizado) || null;
 }
@@ -742,18 +872,64 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         ventasWhere.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        ventasWhere.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadesGeneral = normalizedFilters.ciudades && normalizedFilters.ciudades.length > 0
+        ? normalizedFilters.ciudades
+        : (normalizedFilters.ciudad ? [String(normalizedFilters.ciudad).trim()] : null);
+    if (ciudadesGeneral && ciudadesGeneral.length > 0) {
+        const placeholders = ciudadesGeneral.map((_, i) => `:semLineasCiudad${i}`).join(',');
+        ventasWhere.push(`CAST(dv.id_ciudad_original AS TEXT) IN (${placeholders})`);
+        ciudadesGeneral.forEach((c, i) => { replacements[`semLineasCiudad${i}`] = String(c); });
+    }
+
+    // Filtro por vendedor (soporta array multi o string legacy)
+    const vendedoresGeneral = normalizedFilters.vendedores && normalizedFilters.vendedores.length > 0
+        ? normalizedFilters.vendedores.map((v) => String(v).trim()).filter(Boolean)
+        : (normalizedFilters.vendedor
+            ? String(normalizedFilters.vendedor).split(',').map((v) => v.trim()).filter(Boolean)
+            : null);
+
+    let vendedorCuotaCond = '';
+    if (vendedoresGeneral && vendedoresGeneral.length > 0) {
+        const placeholders = vendedoresGeneral.map((_, i) => `:semLineasVendedor${i}`).join(',');
+        vendedoresGeneral.forEach((v, i) => { replacements[`semLineasVendedor${i}`] = v; });
+        ventasWhere.push(`vd.codigo_vendedor IN (${placeholders})`);
+
+        // La cuota (cuotas_agregadas) debe filtrarse por el mismo vendedor
+        // seleccionado, igual que la venta; si no, la cuota queda calculada
+        // sobre todos los vendedores del scope (bug: cuota de "todos" con
+        // venta de "uno solo").
+        const cuotaVendPlaceholders = vendedoresGeneral.map((_, i) => `:semCuotaVend${i}`).join(',');
+        vendedoresGeneral.forEach((v, i) => { replacements[`semCuotaVend${i}`] = v; });
+        vendedorCuotaCond = `
+              AND vcp.id_vendedor IN (
+                  SELECT id_vendedor FROM vendedor WHERE codigo_vendedor IN (${cuotaVendPlaceholders})
+              )`;
     }
 
     const proveedoresGeneral = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
         ? normalizedFilters.proveedores
         : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
 
+    let cuotaProveedorCond = '';
     if (proveedoresGeneral) {
-        const provCond = buildProveedorCondition(proveedoresGeneral, replacements, 'dv');
+        const provCond = buildProveedorCondition(proveedoresGeneral, replacements);
         ventasWhere.push(`(${provCond})`);
+
+        const cuotaPlaceholders = proveedoresGeneral.map((_, i) => `:cuotaProv${i}`).join(',');
+        proveedoresGeneral.forEach((p, i) => { replacements[`cuotaProv${i}`] = p; });
+        cuotaProveedorCond = `AND vcp.id_proveedor IN (${cuotaPlaceholders})`;
+    }
+
+    // Filtro por categoría (soporta array multi o string legacy). Solo
+    // aplica al lado de ventas (ventas_por_proveedor ya hace JOIN a item),
+    // igual que en getLineasPorVendedor.
+    const categoriasGeneral = normalizedFilters.categorias && normalizedFilters.categorias.length > 0
+        ? normalizedFilters.categorias
+        : (normalizedFilters.categoria ? [String(normalizedFilters.categoria).trim()] : null);
+    if (categoriasGeneral && categoriasGeneral.length > 0) {
+        const placeholders = categoriasGeneral.map((_, i) => `:semLineasCat${i}`).join(',');
+        ventasWhere.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        categoriasGeneral.forEach((cat, i) => { replacements[`semLineasCat${i}`] = String(cat); });
     }
 
     if (scopeWhereVenta) {
@@ -764,6 +940,36 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
     replacements.cuotaFechaFin = normalizedFilters.fechaFin;
 
     const ventasWhereClause = ventasWhere.length > 0 ? `WHERE ${ventasWhere.join(' AND ')}` : '';
+
+    // Si hay ciudad, vendedor(es) o categoría(s) seleccionados, el universo
+    // de ventas se reduce: solo deben listarse proveedores con venta real
+    // bajo esos filtros, no todos los que tengan cuota asignada al scope.
+    const hayFiltroReductor = Boolean(
+        (ciudadesGeneral && ciudadesGeneral.length > 0) ||
+        (vendedoresGeneral && vendedoresGeneral.length > 0) ||
+        (categoriasGeneral && categoriasGeneral.length > 0),
+    );
+
+    // Ciudad y categoría reducen implícitamente el universo de vendedores
+    // (solo los que vendieron bajo esos filtros), pero no alimentan
+    // vendedorCuotaCond (que solo reacciona a filtro explícito de vendedor).
+    // Sin esto, cuotas_agregadas suma cuota de TODOS los vendedores del
+    // scope aunque ventas_por_proveedor ya esté acotado a un subconjunto,
+    // inflando cuota_proveedor_total. Si ya hay filtro explícito de
+    // vendedor, vendedorCuotaCond ya restringe correctamente y esto es
+    // redundante (no se aplica para evitar duplicar filtros).
+    let vendedoresImplicitosCond = '';
+    if (!vendedorCuotaCond && ((ciudadesGeneral && ciudadesGeneral.length > 0) || (categoriasGeneral && categoriasGeneral.length > 0))) {
+        vendedoresImplicitosCond = `
+              AND vcp.id_vendedor IN (
+                  SELECT DISTINCT v.id_vendedor
+                  FROM venta v
+                  JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
+                  JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+                  JOIN item it ON it.id_item = dv.id_item
+                  ${ventasWhereClause}
+              )`;
+    }
 
     const query = `
         WITH cuotas_agregadas AS (
@@ -783,6 +989,9 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
               AND cp.fecha_inicio <= :cuotaFechaFin
               AND cp.fecha_fin >= :cuotaFechaInicio
               ${scopeWhereCuota}
+              ${cuotaProveedorCond}
+              ${vendedorCuotaCond}
+              ${vendedoresImplicitosCond}
             GROUP BY vcp.id_proveedor, COALESCE(TRIM(pr.nombre), 'SIN LINEA'), TRIM(COALESCE(pr.codigo, ''))
         ),
         cuotas_deduplicadas AS (
@@ -793,7 +1002,6 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         ),
         ventas_por_proveedor AS (
             SELECT
-                MAX(it.id_proveedor) AS id_proveedor,
                 UPPER(TRIM(REGEXP_REPLACE(
                     REGEXP_REPLACE(
                         TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', '')),
@@ -802,12 +1010,13 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
                     ' +', ' ', 'g'
                 ))) AS nombre_norm,
                 MAX(TRIM(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')), '^[0-9]+ - ', ''))) AS reporte_prov_con_obs,
+                MAX(it.id_proveedor) AS id_proveedor,
                 SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta_total
             FROM venta v
+            JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item it ON it.id_item = dv.id_item
             LEFT JOIN proveedor pr ON pr.id_proveedor = it.id_proveedor
-            LEFT JOIN cliente c ON c.id_cliente = v.id_cliente
             ${ventasWhereClause}
             GROUP BY UPPER(TRIM(REGEXP_REPLACE(
                         REGEXP_REPLACE(
@@ -818,14 +1027,14 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
                     )))
         )
         SELECT
-            COALESCE(vp.id_proveedor, cq.id_proveedor) AS id_proveedor,
+            COALESCE(cq.id_proveedor, vp.id_proveedor) AS id_proveedor,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS codigo_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS nombre_linea,
             COALESCE(vp.reporte_prov_con_obs, cq.nombre_proveedor) AS reporte_prov_con_obs,
             cq.suma_cuota AS cuota_proveedor_total,
             COALESCE(vp.venta_total, 0) AS venta
         FROM cuotas_deduplicadas cq
-        LEFT JOIN ventas_por_proveedor vp
+        ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_por_proveedor vp
             ON vp.nombre_norm = cq.nombre_norm
         UNION ALL
         SELECT
@@ -905,24 +1114,77 @@ const getCiudadesGeneralSemana = async (filters = {}, auth = null) => {
         where.push('v.fecha <= :fechaFin');
         replacements.fechaFin = formatDateOnly(normalizedFilters.fechaFin);
     }
-    if (normalizedFilters.ciudad) {
-        where.push('CAST(c.id_ciudad AS TEXT) = :ciudad');
-        replacements.ciudad = String(normalizedFilters.ciudad);
+    const ciudadCondGeneralCiu = buildCiudadCondition(normalizedFilters, replacements, 'dv.id_ciudad_original');
+    if (ciudadCondGeneralCiu) {
+        where.push(ciudadCondGeneralCiu);
     }
+
+    // Filtro por vendedor(es) seleccionados en la UI — mismo patrón que
+    // getCumplimientoPorCiudadGlobal (equivalente mensual en cumplimientoMesService.js).
+    const vendedoresGeneralCiu = normalizedFilters.vendedores && normalizedFilters.vendedores.length > 0
+        ? normalizedFilters.vendedores
+        : (normalizedFilters.vendedor ? [String(normalizedFilters.vendedor).trim()] : null);
+    if (vendedoresGeneralCiu && vendedoresGeneralCiu.length) {
+        const placeholders = vendedoresGeneralCiu.map((_, i) => `:semCiuVend${i}`).join(',');
+        vendedoresGeneralCiu.forEach((v, i) => { replacements[`semCiuVend${i}`] = v; });
+        where.push(`vd.codigo_vendedor IN (${placeholders})`);
+    }
+
+    // Filtro por proveedor(es)/categoría(s) — mismo patrón que getCiudadesPorVendedor.
+    const proveedoresGeneralCiu = normalizedFilters.proveedores && normalizedFilters.proveedores.length > 0
+        ? normalizedFilters.proveedores
+        : (normalizedFilters.proveedor ? [String(normalizedFilters.proveedor).trim()] : null);
+    const categoriasGeneralCiu = normalizedFilters.categorias && normalizedFilters.categorias.length > 0
+        ? normalizedFilters.categorias
+        : null;
+    if (proveedoresGeneralCiu) {
+        const provCond = buildProveedorCondition(proveedoresGeneralCiu, replacements);
+        where.push(`(${provCond})`);
+    }
+    if (categoriasGeneralCiu) {
+        const placeholders = categoriasGeneralCiu.map((_, i) => `:semCiuCat${i}`).join(',');
+        where.push(`CAST(it.id_categoria AS TEXT) IN (${placeholders})`);
+        categoriasGeneralCiu.forEach((cat, i) => { replacements[`semCiuCat${i}`] = String(cat); });
+    } else if (normalizedFilters.categoria) {
+        const categoriaId = await getCategoriaIdByNombre(normalizedFilters.categoria);
+        if (categoriaId) {
+            where.push('CAST(it.id_categoria AS TEXT) = :categoria');
+            replacements.categoria = String(categoriaId);
+        }
+    }
+
     if (scopeWhereVenta) {
         where.push(scopeWhereVenta.replace(/^\s*AND\s+/i, ''));
     }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
+    // JOIN a vendedor/item solo cuando el filtro correspondiente los necesita,
+    // para no alterar el plan de la query cuando no aplica (mismo criterio
+    // que el resto de funciones "PorVendedor"/"General" de este archivo).
+    const joinVendedorGeneralCiu = vendedoresGeneralCiu && vendedoresGeneralCiu.length
+        ? 'JOIN vendedor vd ON vd.id_vendedor = v.id_vendedor'
+        : '';
+    const joinItemGeneralCiu = (proveedoresGeneralCiu || categoriasGeneralCiu || normalizedFilters.categoria)
+        ? 'JOIN item it ON it.id_item = dv.id_item'
+        : '';
+
+    // Nota: el JOIN a detalle_venta multiplica las filas de venta (una
+    // venta con N líneas de detalle aparece N veces). Sumar el monto de
+    // CABECERA (v.valor_neto/subtotal) aquí infla el total por ese fan-out
+    // — hay que sumar el subtotal POR LÍNEA (dv.subtotal), igual que el
+    // resto de queries de este archivo y que el equivalente mensual
+    // (getCumplimientoPorCiudadGlobal en cumplimientoMesService.js).
     const query = `
         SELECT
             COALESCE(dv.id_ciudad_original, 0) AS id_ciudad,
             COALESCE(TRIM(ci.nombre), 'SIN CIUDAD') AS ciudad,
-            SUM(${signedNcAmountSql('v')}) AS venta
+            SUM(${signedNcDetailSubtotalSql('v', 'dv')}) AS venta
         FROM venta v
         JOIN detalle_venta dv ON dv.id_venta = v.id_venta
         LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
+        ${joinVendedorGeneralCiu}
+        ${joinItemGeneralCiu}
         ${whereClause}
         GROUP BY dv.id_ciudad_original, COALESCE(TRIM(ci.nombre), 'SIN CIUDAD')
         ORDER BY venta DESC

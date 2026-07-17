@@ -35,7 +35,14 @@
       "Bash(curl -s -X POST http://localhost:3000/admin/reset-passwords)",
       "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"codigo\":\"0550\",\"password\":\"0550\"}')",
       "Bash(curl -s 'http://localhost:3000/cliente' -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3Nzg5MzgzMzAsImV4cCI6MTc3ODk4MTUzMH0.0l8Q-B5JFtHMb_4lHz6NAws8jHNIPXgBt5BCE09_NRI\")",
-      "Bash(curl -s 'http://localhost:3000/ciudad')"
+      "Bash(curl -s 'http://localhost:3000/ciudad')",
+      "Bash(ssh *)",
+      "Bash(git fetch *)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"http_code: %{http_code}\\\\n\" https://sigc.dulcesydulces.co/)",
+      "Bash(curl -s https://sigc.dulcesydulces.co/)",
+      "Bash(curl -s 'http://localhost:3000/api/mes/cumplimiento/vendedor/0550/lineas?fechaInicio=2026-06-01&fechaFin=2026-06-30' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZFVzdWFyaW8iOjE4LCJpZFZlbmRlZG9yIjoxMDgsImNvZFZlbmRlZG9yIjoiMDU1MCIsInVzZXJuYW1lIjoiMDU1MCIsInJvbCI6IjMiLCJpYXQiOjE3ODMzOTQ4OTMsImV4cCI6MTc4MzQzODA5M30.dZDTbDLnbp6tgJq_E54L05vB5rE7B-FNdkotoVTRg9g')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); rows=d.get\\('detallePorLinea',[]\\); print\\(len\\(rows\\)\\); [print\\(r.get\\('linea'\\), r.get\\('ventaAcum'\\)\\) for r in rows]\")"
     ]
   },
   "prefersReducedMotion": false

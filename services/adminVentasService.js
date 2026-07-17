@@ -52,6 +52,7 @@ const eliminarVentasPorRangoCore = async (jobId, fechaInicio, fechaFin) => {
             status: 'completed',
             ventasEliminadas: 0,
             detallesEliminados: 0,
+            factVentasEliminados: 0,
             progress: 100,
             finishedAt: new Date().toISOString()
         });
@@ -60,21 +61,41 @@ const eliminarVentasPorRangoCore = async (jobId, fechaInicio, fechaFin) => {
 
     const todas = idsVentas.map(r => r.id_venta);
 
-    const [detCount] = await sequelize.query(
-        `SELECT COUNT(*) AS total FROM detalle_venta WHERE id_venta IN (${todas.join(',')})`,
-        { type: QueryTypes.SELECT }
-    );
+    const [detCount, fvCount] = await Promise.all([
+        sequelize.query(
+            `SELECT COUNT(*) AS total FROM detalle_venta WHERE id_venta IN (${todas.join(',')})`,
+            { type: QueryTypes.SELECT }
+        ),
+        sequelize.query(
+            `SELECT COUNT(*) AS total FROM fact_ventas WHERE id_venta IN (${todas.join(',')})`,
+            { type: QueryTypes.SELECT }
+        )
+    ]);
     const totalDetalles = Number(detCount.total);
+    const totalFactVentas = Number(fvCount.total);
 
     jobsStore.actualizar(jobId, {
         totalEstimado: totalVentas,
         detallesEliminados: totalDetalles,
+        factVentasEliminados: totalFactVentas,
         progress: 5
     });
 
     const lotes = [];
     for (let i = 0; i < todas.length; i += BATCH_SIZE) {
         lotes.push(todas.slice(i, i + BATCH_SIZE));
+    }
+
+    let factVentasDone = 0;
+    for (const lote of lotes) {
+        await sequelize.query(
+            `DELETE FROM fact_ventas WHERE id_venta IN (${lote.join(',')})`,
+            { type: QueryTypes.DELETE }
+        );
+        factVentasDone += lote.length;
+        jobsStore.actualizar(jobId, {
+            progress: Math.min(5 + Math.round((factVentasDone / todas.length) * 15), 20)
+        });
     }
 
     let detallesDone = 0;
@@ -85,7 +106,7 @@ const eliminarVentasPorRangoCore = async (jobId, fechaInicio, fechaFin) => {
         );
         detallesDone += lote.length;
         jobsStore.actualizar(jobId, {
-            progress: Math.min(5 + Math.round((detallesDone / todas.length) * 45), 50)
+            progress: Math.min(20 + Math.round((detallesDone / todas.length) * 40), 60)
         });
     }
 
@@ -97,7 +118,7 @@ const eliminarVentasPorRangoCore = async (jobId, fechaInicio, fechaFin) => {
         );
         ventasDone += lote.length;
         jobsStore.actualizar(jobId, {
-            progress: Math.min(50 + Math.round((ventasDone / todas.length) * 50), 100)
+            progress: Math.min(60 + Math.round((ventasDone / todas.length) * 40), 100)
         });
     }
 
@@ -105,6 +126,7 @@ const eliminarVentasPorRangoCore = async (jobId, fechaInicio, fechaFin) => {
         status: 'completed',
         ventasEliminadas: totalVentas,
         detallesEliminados: totalDetalles,
+        factVentasEliminados: totalFactVentas,
         progress: 100,
         finishedAt: new Date().toISOString()
     });

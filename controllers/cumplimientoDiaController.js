@@ -1,3 +1,5 @@
+const { QueryTypes } = require('sequelize');
+const { sequelize } = require('../models');
 const cumplimientoDiaService = require('../services/cumplimientoDiaService');
 
 const extractCategoryId = (categoryStr) => {
@@ -10,28 +12,42 @@ const extractCategoryId = (categoryStr) => {
     return match ? match[0] : categoryStr;
 };
 
+const toArr = (raw) => {
+    if (raw == null || raw === '') return [];
+    const list = Array.isArray(raw) ? raw : String(raw).split(',');
+    return [...new Set(list.flatMap(v => String(v).split(',').map(s => s.trim())).filter(Boolean))];
+};
+
 const getFilters = (query) => {
     const filters = {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,
-        vendedor: query.vendedor || query.codVendedor
+        vendedor: query.vendedor
     };
+
+    const vendedorRaw = query.vendedor || query.codVendedor;
+    if (vendedorRaw) {
+        filters.vendedores = toArr(vendedorRaw);
+        filters.vendedor = filters.vendedores[0];
+    }
 
     const proveedorRaw = query.proveedor || query.codProveedor;
     if (proveedorRaw) {
-        const list = Array.isArray(proveedorRaw)
-            ? proveedorRaw
-            : String(proveedorRaw).split(',');
-        filters.proveedores = list.map(p => p.trim()).filter(Boolean);
+        filters.proveedores = toArr(proveedorRaw);
         filters.proveedor = filters.proveedores[0];
     }
 
     const categoriaRaw = query.categoria || query.codCategoria;
     if (categoriaRaw) {
-        const list = Array.isArray(categoriaRaw)
-            ? categoriaRaw
-            : String(categoriaRaw).split(',');
-        filters.categorias = list.map(c => extractCategoryId(c)).filter(Boolean);
+        const raw = Array.isArray(categoriaRaw) ? categoriaRaw : String(categoriaRaw).split(',');
+        const list = raw.flatMap(v => String(v).split(',').map(s => extractCategoryId(s.trim()))).filter(Boolean);
+        filters.categorias = [...new Set(list)];
+    }
+
+    const ciudadRaw = query.ciudad || query.codCiudad;
+    if (ciudadRaw) {
+        filters.ciudades = toArr(ciudadRaw);
+        filters.ciudad = filters.ciudades[0];
     }
 
     return filters;
@@ -65,12 +81,61 @@ module.exports = {
 
     /**
      * GET /dia/cumplimiento/front
-     * Para admins - cuota diaria por vendedor (agregada en el rango de fechas)
+     * Role-aware desde JWT: admin ve todos, supervisor ve su equipo,
+     * vendedor ve solo lo suyo. Mismo patron que cumplimientoMesController.listFront.
      */
     async listFront(req, res) {
         try {
-            const data = await cumplimientoDiaService.getCumplimientoDiaVendedores(getFilters(req.query));
-            return res.status(200).send(data);
+            const idRol = String(req.auth?.rol ?? '');
+            const idUsuario = req.auth?.idUsuario;
+            const codigoVendedor = String(req.auth?.codVendedor || '').trim();
+            const filters = getFilters(req.query);
+
+            // Admin: sin filtro de vendedor
+            if (idRol === '1') {
+                const data = await cumplimientoDiaService.getCumplimientoDiaVendedores(filters);
+                return res.status(200).send(data);
+            }
+
+            // Supervisor: solo vendedores asignados a su equipo
+            if (idRol === '2' && idUsuario) {
+                const vendedoresAsignados = await sequelize.query(`
+                    SELECT codigo_vendedor FROM vendedor
+                    WHERE id_supervisor = :idUsuario AND codigo_vendedor IS NOT NULL
+                `, {
+                    replacements: { idUsuario },
+                    type: QueryTypes.SELECT
+                });
+
+                const codigos = vendedoresAsignados.map(v => v.codigo_vendedor).filter(Boolean);
+
+                if (codigos.length === 0) {
+                    return res.status(200).send({
+                        periodo: filters,
+                        detalle: [],
+                        totales: { cuotaTotal: 0, ventaTotal: 0, porcCumplimiento: 0, proyeccionTotal: 0, porcCumplimientoProyectado: 0 }
+                    });
+                }
+
+                const data = await cumplimientoDiaService.getCumplimientoDiaVendedores({
+                    ...filters,
+                    vendedores: codigos
+                });
+                return res.status(200).send(data);
+            }
+
+            // Vendedor: solo sus propias ventas/cuotas
+            if (codigoVendedor) {
+                const data = await cumplimientoDiaService.getCumplimientoDiaVendedores({
+                    ...filters,
+                    vendedor: codigoVendedor
+                });
+                return res.status(200).send(data);
+            }
+
+            return res.status(403).send({
+                message: 'El usuario autenticado no tiene código de vendedor asociado'
+            });
         } catch (error) {
             return res.status(400).send(error);
         }

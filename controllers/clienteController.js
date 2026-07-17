@@ -1,6 +1,4 @@
 const clienteProductoService = require('../services/clienteProductoService');
-const { sequelize } = require('../models');
-const { QueryTypes } = require('sequelize');
 const {
     cliente_model,
     ciudad_model,
@@ -8,21 +6,6 @@ const {
     canal_model,
     tipo_negocio_model
 } = require('../models');
-
-async function resolveIdVendedor(param) {
-    if (!param) return param;
-    const p = String(param).trim();
-    let rows = await sequelize.query(
-        `SELECT id_vendedor FROM vendedor WHERE id_vendedor = :p LIMIT 1`,
-        { type: QueryTypes.SELECT, replacements: { p } }
-    );
-    if (rows.length) return rows[0].id_vendedor;
-    rows = await sequelize.query(
-        `SELECT id_vendedor FROM vendedor WHERE codigo_vendedor = LPAD(:p, 4, '0') LIMIT 1`,
-        { type: QueryTypes.SELECT, replacements: { p } }
-    );
-    return rows.length ? rows[0].id_vendedor : param;
-}
 module.exports = {
     async productosPorCliente(req, res) {
         try {
@@ -35,19 +18,16 @@ module.exports = {
 
     async productosPorClientePorVendedor(req, res) {
         try {
-            const { idVendedor: rawIdVendedor } = req.params;
+            const { idVendedor } = req.params;
             const {
                 fechaInicio, fechaFin,
                 codVendedor, codProveedor, codCategoria, codCiudad
             } = req.query;
-            console.log('ID Vendedor recibido (raw):', rawIdVendedor);
+            console.log('ID Vendedor recibido:', idVendedor);
 
-            if (!rawIdVendedor) {
+            if (!idVendedor) {
                 return res.status(400).send({ error: 'El parámetro idVendedor es requerido.' });
             }
-
-            const idVendedor = await resolveIdVendedor(rawIdVendedor);
-            console.log('ID Vendedor resuelto:', idVendedor);
 
             const filters = {
                 fechaInicio, fechaFin,
@@ -63,18 +43,17 @@ module.exports = {
 
     async debugProductosPorClientePorVendedor(req, res) {
         try {
-            const { idVendedor: rawIdVendedor } = req.params;
-            console.log('ID Vendedor recibido (debug):', rawIdVendedor);
+            const { idVendedor } = req.params;
+            console.log('ID Vendedor recibido:', idVendedor); // Log para verificar el parámetro
 
-            if (!rawIdVendedor) {
+            if (!idVendedor) {
                 return res.status(400).send({ error: 'El parámetro idVendedor es requerido.' });
             }
 
-            const idVendedor = await resolveIdVendedor(rawIdVendedor);
             const data = await clienteProductoService.debugProductosPorClientePorVendedor(idVendedor);
             res.status(200).send(data);
         } catch (error) {
-            console.error('Error en debugProductosPorClientePorVendedor:', error);
+            console.error('Error en debugProductosPorClientePorVendedor:', error); // Log para capturar errores
             res.status(400).send({ error: 'Ocurrió un error al procesar la solicitud.', details: error.message });
         }
     },
