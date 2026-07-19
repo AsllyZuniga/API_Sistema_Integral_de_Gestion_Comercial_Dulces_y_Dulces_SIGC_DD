@@ -4,15 +4,17 @@ Este directorio agrupa toda la documentación técnica del proyecto, organizada 
 
 ## Índice
 
-### 📡 Endpoints
+### Endpoints
 
-Documentación detallada de endpoints específicos de la API.
+Documentacion detallada de endpoints especificos de la API.
 
-- [`ENDPOINT_VENDEDOR_ITEMS.md`](endpoints/ENDPOINT_VENDEDOR_ITEMS.md) — Endpoint de vendedores con clientes e items, filtros por rol, paginación, códigos de error.
+- [`ENDPOINT_VENDEDOR_ITEMS.md`](endpoints/ENDPOINT_VENDEDOR_ITEMS.md) — Endpoint de vendedores con clientes e items, filtros por rol, paginacion, codigos de error.
+- [`ENDPOINT_CUOTAS_DELETE.md`](endpoints/ENDPOINT_CUOTAS_DELETE.md) — Endpoints de eliminacion de cuotas de vendedores (individual y masivo), autenticacion, ejemplos.
+- [`ENDPOINT_USUARIO_PASSWORD.md`](endpoints/ENDPOINT_USUARIO_PASSWORD.md) — Endpoint de actualizacion de contrasena, seguridad (solo admin), request/response, ejemplos.
 
-### 🚀 Postman
+### Postman
 
-Guías y colecciones para consumir la API con Postman.
+Guias y colecciones para consumir la API con Postman.
 
 - [`GUIA_POSTMAN_VENDEDORES_ITEMS.md`](postman/GUIA_POSTMAN_VENDEDORES_ITEMS.md) — Guía específica del endpoint de vendedores/items.
 - [`POSTMAN_GUIDE.md`](postman/POSTMAN_GUIDE.md) — Guía general de uso de Postman con la API.
