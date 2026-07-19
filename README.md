@@ -138,6 +138,8 @@ Authentication is credential-based (vendor code / username + password). Password
 
 **User model fields:** `id_usuario`, `username`, `password` (bcrypt), `estado` (active/inactive), `id_rol` (FK → `roles`).
 
+**Security note:** The `PUT /api/usuario/:id` endpoint now requires **admin authentication** (JWT + rol=1). Vendors, supervisors and unauthenticated requests receive `401 Unauthorized` / `403 Forbidden`.
+
 ---
 
 ### Commercial Masters
@@ -299,6 +301,7 @@ The quota system enables sales management to track vendor performance against ta
 | `/api/vendedor-cuota-proveedor` | `vendedorCuotaProveedor` | Many-to-many: vendor ↔ provider quota targets |
 | `/api/vendedor-cuota-categoria` | `vendedorCuotaCategoria` | Many-to-many: vendor ↔ category quota targets |
 | `/api/rango-dias` | `rango_dias` | Day-range definitions used in quota calculations |
+| `/api/cuotas/usuario/:id` | `DELETE` | Bulk-delete all daily, weekly, and monthly quotas for a user (admin only) |
 
 The **compliance service** (`cumplimientoMesService.js`) cross-references actual sales data against quota targets and returns achievement percentages per vendor per period.
 
@@ -438,6 +441,7 @@ REPORTE PROV CON OBS
 | **Provider Quota** | `/api/cuota-proveedor` | GET, POST, PUT, DELETE |
 | **Vendor-Provider Quota** | `/api/vendedor-cuota-proveedor` | GET, POST, PUT, DELETE |
 | **Vendor-Category Quota** | `/api/vendedor-cuota-categoria` | GET, POST, PUT, DELETE |
+| **Quota Bulk Delete** | `/api/cuotas/usuario/:id` | DELETE (admin only) |
 | **Day Ranges** | `/api/rango-dias` | GET, POST, PUT, DELETE |
 | **Monthly Compliance** | `/api/mes/cumplimiento` | GET |
 | **Weekly Compliance** | `/api/semana/cumplimiento` | GET |

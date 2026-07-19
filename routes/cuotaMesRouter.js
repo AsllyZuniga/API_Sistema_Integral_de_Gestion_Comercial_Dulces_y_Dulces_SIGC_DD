@@ -6,6 +6,7 @@ router.get('/', cuotaMesController.list);
 router.get('/:id', cuotaMesController.getById);
 router.post('/', cuotaMesController.add);
 router.put('/:id', cuotaMesController.update);
+router.delete('/:id', cuotaMesController.delete);
 
 module.exports = router;
 

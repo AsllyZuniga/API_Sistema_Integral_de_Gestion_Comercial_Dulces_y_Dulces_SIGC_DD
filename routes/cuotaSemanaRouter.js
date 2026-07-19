@@ -6,6 +6,7 @@ router.get('/', cuotaSemanaController.list);
 router.get('/:id', cuotaSemanaController.getById);
 router.post('/', cuotaSemanaController.add);
 router.put('/:id', cuotaSemanaController.update);
+router.delete('/:id', cuotaSemanaController.delete);
 
 module.exports = router;
 

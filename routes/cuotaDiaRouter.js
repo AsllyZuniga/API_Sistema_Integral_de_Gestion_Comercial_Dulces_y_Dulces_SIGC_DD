@@ -108,6 +108,7 @@ router.get('/por-dia', requireAuthJWT, async (req, res) => {
 
 router.get('/:id', require('../controllers').cuotaDiaController.getById);
 router.put('/:id', require('../controllers').cuotaDiaController.update);
+router.delete('/:id', require('../controllers').cuotaDiaController.delete);
 
 module.exports = router;
 

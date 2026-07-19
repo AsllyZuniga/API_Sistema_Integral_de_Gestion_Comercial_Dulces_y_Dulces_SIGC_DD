@@ -58,6 +58,20 @@ module.exports = {
         } catch (error) {
             return res.status(400).send(error);
         }
+    },
+
+    async delete(req, res) {
+        try {
+            const deleted = await cuotaMesService.deleteById(req.params.id);
+            if (!deleted) {
+                return res.status(404).send({
+                    message: 'cuotaMes Not Found'
+                });
+            }
+            return res.status(200).send(deleted);
+        } catch (error) {
+            return res.status(400).send(error);
+        }
     }
 };
 

@@ -96,6 +96,21 @@ const create = async (data) => {
     return cuotaMes_model.create(dataToCreate);
 };
 
+const deleteById = async (id) => {
+    const cuotaMes = await cuotaMes_model.findByPk(id);
+    if (!cuotaMes) return null;
+    await cuotaMes.destroy();
+    return cuotaMes;
+};
+
+const deleteByUser = async (idUsuario) => {
+    const registros = await cuotaMes_model.findAll({ where: { id_usuario: idUsuario } });
+    if (!registros.length) return [];
+    const ids = registros.map(r => r.id_cuotaMes);
+    await cuotaMes_model.destroy({ where: { id_cuotaMes: ids } });
+    return registros;
+};
+
 const updateById = async (id, data) => {
     const cuotaMes = await cuotaMes_model.findByPk(id);
     if (!cuotaMes) return null;
@@ -135,6 +150,8 @@ module.exports = {
     getById,
     create,
     updateById,
+    deleteById,
+    deleteByUser,
     detectMonth,
     formatDate,
     getLastDayOfMonth,
