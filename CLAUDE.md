@@ -12,7 +12,7 @@ Sistema backend para gestión comercial com entidades como ventas, clientes, pro
 
 - **Runtime**: Node.js
 - **Framework**: Express.js
-- **Database**: MySQL/MariaDB (Sequelize ORM)
+- **Database**: PostgreSQL (Sequelize ORM)
 - **Authentication**: JWT (Token Bearer)
 - **Testing**: Postman (colecciones incluidas)
 
@@ -29,8 +29,8 @@ project-root/
 │   └── database.js        # Conexión Sequelize
 ├── controllers/           # Lógica de negocio por entidad
 ├── models/                # Modelos Sequelize (BD)
-├── routes/                # Rutas API
-├── middlewares/           # Autenticación JWT
+├── routes/                # Rutas API (37 archivos)
+├── middlewares/           # Autenticación JWT + requireAdmin
 ├── migrations/            # Cambios de BD
 ├── services/              # Servicios auxiliares
 ├── utils/                 # Funciones utilitarias
@@ -61,6 +61,8 @@ project-root/
 - **cuotaSemana** - Cuota semanal
 - **cuotaDia** - Cuota diaria
 - **cuotaProveedor** - Cuota por proveedor
+- **vendedorCuotaProveedor** - Asignación vendedor → proveedor
+- **vendedorCuotaCategoria** - Asignación vendedor → categoría
 
 ### Módulo Administrativo
 
@@ -108,8 +110,17 @@ npx sequelize-cli migration:generate   # Crear nueva migration
 
 - **Tipo**: JWT Bearer Token
 - **Header requerido**: `Authorization: Bearer <token>`
-- **Middleware**: `authJwtMiddleware.js`
-- **Rutas públicas**: Login/Registro (validar en cada controlador)
+- **Middleware**: `authJwtMiddleware.js` — valida JWT, expone `req.auth`
+- **requireAdmin**: `middlewares/requireAdmin.js` — `requireAuthJWT` + verificación `rol === 1`. Retorna 401/403.
+- **Rutas públicas**: Login/Registro + rutas sin middleware JWT
+
+### Endpoints protegidos con requireAdmin
+
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/api/usuario/:id` | PUT | Actualizar usuario/cambiar contraseña (solo admin) |
+| `/api/cuotas/usuario/:id_usuario` | DELETE | Eliminar todas las cuotas de un usuario (solo admin) |
+| `/api/admin` | GET | Reportes administrativos |
 
 ---
 
@@ -157,6 +168,21 @@ exports.delete = async (req, res) => {
 - `vendedor` → `cuotaProveedor` (1:N)
 - `categoria` → `cuotaCategoria` (1:N)
 - `cuotaCategoria` → `cuotaMes/cuotaSemana/cuotaDia` (1:N)
+- `usuario` → `cuotaMes/cuotaSemana/cuotaDia` (1:N)
+- `vendedor` belongsTo `cuotaMes/cuotaSemana/cuotaDia` (FK: `id_cuotaMes`, `id_cuotaSemana`, `id_cuotaDia`)
+
+### Endpoints DELETE de Cuotas
+
+| Método | Ruta | Auth | Descripción |
+|--------|------|------|-------------|
+| `DELETE` | `/api/cuota-mes/:id` | ❌ | Eliminar cuota mensual individual |
+| `DELETE` | `/api/cuota-semana/:id` | ❌ | Eliminar cuota semanal individual |
+| `DELETE` | `/api/cuota-dia/:id` | ❌ | Eliminar cuota diaria individual |
+| `DELETE` | `/api/cuotas/usuario/:id_usuario` | ✅ Admin | Eliminar todas las cuotas de un usuario + limpia FK vendedor |
+| `DELETE` | `/api/cuota-proveedor/:id` | ❌ | Eliminar cuota de proveedor |
+| `DELETE` | `/api/cuota-categoria/:id` | ❌ | Eliminar cuota de categoría |
+| `DELETE` | `/api/vendedor-cuota-proveedor/:id` | ❌ | Eliminar asignación vendedor-proveedor |
+| `DELETE` | `/api/vendedor-cuota-categoria/:id` | ❌ | Eliminar asignación vendedor-categoría |
 
 ---
 
