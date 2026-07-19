@@ -19,6 +19,9 @@ const buildVendedorPayload = (vendedor) => ({
     nombre: normalizeText(vendedor.nombre),
     username: normalizeText(vendedor.usuario?.username),
     estado: vendedor.usuario?.estado,
+    accesoVentas: vendedor.usuario?.acceso_ventas,
+    accesoCuotas: vendedor.usuario?.acceso_cuotas,
+    accesoGestionUsuarios: vendedor.usuario?.acceso_gestion_usuarios,
     rol: vendedor.usuario?.rol
         ? {
             idRol: vendedor.usuario.rol.id_rol,
@@ -35,6 +38,9 @@ const buildUsuarioPayload = (usuario) => ({
     nombre: normalizeText(usuario.username),
     username: normalizeText(usuario.username),
     estado: usuario.estado,
+    accesoVentas: usuario.acceso_ventas,
+    accesoCuotas: usuario.acceso_cuotas,
+    accesoGestionUsuarios: usuario.acceso_gestion_usuarios,
     rol: usuario.rol
         ? {
             idRol: usuario.rol.id_rol,
@@ -48,7 +54,10 @@ const buildAuthTokenPayload = (userPayload) => ({
     idVendedor: userPayload.idVendedor,
     codVendedor: userPayload.codVendedor || null,
     username: userPayload.username || null,
-    rol: userPayload.rol?.idRol || null
+    rol: userPayload.rol?.idRol || null,
+    accesoVentas: userPayload.accesoVentas !== false,
+    accesoCuotas: userPayload.accesoCuotas !== false,
+    accesoGestionUsuarios: userPayload.accesoGestionUsuarios !== false
 });
 
 /**
