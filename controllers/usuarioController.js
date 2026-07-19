@@ -87,6 +87,9 @@ module.exports = {
                         password: passwordToSave,
                         estado: req.body.estado ?? usuario.estado,
                         id_rol: req.body.id_rol ?? usuario.id_rol,
+                        acceso_ventas: req.body.acceso_ventas ?? usuario.acceso_ventas,
+                        acceso_cuotas: req.body.acceso_cuotas ?? usuario.acceso_cuotas,
+                        acceso_gestion_usuarios: req.body.acceso_gestion_usuarios ?? usuario.acceso_gestion_usuarios,
                     })
                     .then(() => res.status(200).send(usuario))
                     .catch((error) => res.status(400).send(error));

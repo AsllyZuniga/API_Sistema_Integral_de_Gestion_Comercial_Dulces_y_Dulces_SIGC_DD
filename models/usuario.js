@@ -52,6 +52,33 @@ module.exports = sequelize => {
         key: "id_rol",
         model: "rol_model"
       }
+    },
+    acceso_ventas: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+      comment: null,
+      primaryKey: false,
+      field: "acceso_ventas",
+      autoIncrement: false
+    },
+    acceso_cuotas: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+      comment: null,
+      primaryKey: false,
+      field: "acceso_cuotas",
+      autoIncrement: false
+    },
+    acceso_gestion_usuarios: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+      comment: null,
+      primaryKey: false,
+      field: "acceso_gestion_usuarios",
+      autoIncrement: false
     }
   };
   const options = {
