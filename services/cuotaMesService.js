@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { cuotaMes_model } = require('../models');
 
 /**
@@ -103,8 +104,20 @@ const deleteById = async (id) => {
     return cuotaMes;
 };
 
-const deleteByUser = async (idUsuario) => {
-    const registros = await cuotaMes_model.findAll({ where: { id_usuario: idUsuario } });
+/**
+ * Elimina las cuotas mensuales de un usuario.
+ * Si se pasa fechaInicio/fechaFin, solo elimina las cuotas cuyo periodo
+ * (fecha_inicio–fecha_fin) se solape con ese rango; sin rango, elimina todas.
+ */
+const deleteByUser = async (idUsuario, fechaInicio, fechaFin) => {
+    const where = { id_usuario: idUsuario };
+
+    if (fechaInicio && fechaFin) {
+        where.fecha_inicio = { [Op.lte]: fechaFin };
+        where.fecha_fin = { [Op.gte]: fechaInicio };
+    }
+
+    const registros = await cuotaMes_model.findAll({ where });
     if (!registros.length) return [];
     const ids = registros.map(r => r.id_cuotaMes);
     await cuotaMes_model.destroy({ where: { id_cuotaMes: ids } });

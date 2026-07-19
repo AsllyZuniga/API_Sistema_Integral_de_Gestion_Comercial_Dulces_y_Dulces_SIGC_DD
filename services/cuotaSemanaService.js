@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const { cuotaSemana_model } = require('../models');
 
 const getAll = async () => cuotaSemana_model.findAll();
@@ -13,8 +14,15 @@ const deleteById = async (id) => {
     return cuotaSemana;
 };
 
-const deleteByUser = async (idUsuario) => {
-    const registros = await cuotaSemana_model.findAll({ where: { id_usuario: idUsuario } });
+const deleteByUser = async (idUsuario, fechaInicio, fechaFin) => {
+    const where = { id_usuario: idUsuario };
+
+    if (fechaInicio && fechaFin) {
+        where.fecha_inicio = { [Op.lte]: fechaFin };
+        where.fecha_fin = { [Op.gte]: fechaInicio };
+    }
+
+    const registros = await cuotaSemana_model.findAll({ where });
     if (!registros.length) return [];
     const ids = registros.map(r => r.id_cuotaSemana);
     await cuotaSemana_model.destroy({ where: { id_cuotaSemana: ids } });

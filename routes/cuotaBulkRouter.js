@@ -9,17 +9,23 @@ const cuotaDiaService = require('../services/cuotaDiaService');
 router.delete('/usuario/:id_usuario', requireAdmin, async (req, res) => {
     try {
         const { id_usuario } = req.params;
+        const { fecha_inicio, fecha_fin } = req.query;
 
         const [deletedMeses, deletedSemanas, deletedDias] = await Promise.all([
-            cuotaMesService.deleteByUser(id_usuario),
-            cuotaSemanaService.deleteByUser(id_usuario),
-            cuotaDiaService.deleteByUser(id_usuario)
+            cuotaMesService.deleteByUser(id_usuario, fecha_inicio, fecha_fin),
+            cuotaSemanaService.deleteByUser(id_usuario, fecha_inicio, fecha_fin),
+            cuotaDiaService.deleteByUser(id_usuario, fecha_inicio, fecha_fin)
         ]);
 
-        await db.vendedor_model.update(
-            { id_cuotaMes: null, id_cuotaSemana: null, id_cuotaDia: null },
-            { where: { id_usuario } }
-        );
+        // Solo limpiar las FK del vendedor cuando se borró sin rango (todo el
+        // histórico). Con rango, la cuota vigente puede seguir existiendo y
+        // el FK no debe tocarse.
+        if (!fecha_inicio || !fecha_fin) {
+            await db.vendedor_model.update(
+                { id_cuotaMes: null, id_cuotaSemana: null, id_cuotaDia: null },
+                { where: { id_usuario } }
+            );
+        }
 
         return res.status(200).json({
             success: true,
