@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { cuotaMes_model } = require('../models');
+const { cuotaMes_model, vendedor_model } = require('../models');
 
 /**
  * Obtiene el mes de un string (ej: "abril" -> 3)
@@ -100,6 +100,7 @@ const create = async (data) => {
 const deleteById = async (id) => {
     const cuotaMes = await cuotaMes_model.findByPk(id);
     if (!cuotaMes) return null;
+    await vendedor_model.update({ id_cuotaMes: null }, { where: { id_cuotaMes: id } });
     await cuotaMes.destroy();
     return cuotaMes;
 };
@@ -121,6 +122,12 @@ const deleteByUser = async (idUsuario, fechaInicio, fechaFin) => {
     const registros = await cuotaMes_model.findAll({ where });
     if (!registros.length) return [];
     const ids = registros.map(r => r.id_cuotaMes);
+    // Limpiar el FK del vendedor si su cuota vigente está entre las que se
+    // van a borrar; si no, PostgreSQL rechaza el destroy por la FK.
+    await vendedor_model.update(
+        { id_cuotaMes: null },
+        { where: { id_cuotaMes: ids } }
+    );
     await cuotaMes_model.destroy({ where: { id_cuotaMes: ids } });
     return registros;
 };
