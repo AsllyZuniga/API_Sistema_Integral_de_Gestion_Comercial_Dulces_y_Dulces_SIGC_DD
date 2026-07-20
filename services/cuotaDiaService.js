@@ -15,7 +15,7 @@ const deleteById = async (id) => {
 };
 
 const deleteByUser = async (idUsuario, fechaInicio, fechaFin) => {
-    const where = { id_usuario: idUsuario };
+    const where = { id_usuario: Array.isArray(idUsuario) ? { [Op.in]: idUsuario } : idUsuario };
 
     if (fechaInicio && fechaFin) {
         where.fecha_inicio = { [Op.lte]: fechaFin };

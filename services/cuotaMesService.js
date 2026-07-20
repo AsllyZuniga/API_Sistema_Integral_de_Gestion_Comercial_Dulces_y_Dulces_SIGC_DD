@@ -105,12 +105,13 @@ const deleteById = async (id) => {
 };
 
 /**
- * Elimina las cuotas mensuales de un usuario.
+ * Elimina las cuotas mensuales de uno o varios usuarios (idUsuario puede
+ * ser un id único o un array de ids).
  * Si se pasa fechaInicio/fechaFin, solo elimina las cuotas cuyo periodo
  * (fecha_inicio–fecha_fin) se solape con ese rango; sin rango, elimina todas.
  */
 const deleteByUser = async (idUsuario, fechaInicio, fechaFin) => {
-    const where = { id_usuario: idUsuario };
+    const where = { id_usuario: Array.isArray(idUsuario) ? { [Op.in]: idUsuario } : idUsuario };
 
     if (fechaInicio && fechaFin) {
         where.fecha_inicio = { [Op.lte]: fechaFin };

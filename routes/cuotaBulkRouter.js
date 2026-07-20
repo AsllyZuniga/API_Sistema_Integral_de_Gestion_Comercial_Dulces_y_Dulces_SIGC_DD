@@ -6,6 +6,41 @@ const cuotaMesService = require('../services/cuotaMesService');
 const cuotaSemanaService = require('../services/cuotaSemanaService');
 const cuotaDiaService = require('../services/cuotaDiaService');
 
+router.delete('/usuario/lote', requireAdmin, async (req, res) => {
+    try {
+        const { ids_usuario, fecha_inicio, fecha_fin } = req.body || {};
+
+        if (!Array.isArray(ids_usuario) || ids_usuario.length === 0) {
+            return res.status(400).json({ success: false, error: 'ids_usuario debe ser un array no vacío' });
+        }
+
+        const [deletedMeses, deletedSemanas, deletedDias] = await Promise.all([
+            cuotaMesService.deleteByUser(ids_usuario, fecha_inicio, fecha_fin),
+            cuotaSemanaService.deleteByUser(ids_usuario, fecha_inicio, fecha_fin),
+            cuotaDiaService.deleteByUser(ids_usuario, fecha_inicio, fecha_fin)
+        ]);
+
+        if (!fecha_inicio || !fecha_fin) {
+            await db.vendedor_model.update(
+                { id_cuotaMes: null, id_cuotaSemana: null, id_cuotaDia: null },
+                { where: { id_usuario: ids_usuario } }
+            );
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                cuota_mes: deletedMeses.length,
+                cuota_semana: deletedSemanas.length,
+                cuota_dia: deletedDias.length
+            },
+            message: `Cuotas eliminadas para ${ids_usuario.length} usuarios`
+        });
+    } catch (error) {
+        return res.status(400).json({ success: false, error: error.message });
+    }
+});
+
 router.delete('/usuario/:id_usuario', requireAdmin, async (req, res) => {
     try {
         const { id_usuario } = req.params;
