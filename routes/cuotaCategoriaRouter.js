@@ -23,19 +23,19 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 router.get('/general', requireAuthJWT, cuotaCategoriaController.general);
 
 // ✅ ENDPOINTS DE VALIDACIÓN DE CUOTAS
-router.get('/validar/marzo', cuotaCategoriaValidadorController.validateCuotasMarzo);
-router.post('/validar/comparar-csv', cuotaCategoriaValidadorController.compareCuotasConCSV);
+router.get('/validar/marzo', requireAuthJWT, cuotaCategoriaValidadorController.validateCuotasMarzo);
+router.post('/validar/comparar-csv', requireAuthJWT, cuotaCategoriaValidadorController.compareCuotasConCSV);
 
 /**
  * DELETE /cuota-categoria/:id
  * Elimina una cuota de categoría por ID
  */
-router.delete('/:id', cuotaCategoriaController.deleteById);
+router.delete('/:id', requireAuthJWT, cuotaCategoriaController.deleteById);
 
 /**
  * DELETE /cuota-categoria/rango/por-fechas?fechaInicio=2026-05-01&fechaFin=2026-05-31
  * Elimina todas las cuotas de categoría en el rango de fechas especificado
  */
-router.delete('/rango/por-fechas', cuotaCategoriaController.deleteByDateRange);
+router.delete('/rango/por-fechas', requireAuthJWT, cuotaCategoriaController.deleteByDateRange);
 
 module.exports = router;

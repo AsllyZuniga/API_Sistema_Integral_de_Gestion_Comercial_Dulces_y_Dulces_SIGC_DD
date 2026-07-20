@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const controller = require('../controllers/cuotaCategoriaImportController');
+const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ const upload = multer({
  * GET /cuota-categoria-import/
  * Obtiene instrucciones completas para importación
  */
-router.get('/', controller.getInstrucciones);
+router.get('/', requireAuthJWT, controller.getInstrucciones);
 
 /**
  * POST /cuota-categoria-import/cargar
@@ -61,7 +62,7 @@ router.get('/', controller.getInstrucciones);
  * - Si hay errores, CANCELA importación
  * - NO crea ni duplica vendedores ni categorías
  */
-router.post('/cargar', upload.single('archivo'), controller.importarConArchivo);
+router.post('/cargar', requireAuthJWT, upload.single('archivo'), controller.importarConArchivo);
 
 /**
  * POST /cuota-categoria-import/validar
@@ -75,7 +76,7 @@ router.post('/cargar', upload.single('archivo'), controller.importarConArchivo);
  * curl -X POST http://localhost:3000/cuota-categoria-import/validar \
  *   -F "archivo=@cuotasCategoriasMarzo.csv"
  */
-router.post('/validar', upload.single('archivo'), controller.validarArchivo);
+router.post('/validar', requireAuthJWT, upload.single('archivo'), controller.validarArchivo);
 
 /**
  * POST /cuota-categoria-import/importar/nestle
@@ -90,13 +91,13 @@ router.post('/validar', upload.single('archivo'), controller.validarArchivo);
  *   "fechaFin": "2026-03-31"
  * }
  */
-router.post('/importar/nestle', controller.importarCuotasNestle);
+router.post('/importar/nestle', requireAuthJWT, controller.importarCuotasNestle);
 
 /**
  * GET /cuota-categoria-import/actuales
  * Obtiene todas las cuotas de categoría cargadas en la BD
  */
-router.get('/actuales', controller.obtenerCuotasActuales);
+router.get('/actuales', requireAuthJWT, controller.obtenerCuotasActuales);
 
 module.exports = router;
 

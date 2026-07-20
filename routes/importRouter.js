@@ -8,6 +8,7 @@ const {
     verificarEstado,
     importarCuotasConArchivo
 } = require('../controllers/importController');
+const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
 /**
  * Configurar multer para manejar uploads de TSV
@@ -60,16 +61,16 @@ const uploadCsvOnly = multer({
  */
 
 // Verificar estado del servicio
-router.get('/status', verificarEstado);
+router.get('/status', requireAuthJWT, verificarEstado);
 
 // Importar ventas desde archivo CARGADO (Postman/Frontend)
-router.post('/ventas/upload', upload.single('archivo'), importarVentasConArchivo);
+router.post('/ventas/upload', requireAuthJWT, upload.single('archivo'), importarVentasConArchivo);
 
 // Importar ventas desde ruta en servidor (Node.js)
-router.post('/ventas', importarVentas);
+router.post('/ventas', requireAuthJWT, importarVentas);
 
 // Importar cuotas desde archivo CSV cargado (Postman/Frontend)
-router.post('/cuotas/upload', (req, res, next) => {
+router.post('/cuotas/upload', requireAuthJWT, (req, res, next) => {
     uploadCsvOnly.single('archivo')(req, res, (err) => {
         if (err) {
             return res.status(400).json({

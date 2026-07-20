@@ -4,8 +4,8 @@ const { Op } = require('sequelize');
 const db = require('../models');
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
-router.get('/', require('../controllers').cuotaDiaController.list);
-router.post('/', require('../controllers').cuotaDiaController.add);
+router.get('/', requireAuthJWT, require('../controllers').cuotaDiaController.list);
+router.post('/', requireAuthJWT, require('../controllers').cuotaDiaController.add);
 
 router.get('/por-dia', requireAuthJWT, async (req, res) => {
     try {
@@ -106,9 +106,9 @@ router.get('/por-dia', requireAuthJWT, async (req, res) => {
     }
 });
 
-router.get('/:id', require('../controllers').cuotaDiaController.getById);
-router.put('/:id', require('../controllers').cuotaDiaController.update);
-router.delete('/:id', require('../controllers').cuotaDiaController.delete);
+router.get('/:id', requireAuthJWT, require('../controllers').cuotaDiaController.getById);
+router.put('/:id', requireAuthJWT, require('../controllers').cuotaDiaController.update);
+router.delete('/:id', requireAuthJWT, require('../controllers').cuotaDiaController.delete);
 
 module.exports = router;
 

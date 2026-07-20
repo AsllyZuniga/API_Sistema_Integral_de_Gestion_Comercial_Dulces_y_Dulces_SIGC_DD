@@ -1,7 +1,8 @@
 var express = require('express');
 var router = express.Router();
 const subcanalController = require('../controllers').subcanalController;
-router.get('/', subcanalController.list);
-router.get('/:id', subcanalController.getById);
-router.post('/', subcanalController.add);
+const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
+router.get('/', requireAuthJWT, subcanalController.list);
+router.get('/:id', requireAuthJWT, subcanalController.getById);
+router.post('/', requireAuthJWT, subcanalController.add);
 module.exports = router;

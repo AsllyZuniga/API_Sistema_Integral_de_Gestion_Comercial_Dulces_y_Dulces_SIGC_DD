@@ -5,9 +5,9 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 const { Op } = require('sequelize');
 const db = require('../models');
 
-router.get('/', rolController.list);
-router.get('/:id', rolController.getById);
-router.post('/', rolController.add);
+router.get('/', requireAuthJWT, rolController.list);
+router.get('/:id', requireAuthJWT, rolController.getById);
+router.post('/', requireAuthJWT, rolController.add);
 
 router.get('/cuota-dia/por-supervisor', requireAuthJWT, async (req, res) => {
     try {
