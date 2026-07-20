@@ -179,7 +179,7 @@ const getItemsVendidosPorRol = async ({
     });
     const total = Number(countRows[0]?.total || 0);
 
-    const rowsQuery = `${baseSelect} ORDER BY LOWER(COALESCE(p.nombre, '')) ASC, LOWER(i.descripcion) ASC`;
+    const rowsQuery = `${baseSelect} ORDER BY LOWER(COALESCE(p.nombre, '')) ASC, TRIM(i.codigo_item) ASC`;
 
     const rows = await sequelize.query(rowsQuery, {
         replacements,
