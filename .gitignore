@@ -156,3 +156,7 @@ global-bundle.pem
 *.key
 *.cer
 global-bundle.pem
+
+# API keys de integración (tokens estáticos). Los reales nunca se versionan;
+# solo el template config/apiKeys.example.json.
+config/apiKeys.json

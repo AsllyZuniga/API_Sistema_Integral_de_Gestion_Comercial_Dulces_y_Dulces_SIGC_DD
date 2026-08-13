@@ -4,7 +4,7 @@ const {
 } = require('../models');
 module.exports = {
     list(req, res) {
-        return megacategoria
+        return megacategoria_model
             .findAll({})
             .then((megacategoria) => res.status(200).send(megacategoria))
             .catch((error) => { res.status(400).send(error); });
@@ -12,7 +12,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return megacategoria
+        return megacategoria_model
             .findByPk(req.params.id)
             .then((megacategoria) => {
                 console.log(megacategoria);
@@ -27,7 +27,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return megacategoria
+        return megacategoria_model
             .create({
                 nombre: req.body.nombre,
             })
@@ -35,7 +35,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return megacategoria
+        return megacategoria_model
             .findByPk(req.params.id)
             .then(megacategoria => {
                 if (!megacategoria) {

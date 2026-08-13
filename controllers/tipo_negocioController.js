@@ -1,7 +1,7 @@
 const { tipo_negocio_model } = require('../models');
 module.exports = {
     list(req, res) {
-        return tipo_negocio
+        return tipo_negocio_model
             .findAll({})
             .then((tipo_negocio) => res.status(200).send(tipo_negocio))
             .catch((error) => { res.status(400).send(error); });
@@ -9,7 +9,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return tipo_negocio
+        return tipo_negocio_model
             .findByPk(req.params.id)
             .then((tipo_negocio) => {
                 console.log(tipo_negocio);
@@ -24,7 +24,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return tipo_negocio
+        return tipo_negocio_model
             .create({
                 tipo_negocio: req.body.tipo_negocio,
                 detalle_tipo_negocio: req.body.detalle_tipo_negocio,
@@ -33,7 +33,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return tipo_negocio
+        return tipo_negocio_model
             .findByPk(req.params.id)
             .then(tipo_negocio => {
                 if (!tipo_negocio) {

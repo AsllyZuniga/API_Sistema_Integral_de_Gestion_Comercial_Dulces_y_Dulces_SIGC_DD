@@ -4,7 +4,7 @@ const {
 } = require('../models');
 module.exports = {
     list(req, res) {
-        return barrio
+        return barrio_model
             .findAll({})
             .then((barrio) => res.status(200).send(barrio))
             .catch((error) => { res.status(400).send(error); });
@@ -12,7 +12,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return barrio
+        return barrio_model
             .findByPk(req.params.id)
             .then((barrio) => {
                 console.log(barrio);
@@ -28,7 +28,7 @@ module.exports = {
     },
 
     add(req, res) {
-        return barrio
+        return barrio_model
             .create({
                 nombre: req.body.nombre,
                 id_ciudad: req.body.id_ciudad,
@@ -37,7 +37,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return barrio
+        return barrio_model
             .findByPk(req.params.id)
             .then(barrio => {
                 if (!barrio) {
@@ -45,7 +45,7 @@ module.exports = {
                         message: 'barrio Not Found',
                     });
                 }
-                return barrio
+                return barrio_model
                     .update({
                         nombre: req.body.nombre || barrio.nombre,
                         id_ciudad: req.body.id_ciudad || barrio.id_ciudad,

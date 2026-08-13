@@ -142,6 +142,50 @@ Authentication is credential-based (vendor code / username + password). Password
 
 ---
 
+### API Keys (External Integrations)
+
+Static API keys let external applications consume **read-only GET endpoints** without user accounts, JWT or database changes.
+
+**Headers accepted** (Bearer wins over `X-API-Key`):
+
+```
+Authorization: Bearer <TOKEN>
+X-API-Key: <TOKEN>
+```
+
+**Behavior** (`middlewares/apiKeyMiddleware.js`, mounted globally on `/api` except `/api/auth`):
+
+| Case | Response |
+|---|---|
+| No API key header | Falls through to existing JWT auth |
+| Invalid / unknown key | `401 { message }` |
+| Valid key, method ≠ GET (POST/PUT/PATCH/DELETE) | `403` — API keys are **read-only**, no exceptions |
+| Valid key, GET without `read` scope | `403` |
+| Valid key, GET with `read` scope | `200` — sets `req.apiKey` + admin-equivalent `req.auth` |
+
+**Storage (no database):**
+- **Development:** `config/apiKeys.json` (gitignored; copy from `config/apiKeys.example.json`).
+- **Production:** `API_KEYS_JSON` env var or `API_KEYS_FILE` path — loaded **only** when `NODE_ENV=production`. Dev tokens are never valid in prod and vice versa.
+
+```bash
+# Generate a token (32 random bytes hex)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+```json
+{
+  "keys": [
+    { "keyId": "external-app", "token": "<hex-token>", "scopes": ["read"] }
+  ]
+}
+```
+
+**Security:** tokens compared via SHA-256 + `crypto.timingSafeEqual` (timing-attack resistant), never logged (only `keyId`), revocation = remove key + restart, centralized in `config/apiKeys.js`.
+
+See [`docs/endpoints/API_KEYS.md`](docs/endpoints/API_KEYS.md) for details.
+
+---
+
 ### Commercial Masters
 
 Masters are the reference data that support transactions. All masters expose standard CRUD endpoints.

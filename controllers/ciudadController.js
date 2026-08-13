@@ -4,7 +4,7 @@ const {
 } = require('../models');
 module.exports = {
     list(req, res) {
-        return ciudad
+        return ciudad_model
             .findAll({})
             .then((ciudad) => res.status(200).send(ciudad))
             .catch((error) => { res.status(400).send(error); });
@@ -12,7 +12,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return ciudad
+        return ciudad_model
             .findByPk(req.params.id)
             .then((ciudad) => {
                 console.log(ciudad);
@@ -27,7 +27,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return ciudad
+        return ciudad_model
             .create({
                 nombre: req.body.nombre,
             })
@@ -35,7 +35,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return ciudad
+        return ciudad_model
             .findByPk(req.params.id)
             .then(ciudad => {
                 if (!ciudad) {
@@ -43,7 +43,7 @@ module.exports = {
                         message: 'ciudad Not Found',
                     });
                 }
-                return ciudad
+                return ciudad_model
                     .update({
                         nombre: req.body.nombre || ciudad.nombre,
                     })

@@ -1,7 +1,7 @@
 const { rol_model } = require('../models');
 module.exports = {
     list(req, res) {
-        return rol
+        return rol_model
             .findAll({})
             .then((rol) => res.status(200).send(rol))
             .catch((error) => { res.status(400).send(error); });
@@ -9,7 +9,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return rol
+        return rol_model
             .findByPk(req.params.id)
             .then((rol) => {
                 console.log(rol);
@@ -24,7 +24,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return rol
+        return rol_model
             .create({
                 nombre: req.body.nombre,
             })
@@ -32,7 +32,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return rol
+        return rol_model
             .findByPk(req.params.id)
             .then(rol => {
                 if (!rol) {

@@ -11,6 +11,7 @@ Documentacion detallada de endpoints especificos de la API.
 - [`ENDPOINT_VENDEDOR_ITEMS.md`](endpoints/ENDPOINT_VENDEDOR_ITEMS.md) — Endpoint de vendedores con clientes e items, filtros por rol, paginacion, codigos de error.
 - [`ENDPOINT_CUOTAS_DELETE.md`](endpoints/ENDPOINT_CUOTAS_DELETE.md) — Endpoints de eliminacion de cuotas de vendedores (individual y masivo), autenticacion, ejemplos.
 - [`ENDPOINT_USUARIO_PASSWORD.md`](endpoints/ENDPOINT_USUARIO_PASSWORD.md) — Endpoint de actualizacion de contrasena, seguridad (solo admin), request/response, ejemplos.
+- [`API_KEYS.md`](endpoints/API_KEYS.md) — Autenticacion por API keys para integraciones externas (solo lectura), configuracion dev/prod, seguridad.
 
 ### Postman
 
