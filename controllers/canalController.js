@@ -4,7 +4,7 @@ const {
 } = require('../models');
 module.exports = {
     list(req, res) {
-        return canal
+        return canal_model
             .findAll({})
             .then((canal) => res.status(200).send(canal))
             .catch((error) => { res.status(400).send(error); });
@@ -12,7 +12,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return canal
+        return canal_model
             .findByPk(req.params.id)
             .then((canal) => {
                 console.log(canal);
@@ -27,7 +27,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return canal
+        return canal_model
             .create({
                 nombre: req.body.nombre,
             })
@@ -35,7 +35,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return canal
+        return canal_model
             .findByPk(req.params.id)
             .then(canal => {
                 if (!canal) {
@@ -43,7 +43,7 @@ module.exports = {
                         message: 'canal Not Found',
                     });
                 }
-                return canal
+                return canal_model
                     .update({
                         nombre: req.body.nombre || canal.nombre,
                     })

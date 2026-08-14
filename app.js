@@ -44,6 +44,7 @@ const cuotaBulkRouter = require('./routes/cuotaBulkRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 const exportRoutes = require('./routes/exportRoutes');
 const filtrosRouter = require('./routes/filtrosRouter');
+const { apiKeyOrJwt } = require('./middlewares/apiKeyMiddleware');
 
 
 var cors = require('cors');
@@ -101,6 +102,10 @@ app.use(["/api/mes/cumplimiento", "/api/semana/cumplimiento", "/api/dia/cumplimi
 });
 
 app.use("/api/auth", authRouter);
+// Autenticación dual para integraciones externas: API key si viene en el
+// header; si no, el JWT existente. Se monta después de /api/auth para no
+// tocar login/registro. Las API keys solo permiten GET (ver middleware).
+app.use("/api", apiKeyOrJwt);
 app.use("/", indexRouter);
 app.use("/api/barrio", barrioRouter);
 app.use("/api/canale", canalRouter);

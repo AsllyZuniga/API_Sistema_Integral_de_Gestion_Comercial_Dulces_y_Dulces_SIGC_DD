@@ -16,6 +16,12 @@ const { verifyAuthToken } = require('../utils/jwt');
  * @param {import('express').NextFunction} next
  */
 const requireAuthJWT = (req, res, next) => {
+    // Si la petición ya fue autenticada por API key (apiKeyOrJwt), la
+    // identidad (req.auth) ya quedó resuelta: no se exige JWT adicional.
+    if (req.apiKey) {
+        return next();
+    }
+
     const authHeader = String(req.headers.authorization || '').trim();
 
     if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {

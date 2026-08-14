@@ -1,7 +1,7 @@
 const { tipo_documento_model } = require('../models');
 module.exports = {
     list(req, res) {
-        return tipo_documento
+        return tipo_documento_model
             .findAll({})
             .then((tipo_documento) => res.status(200).send(tipo_documento))
             .catch((error) => { res.status(400).send(error); });
@@ -9,7 +9,7 @@ module.exports = {
     getById(req, res) {
 
         console.log(req.params.id);
-        return tipo_documento
+        return tipo_documento_model
             .findByPk(req.params.id)
             .then((tipo_documento) => {
                 console.log(tipo_documento);
@@ -24,7 +24,7 @@ module.exports = {
                 res.status(400).send(error));
     },
     add(req, res) {
-        return tipo_documento
+        return tipo_documento_model
             .create({
                 nombre: req.body.nombre,
                 consecutivo: req.body.consecutivo,
@@ -33,7 +33,7 @@ module.exports = {
             .catch((error) => res.status(400).send(error));
     },
     update(req, res) {
-        return tipo_documento
+        return tipo_documento_model
             .findByPk(req.params.id)
             .then(tipo_documento => {
                 if (!tipo_documento) {

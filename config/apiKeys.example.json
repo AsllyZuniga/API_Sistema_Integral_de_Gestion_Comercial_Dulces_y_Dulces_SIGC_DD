@@ -1,0 +1,10 @@
+{
+  "_comment": "Template de API keys para DESARROLLO local. Copia este archivo como config/apiKeys.json (gitignored) y reemplaza los tokens por valores reales generados con: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+  "keys": [
+    {
+      "keyId": "dev-external-app",
+      "token": "reemplazar-con-token-dev-aleatorio",
+      "scopes": ["read"]
+    }
+  ]
+}
