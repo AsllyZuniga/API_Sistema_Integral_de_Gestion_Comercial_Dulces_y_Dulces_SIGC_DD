@@ -162,6 +162,7 @@ const getItemsVendidosPorRol = async ({
             TRIM(i.codigo_item) AS codigo_item,
             TRIM(i.descripcion) AS descripcion,
             COALESCE(SUM(dv.cantidad_emp), 0)::float AS unidades_cajas,
+            COALESCE(SUM(dv.cantidad), 0)::float AS unidades_totales,
             COALESCE(SUM(dv.subtotal), 0)::float AS subtotal
         FROM detalle_venta dv
         INNER JOIN venta v ON v.id_venta = dv.id_venta
@@ -195,6 +196,7 @@ const getItemsVendidosPorRol = async ({
             codigo_item: r.codigo_item || '',
             descripcion: r.descripcion || '',
             unidades_cajas: Number(r.unidades_cajas || 0),
+            unidades_totales: Number(r.unidades_totales || 0),
             subtotal: Number(r.subtotal || 0)
         })),
         paginacion: { total, paginado: false }
