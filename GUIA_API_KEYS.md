@@ -5,6 +5,18 @@ El frontend sigue usando JWT (`Authorization: Bearer <jwt>`); ambos mecanismos c
 
 ---
 
+## 0. URL base
+
+| Entorno | URL base | Nota |
+|---|---|---|
+| **Producción (desplegada)** | `http://ec2-3-224-183-31.compute-1.amazonaws.com` | nginx (:80) → API. Usar esta para integraciones |
+| Desarrollo local | `http://localhost:3000` | Solo para pruebas en máquina local |
+
+Todos los ejemplos de esta guía usan la URL de producción. El health check público es
+`GET /health` (sin autenticación).
+
+---
+
 ## 1. Política de seguridad
 
 | Regla | Detalle |
@@ -40,19 +52,19 @@ Dos opciones (header HTTP):
 
 ```bash
 # Recomendado: header X-API-Key
-curl -s "http://localhost:3000/api/ciudad" \
+curl -s "http://ec2-3-224-183-31.compute-1.amazonaws.com/api/ciudad" \
   -H "X-API-Key: <TU_API_KEY>"
 
 # Alternativa: Bearer
-curl -s "http://localhost:3000/api/ciudad" \
+curl -s "http://ec2-3-224-183-31.compute-1.amazonaws.com/api/ciudad" \
   -H "Authorization: Bearer <TU_API_KEY>"
 
 # Con filtros (rango de fechas + proveedor + categoría + ciudad)
-curl -s "http://localhost:3000/api/mes/cumplimiento/front?fechaInicio=2026-07-01&fechaFin=2026-07-31&proveedor=1408,1167&categoria=645,705&ciudad=155" \
+curl -s "http://ec2-3-224-183-31.compute-1.amazonaws.com/api/mes/cumplimiento/front?fechaInicio=2026-07-01&fechaFin=2026-07-31&proveedor=1408,1167&categoria=645,705&ciudad=155" \
   -H "X-API-Key: <TU_API_KEY>"
 
 # Guardar respuesta en archivo (respuestas grandes)
-curl -s "http://localhost:3000/api/items-vendidos?fechaInicio=2026-07-06&fechaFin=2026-07-11" \
+curl -s "http://ec2-3-224-183-31.compute-1.amazonaws.com/api/items-vendidos?fechaInicio=2026-07-06&fechaFin=2026-07-11" \
   -H "X-API-Key: <TU_API_KEY>" -o items.json
 ```
 
@@ -85,7 +97,7 @@ Alternativa con la pestaña **Authorization**:
 
 ```javascript
 const res = await fetch(
-  'http://localhost:3000/api/semana/cumplimiento/front?fechaInicio=2026-07-06&fechaFin=2026-07-11',
+  'http://ec2-3-224-183-31.compute-1.amazonaws.com/api/semana/cumplimiento/front?fechaInicio=2026-07-06&fechaFin=2026-07-11',
   { headers: { 'X-API-Key': '<TU_API_KEY>' } }
 );
 const data = await res.json();
@@ -306,12 +318,12 @@ GET /api/mes/cumplimiento/front?fechaInicio=2026-07-01&fechaFin=2026-07-31&prove
 
 ```bash
 # Key válida → 200
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/ciudad -H "X-API-Key: <TU_API_KEY>"
+curl -s -o /dev/null -w "%{http_code}\n" http://ec2-3-224-183-31.compute-1.amazonaws.com/api/ciudad -H "X-API-Key: <TU_API_KEY>"
 
 # Key inválida → 401
-curl -s http://localhost:3000/api/ciudad -H "X-API-Key: mala"
+curl -s http://ec2-3-224-183-31.compute-1.amazonaws.com/api/ciudad -H "X-API-Key: mala"
 
 # Escritura con key → 403
-curl -s -X POST http://localhost:3000/api/canale -H "X-API-Key: <TU_API_KEY>" \
+curl -s -X POST http://ec2-3-224-183-31.compute-1.amazonaws.com/api/canale -H "X-API-Key: <TU_API_KEY>" \
   -H "Content-Type: application/json" -d '{"nombre":"x"}'
 ```
