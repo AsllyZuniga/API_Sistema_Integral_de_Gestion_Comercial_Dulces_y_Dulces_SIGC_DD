@@ -116,8 +116,8 @@ const SQL_ACUMULADO_SIGNADO = `
 /**
  * Ventas acumuladas por canal para el período.
  *
- * RF-001: listar todos los canales del catálogo con su venta acumulada
- *         (0 si no tuvieron ventas).
+ * RF-001: listar solo los canales del catálogo que tengan venta acumulada
+ *         mayor a 0 (admin y supervisor).
  * RF-002: sin cuota asignada por canal → cuota = 0 y porcentajes 0.
  * RF-003: proyección con días corridos/hábiles del período.
  * RF-004: respeta el motor de filtros actual (vendedor, proveedor,
@@ -241,6 +241,9 @@ const getVentasPorCanal = async (filters = {}, auth = null) => {
 			}
 		}
 	}
+
+	// Admin y supervisor: solo canales con venta acumulada mayor a 0.
+	rows = rows.filter((r) => r.acumulado > 0);
 
 	rows.sort((a, b) => String(a.canal).localeCompare(String(b.canal), 'es', { sensitivity: 'base' }));
 
