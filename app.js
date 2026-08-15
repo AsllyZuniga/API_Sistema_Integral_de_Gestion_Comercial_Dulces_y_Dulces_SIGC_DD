@@ -39,6 +39,7 @@ const importRouter = require('./routes/importRouter');
 const vendedorCuotaProveedorRouter = require('./routes/vendedorCuotaProveedorRouter');
 const vendedorCuotaCategoriaRouter = require('./routes/vendedorCuotaCategoriaRouter');
 const adminVentasRouter = require('./routes/adminVentasRouter');
+const ventasPorCanalRouter = require('./routes/ventasPorCanalRouter');
 const itemsVendidosRouter = require('./routes/itemsVendidosRouter');
 const cuotaBulkRouter = require('./routes/cuotaBulkRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
@@ -91,7 +92,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Evita respuestas 304 con datos stale en reportes de cumplimiento.
-app.use(["/api/mes/cumplimiento", "/api/semana/cumplimiento", "/api/dia/cumplimiento", "/api/cuota-categoria"], (req, res, next) => {
+app.use(["/api/mes/cumplimiento", "/api/semana/cumplimiento", "/api/dia/cumplimiento", "/api/cuota-categoria", "/api/ventas-por-canal"], (req, res, next) => {
   delete req.headers["if-none-match"];
   delete req.headers["if-modified-since"];
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -140,6 +141,7 @@ app.use('/api/import', importRouter);
 app.use('/api/vendedor-cuota-proveedor', vendedorCuotaProveedorRouter);
 app.use('/api/vendedor-cuota-categoria', vendedorCuotaCategoriaRouter);
 app.use('/api/admin', adminVentasRouter);
+app.use('/api/ventas-por-canal', ventasPorCanalRouter);
 app.use('/api/items-vendidos', itemsVendidosRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);

@@ -80,7 +80,8 @@ const normalizeParams = (query = {}) => {
         codVendedor: parseArrayParam(query.codVendedor),
         codProveedor: parseArrayParam(query.codProveedor),
         codCategoria: parseArrayParam(query.codCategoria),
-        codCiudad: parseArrayParam(query.codCiudad)
+        codCiudad: parseArrayParam(query.codCiudad),
+        codCanal: parseArrayParam(query.codCanal)
     };
 };
 
@@ -103,7 +104,7 @@ const buildProveedorCondition = (values, replacements, prefix) => {
  *   - rango de fechas
  *   - scope JWT (admin/equipo/propio)
  *   - filtros seleccionados, EXCLUYENDO el que se pasa en `exclude`
- *     (clave: 'vendedor' | 'proveedor' | 'categoria' | 'ciudad').
+ *     (clave: 'vendedor' | 'proveedor' | 'categoria' | 'ciudad' | 'canal').
  *
  * Para el filtro de vendedor: para rol 3 (Vendedor) se ignora
  * `params.codVendedor` y se fuerza su propio `codVendedor` del JWT,
@@ -167,6 +168,16 @@ const buildBaseWhere = (params, replacements, scopeWhereVenta, exclude) => {
         if (cond) conditions.push(cond);
     }
 
+    if (exclude !== 'canal' && params.codCanal && params.codCanal.length > 0) {
+        const cond = buildArrayCondition(
+            'CAST(ca.id_canal AS TEXT)',
+            params.codCanal,
+            replacements,
+            'fcan'
+        );
+        if (cond) conditions.push(cond);
+    }
+
     return conditions.join(' AND ');
 };
 
@@ -178,6 +189,7 @@ const buildFromClause = () => `
     LEFT JOIN proveedor pr ON pr.id_proveedor = i.id_proveedor
     LEFT JOIN categoria cat ON cat.id_categoria = i.id_categoria
     LEFT JOIN ciudad ci ON ci.id_ciudad = dv.id_ciudad_original
+    LEFT JOIN canal ca ON ca.id_canal = v.id_canal
 `;
 
 const runDistinctQuery = async (selectExpr, where, sharedReplacements) => {
@@ -187,7 +199,7 @@ const runDistinctQuery = async (selectExpr, where, sharedReplacements) => {
 };
 
 /**
- * Devuelve las opciones de los 4 desplegables en cascada.
+ * Devuelve las opciones de los 5 desplegables en cascada.
  *
  * Self-exclusion: la lista del filtro X NO se filtra por X, solo
  * por los OTROS filtros + scope + fecha. Así el usuario siempre ve
@@ -213,12 +225,13 @@ const getOpcionesFiltros = async (params, auth) => {
         ownCodVendedor: auth?.codVendedor
     };
 
-    // 4 queries, una por lista, cada una excluyendo su propio filtro
+    // 5 queries, una por lista, cada una excluyendo su propio filtro
     const [
         vendedoresRows,
         proveedoresRows,
         categoriasRows,
-        ciudadesRows
+        ciudadesRows,
+        canalesRows
     ] = await Promise.all([
         runDistinctQuery(
             'vd.id_vendedor, vd.codigo_vendedor, vd.nombre AS vendedor_nombre',
@@ -239,6 +252,11 @@ const getOpcionesFiltros = async (params, auth) => {
         runDistinctQuery(
             'ci.id_ciudad, ci.nombre AS ciudad_nombre',
             buildBaseWhere(enrichedParams, baseReplacements, scopeWhereVenta, 'ciudad'),
+            baseReplacements
+        ),
+        runDistinctQuery(
+            'ca.id_canal, ca.nombre AS canal_nombre',
+            buildBaseWhere(enrichedParams, baseReplacements, scopeWhereVenta, 'canal'),
             baseReplacements
         )
     ]);
@@ -274,6 +292,13 @@ const getOpcionesFiltros = async (params, auth) => {
             label: (r.ciudad_nombre || '').trim() || 'SIN CIUDAD'
         }));
 
+    const canales = canalesRows
+        .filter((r) => r.id_canal != null)
+        .map((r) => ({
+            value: String(r.id_canal),
+            label: (r.canal_nombre || '').trim() || `CANAL ${r.id_canal}`
+        }));
+
     return {
         periodo: {
             fechaInicio: params.fechaInicioFormatted,
@@ -282,7 +307,8 @@ const getOpcionesFiltros = async (params, auth) => {
         vendedores: dedupeByValue(vendedores).sort(sortByLabel),
         proveedores: dedupeByValue(proveedores).sort(sortByLabel),
         categorias: dedupeByValue(categorias).sort(sortByLabel),
-        ciudades: dedupeByValue(ciudades).sort(sortByLabel)
+        ciudades: dedupeByValue(ciudades).sort(sortByLabel),
+        canales: dedupeByValue(canales).sort(sortByLabel)
     };
 };
 
