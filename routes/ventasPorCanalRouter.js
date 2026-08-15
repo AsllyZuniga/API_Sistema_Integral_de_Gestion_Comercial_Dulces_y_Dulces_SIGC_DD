@@ -6,23 +6,23 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 const ventasPorCanalController = require('../controllers/ventasPorCanalController');
 
 /**
- * Middleware que exige JWT y permite solo Admin (rol 1) o Supervisor (rol 2).
- * Vendedor (rol 3) queda bloqueado por ahora, pendiente de autorización.
+ * Middleware que exige JWT y permite Admin (rol 1), Supervisor (rol 2) o Vendedor (rol 3).
+ * Vendedor ve solo sus datos gracias al scope self en el servicio.
  */
 const requireAdminOrSupervisor = [
     requireAuthJWT,
     (req, res, next) => {
         const idRol = req.auth?.rol ?? req.auth?.idRol ?? req.auth?.rol?.idRol;
-        if (String(idRol) !== '1' && String(idRol) !== '2') {
+        if (String(idRol) !== '1' && String(idRol) !== '2' && String(idRol) !== '3') {
             return res.status(403).send({
-                message: 'Acceso restringido a administradores y supervisores'
+                message: 'Acceso restringido a administradores, supervisores y vendedores'
             });
         }
         return next();
     }
 ];
 
-// RF-001 a RF-004: Admin y Supervisor habilitados. Vendedor requiere permiso aparte.
+// RF-001 a RF-004: Admin, Supervisor y Vendedor habilitados.
 router.get('/', ...requireAdminOrSupervisor, ventasPorCanalController.general);
 
 module.exports = router;
