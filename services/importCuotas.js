@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require('fs');
+const iconv = require('iconv-lite');
 const { Op } = require('sequelize');
 const models = require('../models');
 
@@ -30,6 +31,25 @@ function normalizeText(value) {
 		.replace(/[\u0300-\u036f]/g, '')
 		.toLowerCase()
 		.trim();
+}
+
+function isValidYear(value) {
+	const parsed = Number(value);
+	return Number.isInteger(parsed) && parsed > 1900 && parsed < 3000;
+}
+
+function decodeContent(input) {
+	const buffer = Buffer.isBuffer(input)
+		? input
+		: Buffer.from(String(input ?? ''), 'utf8');
+
+	let decoded = buffer.toString('utf8');
+
+	if (decoded.includes('\uFFFD')) {
+		decoded = iconv.decode(buffer, 'latin1');
+	}
+
+	return decoded.replace(/^\uFEFF/, '');
 }
 
 function detectDelimiter(headerLine) {
@@ -180,16 +200,16 @@ function extractWeekColumns(headers) {
 		});
 }
 
-function resolveYear(weekColumns, optionsYear) {
-	const parsedYear = Number(optionsYear);
-	if (Number.isInteger(parsedYear) && parsedYear > 1900 && parsedYear < 3000) {
-		return parsedYear;
+function resolveYear(weekColumns, optionsYear, csvAnio) {
+	if (isValidYear(csvAnio)) {
+		return Number(csvAnio);
 	}
 
-	const currentYear = new Date().getFullYear();
-	if (!weekColumns.length) return currentYear;
+	if (isValidYear(optionsYear)) {
+		return Number(optionsYear);
+	}
 
-	return currentYear;
+	return new Date().getFullYear();
 }
 
 /**
@@ -282,9 +302,7 @@ async function upsertCuotaMes(payload, transaction) {
 }
 
 async function importFromBuffer(fileContent, options = {}) {
-	const content = Buffer.isBuffer(fileContent)
-		? fileContent.toString('utf8')
-		: String(fileContent ?? '');
+	const content = decodeContent(fileContent);
 
 	const { headers, rows } = parseCsv(content);
 
@@ -292,6 +310,7 @@ async function importFromBuffer(fileContent, options = {}) {
 	const headerNombre = findHeaderByAliases(headers, ['vendedor', 'nombre', 'nombre_vendedor']);
 	const headerCuotaDia = findHeaderByAliases(headers, ['c. diaria', 'c diaria', 'cuota diaria']);
 	const headerCuotaMes = findHeaderByAliases(headers, ['cuota mes', 'cuota mensual']);
+	const headerAnio = findHeaderByAliases(headers, ['anio', 'año', 'year']);
 
 	if (!headerCodigo) {
 		throw new Error('No se encontró el encabezado de código (cod/codigo/codigo_vendedor).');
@@ -308,7 +327,26 @@ async function importFromBuffer(fileContent, options = {}) {
 		throw new Error('No se identificaron columnas de cuota semanal con formato "2 al 6 de febrero".');
 	}
 
-	const year = resolveYear(weekColumns, options.year);
+	let csvAnio = null;
+	if (headerAnio) {
+		const anios = [...new Set(rows
+			.map(row => String(row[headerAnio] ?? '').trim())
+			.filter(Boolean))];
+
+		if (anios.length > 1) {
+			throw new Error(`El CSV contiene años inconsistentes: ${anios.join(', ')}. Use un único archivo por año.`);
+		}
+
+		if (anios.length === 1 && !isValidYear(anios[0])) {
+			throw new Error(`Año inválido en columna "${headerAnio}": ${anios[0]}`);
+		}
+
+		if (anios.length === 1) {
+			csvAnio = Number(anios[0]);
+		}
+	}
+
+	const year = resolveYear(weekColumns, options.year, csvAnio);
 
 	// Permitir override del mes si se proporciona en options
 	// Si no se proporciona, detectar el mes más frecuente en las columnas
@@ -337,12 +375,12 @@ async function importFromBuffer(fileContent, options = {}) {
 	const monthEnd = formatDate(year, mainMonth, getLastDayOfMonth(year, mainMonth));
 
 	const codes = [...new Set(rows
-		.map(row => String(row[headerCodigo] ?? '').trim())
+		.map(row => String(row[headerCodigo] ?? '').trim().padStart(4, '0'))
 		.filter(Boolean))];
 
 	const existingVendedores = await models.vendedor_model.findAll({
 		where: { codigo_vendedor: codes },
-		attributes: ['id_vendedor', 'codigo_vendedor', 'nombre', 'id_usuario']
+		attributes: ['id_vendedor', 'codigo_vendedor', 'nombre', 'id_usuario', 'id_cuotaMes', 'id_cuotaSemana', 'id_cuotaDia']
 	});
 
 	const existingUsuarios = await models.usuario_model.findAll({
@@ -362,10 +400,59 @@ async function importFromBuffer(fileContent, options = {}) {
 		existingVendedores.map(vendedor => [String(vendedor.codigo_vendedor).trim(), vendedor])
 	);
 
+	const mesFkIds = [...new Set(existingVendedores.map(v => v.id_cuotaMes).filter(Boolean))];
+	const semanaFkIds = [...new Set(existingVendedores.map(v => v.id_cuotaSemana).filter(Boolean))];
+	const diaFkIds = [...new Set(existingVendedores.map(v => v.id_cuotaDia).filter(Boolean))];
+
+	const [cuotaMesVigentes, cuotaSemanaVigentes, cuotaDiaVigentes] = await Promise.all([
+		mesFkIds.length ? models.cuotaMes_model.findAll({
+			where: { id_cuotaMes: mesFkIds },
+			attributes: ['id_cuotaMes', 'fecha_fin']
+		}) : [],
+		semanaFkIds.length ? models.cuotaSemana_model.findAll({
+			where: { id_cuotaSemana: semanaFkIds },
+			attributes: ['id_cuotaSemana', 'fecha_fin']
+		}) : [],
+		diaFkIds.length ? models.cuotaDia_model.findAll({
+			where: { id_cuotaDia: diaFkIds },
+			attributes: ['id_cuotaDia', 'fecha_fin']
+		}) : []
+	]);
+
+	const fechaFinByCuota = {
+		mes: new Map(cuotaMesVigentes.map(c => [String(c.id_cuotaMes), c.fecha_fin])),
+		semana: new Map(cuotaSemanaVigentes.map(c => [String(c.id_cuotaSemana), c.fecha_fin])),
+		dia: new Map(cuotaDiaVigentes.map(c => [String(c.id_cuotaDia), c.fecha_fin]))
+	};
+
+	function isNewerOrEqualPeriod(currentFkId, nuevaFechaFin, tipo) {
+		if (!currentFkId) return true;
+		if (!nuevaFechaFin) return false;
+		const fechaFinVigente = fechaFinByCuota[tipo].get(String(currentFkId));
+		if (!fechaFinVigente) return true;
+		return nuevaFechaFin >= fechaFinVigente;
+	}
+
+	function esPeriodoMasViejo(vendedor, nuevaFechaFin) {
+		if (!nuevaFechaFin) return false;
+
+		const fechasVigentes = [
+			vendedor.id_cuotaMes ? fechaFinByCuota.mes.get(String(vendedor.id_cuotaMes)) : null,
+			vendedor.id_cuotaSemana ? fechaFinByCuota.semana.get(String(vendedor.id_cuotaSemana)) : null,
+			vendedor.id_cuotaDia ? fechaFinByCuota.dia.get(String(vendedor.id_cuotaDia)) : null
+		].filter(Boolean);
+
+		if (!fechasVigentes.length) return false;
+
+		const maxFechaVigente = fechasVigentes.sort().at(-1);
+		return nuevaFechaFin < maxFechaVigente;
+	}
+
 	const summary = {
 		year,
 		month_start: monthStart,
 		month_end: monthEnd,
+		anio_origen: csvAnio !== null ? 'csv' : (isValidYear(options.year) ? 'param' : 'default'),
 		rows_total: rows.length,
 		rows_processed: 0,
 		vendedores_creados: 0,
@@ -378,7 +465,7 @@ async function importFromBuffer(fileContent, options = {}) {
 	};
 
 	for (const row of rows) {
-		const codigo = String(row[headerCodigo] ?? '').trim();
+		const codigo = String(row[headerCodigo] ?? '').trim().padStart(4, '0');
 		if (!codigo) continue;
 
 		const nombre = String(row[headerNombre] ?? '').trim() || `VENDEDOR ${codigo}`;
@@ -403,7 +490,7 @@ async function importFromBuffer(fileContent, options = {}) {
 			});
 			vendedorByCode.set(codigo, vendedor);
 			summary.vendedores_creados += 1;
-		} else if (Number(vendedor.id_usuario) !== Number(idUsuarioFromCodigo)) {
+		} else if (Number(vendedor.id_usuario) !== Number(idUsuarioFromCodigo) && !esPeriodoMasViejo(vendedor, monthEnd)) {
 			await vendedor.update({ id_usuario: idUsuarioFromCodigo });
 			vendedor.id_usuario = idUsuarioFromCodigo;
 		}
@@ -462,13 +549,31 @@ async function importFromBuffer(fileContent, options = {}) {
 					summary.cuota_mes_upserts += 1;
 				}
 
+				const nuevoIdCuotaDia = isNewerOrEqualPeriod(vendedor.id_cuotaDia, cuotaDia?.fecha_fin, 'dia')
+					? (cuotaDia?.id_cuotaDia ?? vendedor.id_cuotaDia)
+					: vendedor.id_cuotaDia;
+
+				const nuevoIdCuotaSemana = isNewerOrEqualPeriod(vendedor.id_cuotaSemana, lastCuotaSemana?.fecha_fin, 'semana')
+					? (lastCuotaSemana?.id_cuotaSemana ?? vendedor.id_cuotaSemana)
+					: vendedor.id_cuotaSemana;
+
+				const nuevoIdCuotaMes = isNewerOrEqualPeriod(vendedor.id_cuotaMes, cuotaMes?.fecha_fin, 'mes')
+					? (cuotaMes?.id_cuotaMes ?? vendedor.id_cuotaMes)
+					: vendedor.id_cuotaMes;
+
+				const esViejo = esPeriodoMasViejo(vendedor, monthEnd);
+
 				await vendedor.update({
-					id_usuario: idUsuarioFromCodigo,
-					id_cuotaDia: cuotaDia?.id_cuotaDia ?? vendedor.id_cuotaDia,
-					id_cuotaSemana: lastCuotaSemana?.id_cuotaSemana ?? vendedor.id_cuotaSemana,
-					id_cuotaMes: cuotaMes?.id_cuotaMes ?? vendedor.id_cuotaMes,
-					nombre
+					id_usuario: esViejo ? vendedor.id_usuario : idUsuarioFromCodigo,
+					id_cuotaDia: nuevoIdCuotaDia,
+					id_cuotaSemana: nuevoIdCuotaSemana,
+					id_cuotaMes: nuevoIdCuotaMes,
+					nombre: esViejo ? vendedor.nombre : nombre
 				}, { transaction });
+
+				vendedor.id_cuotaDia = nuevoIdCuotaDia;
+				vendedor.id_cuotaSemana = nuevoIdCuotaSemana;
+				vendedor.id_cuotaMes = nuevoIdCuotaMes;
 			});
 		} catch (error) {
 			summary.errores.push({
@@ -486,7 +591,7 @@ async function importFromFile(filePath, options = {}) {
 		throw new Error('Debe enviar la ruta del archivo CSV.');
 	}
 
-	const content = fs.readFileSync(filePath, 'utf8');
+	const content = fs.readFileSync(filePath);
 	return importFromBuffer(content, options);
 }
 
