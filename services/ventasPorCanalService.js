@@ -12,6 +12,11 @@ const round = (value, decimals = 2) => {
 	return Math.round((toNumber(value) + Number.EPSILON) * factor) / factor;
 };
 
+const calcularParticipacion = (parte, total) => {
+	const t = toNumber(total);
+	return t > 0 ? (toNumber(parte) / t) * 100 : 0;
+};
+
 const toDateOnly = (value) => {
 	if (!value) {
 		const today = new Date();
@@ -253,8 +258,7 @@ const getVentasPorCanal = async (filters = {}, auth = null) => {
 	const detalle = rows.map((row) => {
 		const cuota = 0;
 		const acumulado = toNumber(row.acumulado);
-		const porcentajeCumplimiento = 0;
-		const part = totalAcumulado > 0 ? (acumulado / totalAcumulado) * 100 : 0;
+		const participacion = calcularParticipacion(acumulado, totalAcumulado);
 		const proyectado = diasCorridos > 0 ? (acumulado / diasCorridos) * diasHabiles : 0;
 		const porcentajeCumplimientoProyectado = 0;
 
@@ -263,8 +267,8 @@ const getVentasPorCanal = async (filters = {}, auth = null) => {
 			canal: row.canal,
 			cuota,
 			acumulado,
-			porcentajeCumplimiento: round(porcentajeCumplimiento, 2),
-			part: round(part, 2),
+			porcentajeCumplimiento: round(participacion, 2),
+			part: round(participacion, 2),
 			proyectado: round(proyectado, 2),
 			porcentajeCumplimientoProyectado: round(porcentajeCumplimientoProyectado, 2)
 		};
@@ -284,8 +288,8 @@ const getVentasPorCanal = async (filters = {}, auth = null) => {
 			canal: 'TOTAL X CANAL',
 			cuota: 0,
 			acumulado: totalAcumulado,
-			porcentajeCumplimiento: 0,
-			part: round(totalAcumulado > 0 ? 100 : 0, 2),
+			porcentajeCumplimiento: round(calcularParticipacion(totalAcumulado, totalAcumulado), 2),
+			part: round(calcularParticipacion(totalAcumulado, totalAcumulado), 2),
 			proyectado: totalProyectado,
 			porcentajeCumplimientoProyectado: 0
 		},
@@ -294,5 +298,6 @@ const getVentasPorCanal = async (filters = {}, auth = null) => {
 };
 
 module.exports = {
-	getVentasPorCanal
+	getVentasPorCanal,
+	calcularParticipacion
 };
