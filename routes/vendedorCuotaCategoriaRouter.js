@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/vendedorCuotaCategoriaController');
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
+const { requireAdminCuotas } = require('../middlewares/requireAdminCuotas');
 
 // Rutas especiales PRIMERO (antes de :id)
 /**
@@ -28,7 +29,7 @@ router.get('/vendedor/:id_vendedor', requireAuthJWT, ctrl.getByVendedor);
 router.get('/categoria/:id_categoria', requireAuthJWT, ctrl.getByCategoria);
 router.get('/:id', requireAuthJWT, ctrl.getById);
 router.post('/', requireAuthJWT, ctrl.create);
-router.put('/:id', requireAuthJWT, ctrl.updateById);
+router.put('/:id', requireAdminCuotas, ctrl.updateById);
 router.delete('/:id', requireAuthJWT, ctrl.deleteById);
 
 /**
