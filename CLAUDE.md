@@ -132,6 +132,7 @@ npx sequelize-cli migration:generate   # Crear nueva migration
 | `/api/cuota-dia/:id` | PUT | Editar cuota diaria de vendedor (admin + acceso a cuotas) |
 | `/api/cuota-proveedor/:id` | PUT | Editar cuota de proveedor (admin + acceso a cuotas) |
 | `/api/vendedor-cuota-categoria/:id` | PUT | Editar cuota de categoría asignada a vendedor (admin + acceso a cuotas) |
+| `/api/vendedor-cuota-proveedor/:id` | PUT | Editar cuota de proveedor asignada a vendedor (admin + acceso a cuotas) |
 
 ---
 

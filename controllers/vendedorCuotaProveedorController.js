@@ -53,10 +53,28 @@ async function create(req, res) {
 
 async function updateById(req, res) {
     try {
-        const data = await service.updateById(req.params.id, req.body);
-        res.json(data);
+        if (req.body.cuota === undefined) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere el campo cuota',
+                statusCode: 400
+            });
+        }
+
+        const data = await service.updateById(req.params.id, { cuota: req.body.cuota });
+
+        res.json({
+            success: true,
+            data,
+            message: 'Cuota de proveedor actualizada correctamente'
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            success: false,
+            error: error.message,
+            statusCode
+        });
     }
 }
 

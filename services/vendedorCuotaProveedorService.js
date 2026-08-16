@@ -1,5 +1,19 @@
 const models = require('../models');
 
+class ValidationError extends Error {
+    constructor(message) {
+        super(message);
+        this.statusCode = 400;
+    }
+}
+
+class NotFoundError extends Error {
+    constructor(message) {
+        super(message);
+        this.statusCode = 404;
+    }
+}
+
 // Obtener todas las asignaciones con relaciones
 async function getAll() {
     return await models.vendedorCuotaProveedor_model.findAll({
@@ -55,10 +69,57 @@ async function create(data) {
 }
 
 // Actualizar por id
+// NOTA: este endpoint no edita la asignación (id_vendedor/id_proveedor/id_cuotaProveedor).
+// Edita el VALOR de la cuotaProveedor vinculada a esa asignación, ya que cada
+// asignación tiene su propia fila de cuota (1:1), por lo que el cambio solo afecta
+// a ese vendedor + proveedor + período.
 async function updateById(id, data) {
-    const row = await models.vendedorCuotaProveedor_model.findByPk(id);
-    if (!row) throw new Error('Asignación no encontrada');
-    return await row.update(data);
+    const row = await models.vendedorCuotaProveedor_model.findByPk(id, {
+        include: [
+            { model: models.cuotaProveedor_model, as: 'cuotaProveedor' }
+        ]
+    });
+
+    if (!row) throw new NotFoundError('Asignación de cuota de proveedor no encontrada');
+    if (!row.cuotaProveedor) {
+        throw new NotFoundError('Cuota de proveedor vinculada a la asignación no encontrada');
+    }
+
+    if (Object.keys(data).length === 0) {
+        throw new ValidationError('No se recibieron campos para actualizar');
+    }
+
+    const blockedFields = ['id_vendedor', 'id_proveedor', 'id_cuotaProveedor', 'fecha_inicio', 'fecha_fin'];
+    for (const field of blockedFields) {
+        if (field in data) {
+            throw new ValidationError(`No se permite modificar ${field} de la asignación`);
+        }
+    }
+
+    if (data.cuota === undefined) {
+        throw new ValidationError('Solo se permite actualizar el campo cuota');
+    }
+
+    const cuotaNum = Number(data.cuota);
+    if (Number.isNaN(cuotaNum)) {
+        throw new ValidationError('La cuota debe ser un valor numérico');
+    }
+    if (cuotaNum < 0) {
+        throw new ValidationError('La cuota no puede ser negativa');
+    }
+
+    await row.cuotaProveedor.update({ cuota: cuotaNum });
+
+    // Recargar la asignación con sus relaciones para devolver el valor actualizado
+    const updated = await models.vendedorCuotaProveedor_model.findByPk(id, {
+        include: [
+            { model: models.vendedor_model, as: 'vendedor' },
+            { model: models.proveedor_model, as: 'proveedor' },
+            { model: models.cuotaProveedor_model, as: 'cuotaProveedor' }
+        ]
+    });
+
+    return updated;
 }
 
 // Eliminar por id
