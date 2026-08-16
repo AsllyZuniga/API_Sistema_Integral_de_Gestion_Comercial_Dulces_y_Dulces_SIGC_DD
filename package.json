@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node ./bin/www",
-    "dev": "nodemon ./bin/www"
+    "dev": "nodemon ./bin/www",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
