@@ -40,23 +40,25 @@ module.exports = {
 
     async update(req, res) {
         try {
-            const existing = await cuotaSemanaService.getById(req.params.id);
-            if (!existing) {
-                return res.status(404).send({
-                    message: 'cuotaSemana Not Found'
-                });
-            }
+            const updateData = {};
+            if (req.body.cuota_semana !== undefined) updateData.cuota_semana = req.body.cuota_semana;
+            if (req.body.fecha_inicio !== undefined) updateData.fecha_inicio = req.body.fecha_inicio;
+            if (req.body.fecha_fin !== undefined) updateData.fecha_fin = req.body.fecha_fin;
 
-            const updated = await cuotaSemanaService.updateById(req.params.id, {
-                cuota_semana: req.body.cuota_semana ?? existing.cuota_semana,
-                fecha_inicio: req.body.fecha_inicio ?? existing.fecha_inicio,
-                fecha_fin: req.body.fecha_fin ?? existing.fecha_fin,
-                id_usuario: req.body.id_usuario ?? existing.id_usuario
+            const updated = await cuotaSemanaService.updateById(req.params.id, updateData);
+
+            return res.status(200).send({
+                success: true,
+                data: updated,
+                message: 'Cuota semanal actualizada correctamente'
             });
-
-            return res.status(200).send(updated);
         } catch (error) {
-            return res.status(400).send(error);
+            const statusCode = error.statusCode || 400;
+            return res.status(statusCode).send({
+                success: false,
+                error: error.message,
+                statusCode
+            });
         }
     },
 

@@ -3,6 +3,7 @@ var router = express.Router();
 const { Op } = require('sequelize');
 const db = require('../models');
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
+const { requireAdminCuotas } = require('../middlewares/requireAdminCuotas');
 
 router.get('/', requireAuthJWT, require('../controllers').cuotaDiaController.list);
 router.post('/', requireAuthJWT, require('../controllers').cuotaDiaController.add);
@@ -107,7 +108,7 @@ router.get('/por-dia', requireAuthJWT, async (req, res) => {
 });
 
 router.get('/:id', requireAuthJWT, require('../controllers').cuotaDiaController.getById);
-router.put('/:id', requireAuthJWT, require('../controllers').cuotaDiaController.update);
+router.put('/:id', requireAdminCuotas, require('../controllers').cuotaDiaController.update);
 router.delete('/:id', requireAuthJWT, require('../controllers').cuotaDiaController.delete);
 
 module.exports = router;

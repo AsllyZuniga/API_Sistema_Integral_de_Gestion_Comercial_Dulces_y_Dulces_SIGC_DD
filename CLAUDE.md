@@ -112,6 +112,7 @@ npx sequelize-cli migration:generate   # Crear nueva migration
 - **Header requerido**: `Authorization: Bearer <token>`
 - **Middleware**: `authJwtMiddleware.js` — valida JWT, expone `req.auth`
 - **requireAdmin**: `middlewares/requireAdmin.js` — `requireAuthJWT` + verificación `rol === 1`. Retorna 401/403.
+- **requireAdminCuotas**: `middlewares/requireAdminCuotas.js` — `requireAuthJWT` + `rol === 1` + `accesoCuotas !== false`. Para edición de cuotas.
 - **Rutas públicas**: Login/Registro + rutas sin middleware JWT
 
 ### Endpoints protegidos con requireAdmin
@@ -121,6 +122,14 @@ npx sequelize-cli migration:generate   # Crear nueva migration
 | `/api/usuario/:id` | PUT | Actualizar usuario/cambiar contraseña (solo admin) |
 | `/api/cuotas/usuario/:id_usuario` | DELETE | Eliminar todas las cuotas de un usuario (solo admin) |
 | `/api/admin` | GET | Reportes administrativos |
+
+### Endpoints protegidos con requireAdminCuotas
+
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/api/cuota-mes/:id` | PUT | Editar cuota mensual de vendedor (admin + acceso a cuotas) |
+| `/api/cuota-semana/:id` | PUT | Editar cuota semanal de vendedor (admin + acceso a cuotas) |
+| `/api/cuota-dia/:id` | PUT | Editar cuota diaria de vendedor (admin + acceso a cuotas) |
 
 ---
 
