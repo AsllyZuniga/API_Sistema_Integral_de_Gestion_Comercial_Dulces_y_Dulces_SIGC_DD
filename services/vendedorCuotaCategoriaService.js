@@ -1,4 +1,42 @@
+const { Op } = require('sequelize');
 const models = require('../models');
+
+/**
+ * Valida que un valor sea una fecha en formato YYYY-MM-DD y que represente
+ * una fecha real del calendario.
+ */
+function isValidDateString(value) {
+    if (!value || typeof value !== 'string') return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+
+    return date.getFullYear() === year
+        && date.getMonth() === month - 1
+        && date.getDate() === day;
+}
+
+class ValidationError extends Error {
+    constructor(message) {
+        super(message);
+        this.statusCode = 400;
+    }
+}
+
+class NotFoundError extends Error {
+    constructor(message) {
+        super(message);
+        this.statusCode = 404;
+    }
+}
+
+class ConflictError extends Error {
+    constructor(message) {
+        super(message);
+        this.statusCode = 409;
+    }
+}
 
 // Obtener todas las asignaciones con relaciones
 async function getAll() {
@@ -61,8 +99,58 @@ async function create(data) {
 // Actualizar por id
 async function updateById(id, data) {
     const row = await models.vendedorCuotaCategoria_model.findByPk(id);
-    if (!row) throw new Error('Asignación de cuota de categoría no encontrada');
-    return await row.update(data);
+    if (!row) {
+        throw new NotFoundError('Asignación de cuota de categoría no encontrada');
+    }
+
+    if (!data || Object.keys(data).length === 0) {
+        throw new ValidationError('No se enviaron campos para actualizar');
+    }
+
+    if (data.id_vendedor !== undefined || data.id_categoria !== undefined) {
+        throw new ValidationError('No se permite cambiar el vendedor o la categoría asignados');
+    }
+
+    const dataToUpdate = { ...data };
+
+    // Validar cuota
+    if (dataToUpdate.cuota !== undefined) {
+        const cuotaValue = Number(dataToUpdate.cuota);
+        if (!Number.isFinite(cuotaValue) || cuotaValue < 0) {
+            throw new ValidationError('cuota debe ser un número mayor o igual a 0');
+        }
+        dataToUpdate.cuota = cuotaValue;
+    }
+
+    // Validar rango de fechas
+    if (dataToUpdate.fecha_inicio !== undefined || dataToUpdate.fecha_fin !== undefined) {
+        const fechaInicio = dataToUpdate.fecha_inicio ?? row.fecha_inicio;
+        const fechaFin = dataToUpdate.fecha_fin ?? row.fecha_fin;
+
+        // Normalizar a string YYYY-MM-DD para validación
+        const fechaInicioStr = String(fechaInicio).slice(0, 10);
+        const fechaFinStr = String(fechaFin).slice(0, 10);
+
+        if (!isValidDateString(fechaInicioStr) || !isValidDateString(fechaFinStr)) {
+            throw new ValidationError('fecha_inicio y fecha_fin deben tener formato YYYY-MM-DD válido');
+        }
+
+        if (fechaInicioStr > fechaFinStr) {
+            throw new ValidationError('fecha_inicio no puede ser mayor que fecha_fin');
+        }
+
+        dataToUpdate.fecha_inicio = fechaInicioStr;
+        dataToUpdate.fecha_fin = fechaFinStr;
+    }
+
+    try {
+        return await row.update(dataToUpdate);
+    } catch (error) {
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            throw new ConflictError('Ya existe otra cuota de categoría para el mismo vendedor y período');
+        }
+        throw error;
+    }
 }
 
 // Eliminar por id

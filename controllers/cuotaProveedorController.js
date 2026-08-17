@@ -30,10 +30,33 @@ async function create(req, res) {
 
 async function updateById(req, res) {
     try {
-        const data = await service.updateById(req.params.id, req.body);
-        res.json(data);
+        if ('id_proveedor' in req.body) {
+            return res.status(400).json({
+                success: false,
+                error: 'No se permite cambiar el proveedor asignado',
+                statusCode: 400
+            });
+        }
+
+        const updateData = {};
+        if (req.body.cuota !== undefined) updateData.cuota = req.body.cuota;
+        if (req.body.fecha_inicio !== undefined) updateData.fecha_inicio = req.body.fecha_inicio;
+        if (req.body.fecha_fin !== undefined) updateData.fecha_fin = req.body.fecha_fin;
+
+        const data = await service.updateById(req.params.id, updateData);
+
+        res.json({
+            success: true,
+            data,
+            message: 'Cuota de proveedor actualizada correctamente'
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        const statusCode = error.statusCode || 500;
+        res.status(statusCode).json({
+            success: false,
+            error: error.message,
+            statusCode
+        });
     }
 }
 

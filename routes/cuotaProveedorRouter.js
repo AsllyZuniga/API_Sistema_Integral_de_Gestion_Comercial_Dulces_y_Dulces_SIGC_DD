@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/cuotaProveedorController');
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
+const { requireAdminCuotas } = require('../middlewares/requireAdminCuotas');
 
 /**
  * GET /cuota-proveedor
@@ -32,7 +33,7 @@ router.post('/', requireAuthJWT, ctrl.create);
  * PUT /cuota-proveedor/:id
  * Actualiza una cuota de proveedor
  */
-router.put('/:id', requireAuthJWT, ctrl.updateById);
+router.put('/:id', requireAdminCuotas, ctrl.updateById);
 
 /**
  * DELETE /cuota-proveedor/:id

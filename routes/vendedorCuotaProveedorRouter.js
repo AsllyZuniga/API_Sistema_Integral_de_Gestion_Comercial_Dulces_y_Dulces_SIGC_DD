@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/vendedorCuotaProveedorController');
 const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
+const { requireAdminCuotas } = require('../middlewares/requireAdminCuotas');
 
 router.get('/',                          requireAuthJWT, ctrl.getAll);
 router.get('/vendedor/:id_vendedor',     requireAuthJWT, ctrl.getByVendedor);
@@ -9,7 +10,7 @@ router.get('/proveedor/:id_proveedor',   requireAuthJWT, ctrl.getByProveedor);
 router.post('/upload',                   requireAuthJWT, ctrl.uploadCSV);
 router.get('/:id',                       requireAuthJWT, ctrl.getById);
 router.post('/',                         requireAuthJWT, ctrl.create);
-router.put('/:id',                       requireAuthJWT, ctrl.updateById);
+router.put('/:id',                       requireAdminCuotas, ctrl.updateById);
 router.delete('/:id',                    requireAuthJWT, ctrl.deleteById);
 
 /**
