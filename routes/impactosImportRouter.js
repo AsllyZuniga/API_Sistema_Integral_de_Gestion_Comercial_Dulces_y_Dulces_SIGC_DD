@@ -44,7 +44,7 @@ router.get('/', requireAuthJWT, controller.getInstrucciones);
  * curl -X POST http://localhost:3000/api/impactos-import/clientes/cargar \
  *   -F "archivo=@impactos_clientes.csv"
  */
-router.post('/clientes/cargar', requireAdmin, upload.single('archivo'), controller.cargar);
+router.post('/:tipo/cargar', requireAdmin, upload.single('archivo'), controller.cargar);
 
 /**
  * POST /api/impactos-import/categorias/cargar
@@ -54,7 +54,6 @@ router.post('/clientes/cargar', requireAdmin, upload.single('archivo'), controll
  * curl -X POST http://localhost:3000/api/impactos-import/categorias/cargar \
  *   -F "archivo=@impactos_categoria.csv"
  */
-router.post('/categorias/cargar', requireAdmin, upload.single('archivo'), controller.cargar);
 
 /**
  * POST /api/impactos-import/proveedores/cargar
@@ -64,7 +63,6 @@ router.post('/categorias/cargar', requireAdmin, upload.single('archivo'), contro
  * curl -X POST http://localhost:3000/api/impactos-import/proveedores/cargar \
  *   -F "archivo=@impactos_proveedores.csv"
  */
-router.post('/proveedores/cargar', requireAdmin, upload.single('archivo'), controller.cargar);
 
 /**
  * PUT /api/impactos-import/:tipo/:id

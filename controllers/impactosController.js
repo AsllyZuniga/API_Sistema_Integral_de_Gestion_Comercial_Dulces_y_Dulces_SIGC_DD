@@ -49,4 +49,22 @@ async function categorias(req, res) {
     return handle(req, res, 'categorias');
 }
 
-module.exports = { vendedores, proveedores, categorias };
+async function diagnostico(req, res) {
+    try {
+        const scope = await getVendedorScopeFromAuth(req.auth);
+        const params = {
+            tipo: req.query.tipo || 'cliente',
+            codigoVendedor: req.query.vendedor || req.query.codVendedor,
+            dimCodigo: req.query.proveedor || req.query.categoria || req.query.dim,
+            fechaInicio: req.query.fechaInicio || undefined,
+            fechaFin: req.query.fechaFin || undefined,
+            scope
+        };
+        const data = await service.diagnosticarImpactos(params);
+        return res.status(200).send(data);
+    } catch (error) {
+        return res.status(400).send({ success: false, error: error.message });
+    }
+}
+
+module.exports = { vendedores, proveedores, categorias, diagnostico };

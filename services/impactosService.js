@@ -116,148 +116,400 @@ function formatRow(cuota, impactos) {
     };
 }
 
-async function calcularVendedores(ctx) {
-    const { fechaInicio, fechaFin, tipoPeriodo, idsCanalCiudad, replacements, scope, filtros } = ctx;
+function buildVentaValidaConds(prefix = 'v') {
+    return [
+        `${prefix}.valor_neto > 0`,
+        `UPPER(TRIM(${prefix}.numero_documento)) NOT LIKE 'NC%'`
+    ];
+}
 
-    const cuotaConds = [];
-    if (fechaInicio) { cuotaConds.push('cu.fecha_fin >= :fechaInicio'); replacements.fechaInicio = fechaInicio; }
-    if (fechaFin) { cuotaConds.push('cu.fecha_inicio <= :fechaFin'); replacements.fechaFin = fechaFin; }
-    cuotaConds.push('cu.tipo_periodo IN (:tipoPeriodo)');
-    replacements.tipoPeriodo = tipoPeriodo;
+async function obtenerPeriodosCuota({ cuotaTable, fechaInicio, fechaFin, tipoPeriodo, scope, idsCanalCiudad, filtros }) {
+    const replacements = { fechaInicio, fechaFin, tipoPeriodo };
+    const conds = [
+        'cu.fecha_fin >= :fechaInicio',
+        'cu.fecha_inicio <= :fechaFin',
+        'cu.tipo_periodo IN (:tipoPeriodo)'
+    ];
+
     const scopeCuota = buildScopeCond(scope, 'cu.id_vendedor', replacements, 'cq');
-    if (scopeCuota) cuotaConds.push(scopeCuota);
+    if (scopeCuota) conds.push(scopeCuota);
 
-    const ventaConds = ['v.valor_neto > 0'];
-    if (fechaInicio) ventaConds.push('v.fecha >= :fechaInicio');
-    if (fechaFin) ventaConds.push('v.fecha <= :fechaFin');
-    const scopeVenta = buildScopeCond(scope, 'v.id_vendedor', replacements, 'vv');
-    if (scopeVenta) ventaConds.push(scopeVenta);
-    const condCc = buildCondCanalCiudad(idsCanalCiudad, 'v.id_vendedor', replacements, 'ccVend');
-    if (condCc) ventaConds.push(condCc);
+    const condCcCuota = buildCondCanalCiudad(idsCanalCiudad, 'cu.id_vendedor', replacements, 'ccCuota');
+    if (condCcCuota) conds.push(condCcCuota);
 
-    const outerConds = ['(COALESCE(cq.cuota_total, 0) > 0 OR COALESCE(im.impactos, 0) > 0)'];
-    const scopeOuter = buildScopeCond(scope, 'v.id_vendedor', replacements, 'vo');
-    if (scopeOuter) outerConds.push(scopeOuter);
-
-    if (filtros.vendedor && toArr(filtros.vendedor).length) {
+    if (filtros && filtros.vendedor && toArr(filtros.vendedor).length) {
         const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
         if (ids.length) {
             replacements.vendFiltro = ids;
-            outerConds.push('v.id_vendedor IN (:vendFiltro)');
+            conds.push('cu.id_vendedor IN (:vendFiltro)');
         } else {
-            outerConds.push('v.id_vendedor = -1');
+            conds.push('cu.id_vendedor = -1');
         }
     }
-    const condCcOuter = buildCondCanalCiudad(idsCanalCiudad, 'v.id_vendedor', replacements, 'ccVendOuter');
-    if (condCcOuter) outerConds.push(condCcOuter);
 
     const sql = `
         SELECT
-            v.codigo_vendedor AS codigo,
-            v.nombre AS nombre,
-            COALESCE(cq.cuota_total, 0)::int AS "cuotaImpactos",
-            COALESCE(im.impactos, 0)::int AS "impactos"
-        FROM vendedor v
-        LEFT JOIN (
-            SELECT cu.id_vendedor, SUM(cu.cuota) AS cuota_total
-            FROM ${TIPOS.vendedores.cuotaTable} cu
-            WHERE ${cuotaConds.join(' AND ')}
-            GROUP BY cu.id_vendedor
-        ) cq ON cq.id_vendedor = v.id_vendedor
-        LEFT JOIN (
-            SELECT v.id_vendedor, COUNT(DISTINCT v.id_cliente) AS impactos
-            FROM venta v
-            WHERE ${ventaConds.join(' AND ')}
-            GROUP BY v.id_vendedor
-        ) im ON im.id_vendedor = v.id_vendedor
-        WHERE ${outerConds.join(' AND ')}
-        ORDER BY v.codigo_vendedor ASC
+            cu.id_vendedor,
+            cu.tipo_periodo,
+            cu.fecha_inicio,
+            cu.fecha_fin,
+            SUM(cu.cuota)::numeric AS cuota_total
+        FROM ${cuotaTable} cu
+        WHERE ${conds.join(' AND ')}
+        GROUP BY cu.id_vendedor, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
+        ORDER BY cu.id_vendedor, cu.tipo_periodo, cu.fecha_inicio
     `;
 
-    const data = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
-    const rows = data.map(r => ({
-        vendedor: `${padCode(r.codigo)} - ${r.nombre}`,
-        ...formatRow(r.cuotaImpactos, r.impactos)
-    }));
+    return sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
+}
+
+async function calcularImpactosVendedorPeriodo({ idVendedor, fechaInicio, fechaFin }) {
+    const replacements = { idVendedor, fechaInicio, fechaFin };
+    const conds = [
+        ...buildVentaValidaConds('v'),
+        'v.fecha >= :fechaInicio',
+        'v.fecha <= :fechaFin',
+        'v.id_vendedor = :idVendedor'
+    ];
+
+    const sql = `
+        SELECT COUNT(DISTINCT v.id_cliente) AS impactos
+        FROM venta v
+        WHERE ${conds.join(' AND ')}
+    `;
+
+    const [row] = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
+    return Number(row?.impactos || 0);
+}
+
+async function obtenerPeriodosDimensionCuota({ cuotaTable, dimCol, fechaInicio, fechaFin, tipoPeriodo, scope, idsCanalCiudad, filtros }) {
+    const replacements = { fechaInicio, fechaFin, tipoPeriodo };
+    const conds = [
+        'cu.fecha_fin >= :fechaInicio',
+        'cu.fecha_inicio <= :fechaFin',
+        'cu.tipo_periodo IN (:tipoPeriodo)'
+    ];
+
+    const scopeCuota = buildScopeCond(scope, 'cu.id_vendedor', replacements, 'cq');
+    if (scopeCuota) conds.push(scopeCuota);
+
+    const condCcCuota = buildCondCanalCiudad(idsCanalCiudad, 'cu.id_vendedor', replacements, 'ccCuota');
+    if (condCcCuota) conds.push(condCcCuota);
+
+    if (filtros && filtros.vendedor && toArr(filtros.vendedor).length) {
+        const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
+        if (ids.length) {
+            replacements.vendFiltro = ids;
+            conds.push('cu.id_vendedor IN (:vendFiltro)');
+        } else {
+            conds.push('cu.id_vendedor = -1');
+        }
+    }
+
+    const dimFilters = filtros ? (dimCol === 'id_proveedor' ? toArr(filtros.proveedor) : toArr(filtros.categoria)) : [];
+    if (dimFilters.length) {
+        replacements.dimFiltro = dimFilters;
+        conds.push(`cu.${dimCol} IN (:dimFiltro)`);
+    }
+
+    const sql = `
+        SELECT
+            cu.id_vendedor,
+            cu.${dimCol} AS id_dim,
+            cu.tipo_periodo,
+            cu.fecha_inicio,
+            cu.fecha_fin,
+            SUM(cu.cuota)::numeric AS cuota_total
+        FROM ${cuotaTable} cu
+        WHERE ${conds.join(' AND ')}
+        GROUP BY cu.id_vendedor, cu.${dimCol}, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
+        ORDER BY cu.id_vendedor, cu.${dimCol}, cu.tipo_periodo, cu.fecha_inicio
+    `;
+
+    return sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
+}
+
+async function calcularImpactosDimensionPeriodo({ dim, idVendedor, idDim, fechaInicio, fechaFin }) {
+    const dimCol = dim === 'proveedor' ? 'id_proveedor' : 'id_categoria';
+    const replacements = { idVendedor, idDim, fechaInicio, fechaFin };
+
+    // Para categoría se deduplica por (proveedor + cliente), no solo por cliente.
+    // Esto refleja que un mismo cliente comprando la misma categoría a proveedores
+    // distintos genera un impacto por cada proveedor en la categoría.
+    const countExpr = dim === 'categoria'
+        ? "COUNT(DISTINCT CONCAT(i.id_proveedor::text, '-', v.id_cliente::text))"
+        : 'COUNT(DISTINCT v.id_cliente)';
+
+    const sql = `
+        SELECT ${countExpr} AS impactos
+        FROM venta v
+        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+        JOIN item i ON i.id_item = dv.id_item
+        WHERE v.id_vendedor = :idVendedor
+          AND i.${dimCol} = :idDim
+          AND v.valor_neto > 0
+          AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%'
+          AND v.fecha >= :fechaInicio
+          AND v.fecha <= :fechaFin
+    `;
+
+    const [row] = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
+    return Number(row?.impactos || 0);
+}
+
+async function calcularVendedores(ctx) {
+    const { fechaInicio, fechaFin, tipoPeriodo, idsCanalCiudad, scope, filtros } = ctx;
+
+    const periodos = await obtenerPeriodosCuota({
+        cuotaTable: TIPOS.vendedores.cuotaTable,
+        fechaInicio,
+        fechaFin,
+        tipoPeriodo,
+        scope,
+        idsCanalCiudad,
+        filtros
+    });
+
+    if (!periodos.length) {
+        return { success: true, tipo: 'vendedores', total: 0, rows: [] };
+    }
+
+    const idsVendedor = [...new Set(periodos.map(p => p.id_vendedor))];
+    const vendedorRows = await sequelize.query(
+        'SELECT id_vendedor, codigo_vendedor, nombre FROM vendedor WHERE id_vendedor IN (:ids)',
+        { replacements: { ids: idsVendedor }, type: QueryTypes.SELECT }
+    );
+    const vendedorMap = new Map(vendedorRows.map(v => [v.id_vendedor, v]));
+
+    const rows = [];
+    for (const periodo of periodos) {
+        const impactos = await calcularImpactosVendedorPeriodo({
+            idVendedor: periodo.id_vendedor,
+            fechaInicio: periodo.fecha_inicio,
+            fechaFin: periodo.fecha_fin
+        });
+
+        const v = vendedorMap.get(periodo.id_vendedor);
+        const cuota = Number(periodo.cuota_total) || 0;
+
+        rows.push({
+            vendedor: v ? `${padCode(v.codigo_vendedor)} - ${v.nombre}` : `ID ${periodo.id_vendedor}`,
+            tipoPeriodo: periodo.tipo_periodo,
+            fechaInicio: periodo.fecha_inicio,
+            fechaFin: periodo.fecha_fin,
+            ...formatRow(cuota, impactos)
+        });
+    }
 
     return { success: true, tipo: 'vendedores', total: rows.length, rows };
 }
 
 async function calcularDimension(ctx, dim) {
-    const { cuotaTable, fechaInicio, fechaFin, tipoPeriodo, idsCanalCiudad, replacements, scope, filtros } = ctx;
+    const { cuotaTable, fechaInicio, fechaFin, tipoPeriodo, idsCanalCiudad, scope, filtros } = ctx;
     const isProv = dim === 'proveedor';
     const dimTable = isProv ? 'proveedor' : 'categoria';
     const dimCol = isProv ? 'id_proveedor' : 'id_categoria';
+    const dimKey = isProv ? 'proveedor' : 'categoria';
 
-    const cuotaConds = [];
-    if (fechaInicio) { cuotaConds.push('cu.fecha_fin >= :fechaInicio'); replacements.fechaInicio = fechaInicio; }
-    if (fechaFin) { cuotaConds.push('cu.fecha_inicio <= :fechaFin'); replacements.fechaFin = fechaFin; }
-    cuotaConds.push('cu.tipo_periodo IN (:tipoPeriodo)');
-    replacements.tipoPeriodo = tipoPeriodo;
-    const scopeCuota = buildScopeCond(scope, 'cu.id_vendedor', replacements, 'cq');
-    if (scopeCuota) cuotaConds.push(scopeCuota);
+    const periodos = await obtenerPeriodosDimensionCuota({
+        cuotaTable,
+        dimCol,
+        fechaInicio,
+        fechaFin,
+        tipoPeriodo,
+        scope,
+        idsCanalCiudad,
+        filtros
+    });
 
-    const dimFilters = isProv ? toArr(filtros.proveedor) : toArr(filtros.categoria);
-    if (dimFilters.length) {
-        replacements.dimFiltro = dimFilters;
-        cuotaConds.push(`cu.${dimCol} IN (:dimFiltro)`);
+    if (!periodos.length) {
+        return { success: true, tipo: isProv ? 'proveedores' : 'categorias', total: 0, rows: [] };
     }
 
-    const ventaConds = ['v.valor_neto > 0'];
-    if (fechaInicio) ventaConds.push('v.fecha >= :fechaInicio');
-    if (fechaFin) ventaConds.push('v.fecha <= :fechaFin');
-    const scopeVenta = buildScopeCond(scope, 'v.id_vendedor', replacements, 'vv');
-    if (scopeVenta) ventaConds.push(scopeVenta);
-    const condCc = buildCondCanalCiudad(idsCanalCiudad, 'v.id_vendedor', replacements, 'ccVend');
-    if (condCc) ventaConds.push(condCc);
-    if (dimFilters.length) ventaConds.push(`i.${dimCol} IN (:dimFiltro)`);
+    const idsVendedor = [...new Set(periodos.map(p => p.id_vendedor))];
+    const vendedorRows = await sequelize.query(
+        'SELECT id_vendedor, codigo_vendedor, nombre FROM vendedor WHERE id_vendedor IN (:ids)',
+        { replacements: { ids: idsVendedor }, type: QueryTypes.SELECT }
+    );
+    const vendedorMap = new Map(vendedorRows.map(v => [v.id_vendedor, v]));
 
-    if (filtros.vendedor && toArr(filtros.vendedor).length) {
-        const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
-        if (ids.length) {
-            replacements.vendFiltro = ids;
-            ventaConds.push('v.id_vendedor IN (:vendFiltro)');
-        } else {
-            ventaConds.push('v.id_vendedor = -1');
+    const idsDim = [...new Set(periodos.map(p => p.id_dim))];
+    const dimRows = await sequelize.query(
+        `SELECT ${dimCol} AS id_dim, nombre FROM ${dimTable} WHERE ${dimCol} IN (:ids)`,
+        { replacements: { ids: idsDim }, type: QueryTypes.SELECT }
+    );
+    const dimMap = new Map(dimRows.map(d => [d.id_dim, d]));
+
+    const rows = [];
+    for (const periodo of periodos) {
+        const impactos = await calcularImpactosDimensionPeriodo({
+            dim,
+            idVendedor: periodo.id_vendedor,
+            idDim: periodo.id_dim,
+            fechaInicio: periodo.fecha_inicio,
+            fechaFin: periodo.fecha_fin
+        });
+
+        const v = vendedorMap.get(periodo.id_vendedor);
+        const d = dimMap.get(periodo.id_dim);
+        const cuota = Number(periodo.cuota_total) || 0;
+
+        rows.push({
+            vendedor: v ? `${padCode(v.codigo_vendedor)} - ${v.nombre}` : `ID ${periodo.id_vendedor}`,
+            [dimKey]: isProv ? d?.nombre : extractCategoryName(d?.nombre),
+            tipoPeriodo: periodo.tipo_periodo,
+            fechaInicio: periodo.fecha_inicio,
+            fechaFin: periodo.fecha_fin,
+            ...formatRow(cuota, impactos)
+        });
+    }
+
+    return { success: true, tipo: isProv ? 'proveedores' : 'categorias', total: rows.length, rows };
+}
+
+async function resolverProveedorPorCodigo(codigo) {
+    const rows = await sequelize.query(
+        'SELECT id_proveedor FROM proveedor WHERE codigo = :cod OR nombre = :cod',
+        { replacements: { cod: String(codigo ?? '').trim() }, type: QueryTypes.SELECT }
+    );
+    return rows.map(r => r.id_proveedor);
+}
+
+async function resolverCategoriaPorNombre(nombre) {
+    const buscado = String(nombre ?? '').trim();
+    if (!buscado) return [];
+
+    // Primero intentar coincidencia exacta con el nombre completo de BD.
+    const exact = await sequelize.query(
+        'SELECT id_categoria FROM categoria WHERE nombre = :nom',
+        { replacements: { nom: buscado }, type: QueryTypes.SELECT }
+    );
+    if (exact.length) return exact.map(r => r.id_categoria);
+
+    // Si no, buscar comparando la parte descriptiva (sin el prefijo "XXXX - ").
+    const all = await sequelize.query(
+        'SELECT id_categoria, nombre FROM categoria',
+        { type: QueryTypes.SELECT }
+    );
+    const matches = all.filter(c => extractCategoryName(c.nombre) === buscado);
+    return matches.map(r => r.id_categoria);
+}
+
+async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodigo, fechaInicio, fechaFin, scope }) {
+    if (!codigoVendedor) throw new Error('codigoVendedor es requerido');
+    if (!fechaInicio || !fechaFin) throw new Error('fechaInicio y fechaFin son requeridos');
+    if (!['cliente', 'proveedor', 'categoria'].includes(tipo)) {
+        throw new Error('tipo debe ser cliente, proveedor o categoria');
+    }
+
+    const idsVend = await resolverVendedoresPorCodigo(codigoVendedor);
+    if (!idsVend.length) throw new Error(`Vendedor con código ${codigoVendedor} no encontrado`);
+
+    let idVendedor = idsVend[0];
+
+    if (scope && scope.tipo !== 'all') {
+        const allowed = scope.tipo === 'self' ? [scope.idVendedor] : scope.idsVendedor;
+        const intersection = idsVend.filter(id => allowed.includes(id));
+        if (!intersection.length) {
+            throw new Error('Vendedor fuera del alcance de su rol');
         }
+        idVendedor = intersection[0];
     }
 
-    const outerConds = ['(COALESCE(cq.cuota_total, 0) > 0 OR COALESCE(im.impactos, 0) > 0)'];
+    let idDim = null;
+    let dimInfo = null;
+    if (tipo === 'proveedor') {
+        if (!dimCodigo) throw new Error('dimCodigo es requerido para tipo=proveedor');
+        const ids = await resolverProveedorPorCodigo(dimCodigo);
+        if (!ids.length) throw new Error(`Proveedor ${dimCodigo} no encontrado`);
+        idDim = ids[0];
+        const [info] = await sequelize.query(
+            'SELECT id_proveedor, codigo, nombre FROM proveedor WHERE id_proveedor = :id',
+            { replacements: { id: idDim }, type: QueryTypes.SELECT }
+        );
+        dimInfo = info;
+    } else if (tipo === 'categoria') {
+        if (!dimCodigo) throw new Error('dimCodigo es requerido para tipo=categoria');
+        const ids = await resolverCategoriaPorNombre(dimCodigo);
+        if (!ids.length) throw new Error(`Categoría ${dimCodigo} no encontrada`);
+        idDim = ids[0];
+        const [info] = await sequelize.query(
+            'SELECT id_categoria, nombre FROM categoria WHERE id_categoria = :id',
+            { replacements: { id: idDim }, type: QueryTypes.SELECT }
+        );
+        dimInfo = info;
+    }
 
-    const sql = `
-        SELECT
-            p.nombre AS nombre,
-            COALESCE(cq.cuota_total, 0)::int AS "cuotaImpactos",
-            COALESCE(im.impactos, 0)::int AS "impactos"
-        FROM (SELECT DISTINCT nombre FROM ${dimTable}) p
-        LEFT JOIN (
-            SELECT dp.nombre AS dim_nombre, SUM(cu.cuota) AS cuota_total
-            FROM ${cuotaTable} cu
-            JOIN ${dimTable} dp ON dp.${dimCol} = cu.${dimCol}
-            WHERE ${cuotaConds.join(' AND ')}
-            GROUP BY dp.nombre
-        ) cq ON cq.dim_nombre = p.nombre
-        LEFT JOIN (
-            SELECT dp.nombre AS dim_nombre, COUNT(DISTINCT v.id_cliente) AS impactos
+    const vendedorRows = await sequelize.query(
+        'SELECT id_vendedor, codigo_vendedor, nombre FROM vendedor WHERE id_vendedor = :id',
+        { replacements: { id: idVendedor }, type: QueryTypes.SELECT, plain: true }
+    );
+
+    const replacements = { idVendedor, fechaInicio, fechaFin };
+    let sqlDiagnostico;
+    let impactos;
+
+    if (tipo === 'cliente') {
+        sqlDiagnostico = `
+            SELECT
+                COUNT(*) AS total_ventas,
+                SUM(CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN 1 ELSE 0 END) AS ventas_validas,
+                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN 1 ELSE 0 END) AS nc_descartadas,
+                SUM(CASE WHEN v.valor_neto <= 0 THEN 1 ELSE 0 END) AS valor_invalido_descartado,
+                COUNT(DISTINCT CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN v.id_cliente END) AS clientes_unicos_validos
+            FROM venta v
+            WHERE v.id_vendedor = :idVendedor
+              AND v.fecha >= :fechaInicio
+              AND v.fecha <= :fechaFin
+        `;
+        impactos = await calcularImpactosVendedorPeriodo({ idVendedor, fechaInicio, fechaFin });
+    } else {
+        const dimCol = tipo === 'proveedor' ? 'id_proveedor' : 'id_categoria';
+        replacements.idDim = idDim;
+
+        const clientesExpr = tipo === 'categoria'
+            ? "COUNT(DISTINCT CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN CONCAT(i.id_proveedor::text, '-', v.id_cliente::text) END)"
+            : "COUNT(DISTINCT CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN v.id_cliente END)";
+
+        sqlDiagnostico = `
+            SELECT
+                COUNT(*) AS total_ventas,
+                SUM(CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN 1 ELSE 0 END) AS ventas_validas,
+                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN 1 ELSE 0 END) AS nc_descartadas,
+                SUM(CASE WHEN v.valor_neto <= 0 THEN 1 ELSE 0 END) AS valor_invalido_descartado,
+                ${clientesExpr} AS clientes_unicos_validos
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item i ON i.id_item = dv.id_item
-            JOIN ${dimTable} dp ON dp.${dimCol} = i.${dimCol}
-            WHERE ${ventaConds.join(' AND ')}
-            GROUP BY dp.nombre
-        ) im ON im.dim_nombre = p.nombre
-        WHERE ${outerConds.join(' AND ')}
-        ORDER BY p.nombre ASC
-    `;
+            WHERE v.id_vendedor = :idVendedor
+              AND i.${dimCol} = :idDim
+              AND v.fecha >= :fechaInicio
+              AND v.fecha <= :fechaFin
+        `;
+        impactos = await calcularImpactosDimensionPeriodo({ dim: tipo, idVendedor, idDim, fechaInicio, fechaFin });
+    }
 
-    const data = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
-    const rows = data.map(r => {
-        const row = formatRow(r.cuotaImpactos, r.impactos);
-        row[dim] = isProv ? r.nombre : extractCategoryName(r.nombre);
-        return row;
-    });
+    const [diagnostico] = await sequelize.query(sqlDiagnostico, { replacements, type: QueryTypes.SELECT });
 
-    return { success: true, tipo: isProv ? 'proveedores' : 'categorias', total: rows.length, rows };
+    return {
+        success: true,
+        tipo,
+        vendedor: {
+            id: vendedorRows?.id_vendedor,
+            codigo: vendedorRows?.codigo_vendedor,
+            nombre: vendedorRows?.nombre
+        },
+        dimension: dimInfo,
+        periodo: { fechaInicio, fechaFin },
+        diagnostico: {
+            total_ventas: Number(diagnostico.total_ventas) || 0,
+            ventas_validas: Number(diagnostico.ventas_validas) || 0,
+            nc_descartadas: Number(diagnostico.nc_descartadas) || 0,
+            valor_invalido_descartado: Number(diagnostico.valor_invalido_descartado) || 0,
+            clientes_unicos_validos: Number(diagnostico.clientes_unicos_validos) || 0
+        },
+        impactos
+    };
 }
 
 async function calcularImpactos(tipo, filtros = {}, scope = null) {
@@ -291,5 +543,6 @@ async function calcularImpactos(tipo, filtros = {}, scope = null) {
 
 module.exports = {
     calcularImpactos,
+    diagnosticarImpactos,
     _test: { toArr, padCode, extractCategoryName, buildScopeCond }
 };

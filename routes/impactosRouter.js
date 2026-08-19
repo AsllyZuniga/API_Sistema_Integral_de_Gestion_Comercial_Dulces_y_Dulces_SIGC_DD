@@ -7,11 +7,12 @@ const { requireAuthJWT } = require('../middlewares/authJwtMiddleware');
 
 /**
  * GET /api/impactos/vendedores
- * Impactos por VENDEDOR (tabla agregada):
- *  - cuotaImpactos (cuota MENSUAL/SEMANAL de impactos_cliente)
- *  - impactos       (clientes con venta > 0 en el periodo)
- *  - porcCump       (impactos / cuota * 100)
- *  - faltan         (cuota - impactos)
+ * Impactos por VENDEDOR:
+ *  - una fila por cada período existente en impactos_cliente
+ *  - cuotaImpactos (cuota del período)
+ *  - impactos (clientes únicos impactados dentro del período)
+ *  - porcCump (impactos / cuota * 100)
+ *  - faltan (cuota - impactos)
  *
  * Query: fechaInicio, fechaFin, tipoPeriodo (SEMANAL|MENSUAL),
  *        vendedor (solo admin), canal, ciudad
@@ -29,5 +30,13 @@ router.get('/proveedores', requireAuthJWT, controller.proveedores);
  * Impactos por CATEGORÍA (agregado sobre impactos_categoria + ventas).
  */
 router.get('/categorias', requireAuthJWT, controller.categorias);
+
+/**
+ * GET /api/impactos/diagnostico
+ * Endpoint de diagnóstico para validar cálculo de impactos por vendedor.
+ *
+ * Query: vendedor (código), fechaInicio, fechaFin
+ */
+router.get('/diagnostico', requireAuthJWT, controller.diagnostico);
 
 module.exports = router;
