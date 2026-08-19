@@ -45,6 +45,8 @@ const cuotaBulkRouter = require('./routes/cuotaBulkRouter');
 const { startRangoDiasScheduler } = require('./services/rangoDiasSchedulerService');
 const exportRoutes = require('./routes/exportRoutes');
 const filtrosRouter = require('./routes/filtrosRouter');
+const impactosImportRouter = require('./routes/impactosImportRouter');
+const impactosRouter = require('./routes/impactosRouter');
 const { apiKeyOrJwt } = require('./middlewares/apiKeyMiddleware');
 
 
@@ -146,6 +148,8 @@ app.use('/api/items-vendidos', itemsVendidosRouter);
 app.use('/export', exportRoutes);
 app.use("/", exportRoutes);
 app.use('/api/filtros', filtrosRouter);
+app.use('/api/impactos-import', impactosImportRouter);
+app.use('/api/impactos', impactosRouter);
 
 
 app.get('/health', (req, res) => {

@@ -45,6 +45,9 @@ const cuotaProveedor_model = require('./cuotaProveedor')(sequelize);
 const vendedorCuotaProveedor_model = require('./vendedorCuotaProveedor')(sequelize);
 const vendedorCuotaCategoria_model = require('./vendedorCuotaCategoria')(sequelize);
 const rango_dias_model = require('./rango_dias')(sequelize);
+const impactosCliente_model = require('./impactosCliente')(sequelize);
+const impactosCategoria_model = require('./impactosCategoria')(sequelize);
+const impactosProveedor_model = require('./impactosProveedor')(sequelize);
 
 // Define associations/relationships
 // Jerarquía de categorías
@@ -162,7 +165,10 @@ module.exports = {
   cuotaProveedor_model,
   vendedorCuotaProveedor_model,
   vendedorCuotaCategoria_model,
-  rango_dias_model
+  rango_dias_model,
+  impactosCliente_model,
+  impactosCategoria_model,
+  impactosProveedor_model
 };
 // Cuotas relaciones
 cuotaDia_model.belongsTo(usuario_model, {
@@ -203,6 +209,9 @@ module.exports.cuotaCategoria_model = cuotaCategoria_model;
 module.exports.cuotaProveedor_model = cuotaProveedor_model;
 module.exports.vendedorCuotaProveedor_model = vendedorCuotaProveedor_model;
 module.exports.vendedorCuotaCategoria_model = vendedorCuotaCategoria_model;
+module.exports.impactosCliente_model = impactosCliente_model;
+module.exports.impactosCategoria_model = impactosCategoria_model;
+module.exports.impactosProveedor_model = impactosProveedor_model;
 
 // ── VendedorCuotaProveedor (tabla intermedia) ──────────────────────────
 vendedor_model.hasMany(vendedorCuotaProveedor_model, {
@@ -277,4 +286,48 @@ categoria_model.belongsToMany(vendedor_model, {
   foreignKey: 'id_categoria',
   otherKey: 'id_vendedor',
   as: 'vendedoresConCuota'
+});
+
+// ── Impactos (cliente / categoria / proveedor) ────────────────────────────────
+vendedor_model.hasMany(impactosCliente_model, {
+  foreignKey: 'id_vendedor',
+  as: 'impactosCliente'
+});
+impactosCliente_model.belongsTo(vendedor_model, {
+  foreignKey: 'id_vendedor',
+  as: 'vendedor'
+});
+
+vendedor_model.hasMany(impactosCategoria_model, {
+  foreignKey: 'id_vendedor',
+  as: 'impactosCategoria'
+});
+impactosCategoria_model.belongsTo(vendedor_model, {
+  foreignKey: 'id_vendedor',
+  as: 'vendedor'
+});
+categoria_model.hasMany(impactosCategoria_model, {
+  foreignKey: 'id_categoria',
+  as: 'impactosCategoria'
+});
+impactosCategoria_model.belongsTo(categoria_model, {
+  foreignKey: 'id_categoria',
+  as: 'categoria'
+});
+
+vendedor_model.hasMany(impactosProveedor_model, {
+  foreignKey: 'id_vendedor',
+  as: 'impactosProveedor'
+});
+impactosProveedor_model.belongsTo(vendedor_model, {
+  foreignKey: 'id_vendedor',
+  as: 'vendedor'
+});
+proveedor_model.hasMany(impactosProveedor_model, {
+  foreignKey: 'id_proveedor',
+  as: 'impactosProveedor'
+});
+impactosProveedor_model.belongsTo(proveedor_model, {
+  foreignKey: 'id_proveedor',
+  as: 'proveedor'
 });
