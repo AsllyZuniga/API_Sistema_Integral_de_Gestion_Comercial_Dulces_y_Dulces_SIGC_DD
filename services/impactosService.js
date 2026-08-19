@@ -212,6 +212,16 @@ async function calcularDimension(ctx, dim) {
     if (condCc) ventaConds.push(condCc);
     if (dimFilters.length) ventaConds.push(`i.${dimCol} IN (:dimFiltro)`);
 
+    if (filtros.vendedor && toArr(filtros.vendedor).length) {
+        const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
+        if (ids.length) {
+            replacements.vendFiltro = ids;
+            ventaConds.push('v.id_vendedor IN (:vendFiltro)');
+        } else {
+            ventaConds.push('v.id_vendedor = -1');
+        }
+    }
+
     const outerConds = ['(COALESCE(cq.cuota_total, 0) > 0 OR COALESCE(im.impactos, 0) > 0)'];
 
     const sql = `
