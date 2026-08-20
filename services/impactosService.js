@@ -139,6 +139,16 @@ function formatRow(cuota, impactos) {
     };
 }
 
+function inferirTipoPeriodo(fechaInicio, fechaFin) {
+    if (!fechaInicio || !fechaFin) return ['MENSUAL'];
+    const inicio = new Date(fechaInicio);
+    const fin = new Date(fechaFin);
+    const dias = Math.round((fin - inicio) / (1000 * 60 * 60 * 24)) + 1;
+    if (dias <= 1) return ['DIARIO'];
+    if (dias <= 8) return ['SEMANAL'];
+    return ['MENSUAL'];
+}
+
 function buildVentaValidaConds(prefix = 'v') {
     return [
         `${prefix}.valor_neto > 0`,
@@ -259,14 +269,24 @@ function buildPeriodosValues(periodos, columns, types) {
     }).join(',\n            ');
 }
 
-async function calcularImpactosVendedorBatch(periodos) {
+async function calcularImpactosVendedorBatch(periodos, fechaInicioGlobal, fechaFinGlobal) {
     if (!periodos || periodos.length === 0) return new Map();
 
     const values = buildPeriodosValues(periodos, ['id_vendedor', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', null, null, null]);
 
     const sql = `
-        WITH periodos(id_vendedor, tipo_periodo, fecha_inicio, fecha_fin) AS (
+        WITH periodos_raw(id_vendedor, tipo_periodo, fecha_inicio, fecha_fin) AS (
             VALUES ${values}
+        ),
+        periodos AS (
+            SELECT
+                id_vendedor,
+                tipo_periodo,
+                fecha_inicio,
+                fecha_fin,
+                GREATEST(fecha_inicio, COALESCE(:fechaInicio, fecha_inicio)) AS calc_fecha_inicio,
+                LEAST(fecha_fin, COALESCE(:fechaFin, fecha_fin)) AS calc_fecha_fin
+            FROM periodos_raw
         ),
         cliente_subtotal AS (
             SELECT
@@ -283,8 +303,8 @@ async function calcularImpactosVendedorBatch(periodos) {
                 ) AS subtotal_neto
             FROM periodos p
             JOIN venta v ON v.id_vendedor = p.id_vendedor
-              AND v.fecha >= p.fecha_inicio
-              AND v.fecha <= p.fecha_fin
+              AND v.fecha >= p.calc_fecha_inicio
+              AND v.fecha <= p.calc_fecha_fin
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             GROUP BY p.id_vendedor, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, v.id_cliente
         )
@@ -298,7 +318,10 @@ async function calcularImpactosVendedorBatch(periodos) {
         GROUP BY id_vendedor, tipo_periodo, fecha_inicio, fecha_fin
     `;
 
-    const rows = await sequelize.query(sql, { type: QueryTypes.SELECT });
+    const rows = await sequelize.query(sql, {
+        replacements: { fechaInicio: fechaInicioGlobal, fechaFin: fechaFinGlobal },
+        type: QueryTypes.SELECT
+    });
     const map = new Map();
     rows.forEach(r => {
         const key = `${r.id_vendedor}|${r.tipo_periodo}|${r.fecha_inicio}|${r.fecha_fin}`;
@@ -307,7 +330,7 @@ async function calcularImpactosVendedorBatch(periodos) {
     return map;
 }
 
-async function calcularImpactosDimensionBatch(periodos, dim) {
+async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, fechaFinGlobal) {
     if (!periodos || periodos.length === 0) return new Map();
 
     const dimCol = dim === 'proveedor' ? 'id_proveedor' : 'id_categoria';
@@ -318,8 +341,19 @@ async function calcularImpactosDimensionBatch(periodos, dim) {
     const values = buildPeriodosValues(periodos, ['id_vendedor', 'id_dim', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', 'int', null, null, null]);
 
     const sql = `
-        WITH periodos(id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin) AS (
+        WITH periodos_raw(id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin) AS (
             VALUES ${values}
+        ),
+        periodos AS (
+            SELECT
+                id_vendedor,
+                id_dim,
+                tipo_periodo,
+                fecha_inicio,
+                fecha_fin,
+                GREATEST(fecha_inicio, COALESCE(:fechaInicio, fecha_inicio)) AS calc_fecha_inicio,
+                LEAST(fecha_fin, COALESCE(:fechaFin, fecha_fin)) AS calc_fecha_fin
+            FROM periodos_raw
         ),
         grupo_subtotal AS (
             SELECT
@@ -337,8 +371,8 @@ async function calcularImpactosDimensionBatch(periodos, dim) {
                 ) AS subtotal_neto
             FROM periodos p
             JOIN venta v ON v.id_vendedor = p.id_vendedor
-              AND v.fecha >= p.fecha_inicio
-              AND v.fecha <= p.fecha_fin
+              AND v.fecha >= p.calc_fecha_inicio
+              AND v.fecha <= p.calc_fecha_fin
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN item i ON i.id_item = dv.id_item AND i.${dimCol} = p.id_dim
             GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, ${groupExpr}
@@ -354,7 +388,10 @@ async function calcularImpactosDimensionBatch(periodos, dim) {
         GROUP BY id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin
     `;
 
-    const rows = await sequelize.query(sql, { type: QueryTypes.SELECT });
+    const rows = await sequelize.query(sql, {
+        replacements: { fechaInicio: fechaInicioGlobal, fechaFin: fechaFinGlobal },
+        type: QueryTypes.SELECT
+    });
     const map = new Map();
     rows.forEach(r => {
         const key = `${r.id_vendedor}|${r.id_dim}|${r.tipo_periodo}|${r.fecha_inicio}|${r.fecha_fin}`;
@@ -370,7 +407,7 @@ async function calcularImpactosVendedorPeriodo({ idVendedor, fechaInicio, fechaF
         tipo_periodo: 'DIAGNOSTICO',
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin
-    }]);
+    }], fechaInicio, fechaFin);
     const key = `${idVendedor}|DIAGNOSTICO|${fechaInicio}|${fechaFin}`;
     return map.get(key) || 0;
 }
@@ -382,7 +419,7 @@ async function calcularImpactosDimensionPeriodo({ dim, idVendedor, idDim, fechaI
         tipo_periodo: 'DIAGNOSTICO',
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin
-    }], dim);
+    }], dim, fechaInicio, fechaFin);
     const key = `${idVendedor}|${idDim}|DIAGNOSTICO|${fechaInicio}|${fechaFin}`;
     return map.get(key) || 0;
 }
@@ -411,7 +448,7 @@ async function calcularVendedores(ctx) {
     );
     const vendedorMap = new Map(vendedorRows.map(v => [v.id_vendedor, v]));
 
-    const impactosMap = await calcularImpactosVendedorBatch(periodos);
+    const impactosMap = await calcularImpactosVendedorBatch(periodos, fechaInicio, fechaFin);
 
     const rows = [];
     for (const periodo of periodos) {
@@ -477,7 +514,7 @@ async function calcularDimension(ctx, dim) {
     );
     const dimMap = new Map(dimRows.map(d => [d.id_dim, d]));
 
-    const impactosMap = await calcularImpactosDimensionBatch(periodos, dim);
+    const impactosMap = await calcularImpactosDimensionBatch(periodos, dim, fechaInicio, fechaFin);
 
     const rows = [];
     for (const periodo of periodos) {
@@ -699,14 +736,15 @@ async function calcularImpactos(tipo, filtros = {}, scope = null) {
     }
 
     const replacements = {};
-    const tipoPeriodo = toArr(filtros.tipoPeriodo).length ? toArr(filtros.tipoPeriodo) : ['MENSUAL'];
-
     const dateRow = await sequelize.query(
         `SELECT MIN(fecha_inicio) AS mi, MAX(fecha_fin) AS mf FROM ${cfg.cuotaTable}`,
         { type: QueryTypes.SELECT, plain: true }
     );
     const fechaInicio = filtros.fechaInicio || dateRow?.mi || null;
     const fechaFin = filtros.fechaFin || dateRow?.mf || null;
+    const tipoPeriodo = toArr(filtros.tipoPeriodo).length
+        ? toArr(filtros.tipoPeriodo)
+        : inferirTipoPeriodo(fechaInicio, fechaFin);
 
     const idsCanalCiudad = await resolverVendedoresPorCanalCiudad(filtros);
 

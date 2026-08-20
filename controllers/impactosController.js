@@ -26,11 +26,18 @@ function buildFiltros(q, scope) {
     return filtros;
 }
 
+function setNoCacheHeaders(res) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+}
+
 async function handle(req, res, tipo) {
     try {
         const scope = await getVendedorScopeFromAuth(req.auth);
         const filtros = buildFiltros(req.query, scope);
         const data = await service.calcularImpactos(tipo, filtros, scope);
+        setNoCacheHeaders(res);
         return res.status(200).send(data);
     } catch (error) {
         return res.status(400).send({ success: false, error: error.message });
@@ -61,6 +68,7 @@ async function diagnostico(req, res) {
             scope
         };
         const data = await service.diagnosticarImpactos(params);
+        setNoCacheHeaders(res);
         return res.status(200).send(data);
     } catch (error) {
         return res.status(400).send({ success: false, error: error.message });
