@@ -186,24 +186,7 @@ async function obtenerPeriodosCuota({ cuotaTable, fechaInicio, fechaFin, tipoPer
     return sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
 }
 
-async function calcularImpactosVendedorPeriodo({ idVendedor, fechaInicio, fechaFin }) {
-    const replacements = { idVendedor, fechaInicio, fechaFin };
-    const conds = [
-        ...buildVentaValidaConds('v'),
-        'v.fecha >= :fechaInicio',
-        'v.fecha <= :fechaFin',
-        'v.id_vendedor = :idVendedor'
-    ];
 
-    const sql = `
-        SELECT COUNT(DISTINCT v.id_cliente) AS impactos
-        FROM venta v
-        WHERE ${conds.join(' AND ')}
-    `;
-
-    const [row] = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
-    return Number(row?.impactos || 0);
-}
 
 async function obtenerPeriodosDimensionCuota({ cuotaTable, dimCol, fechaInicio, fechaFin, tipoPeriodo, scope, idsCanalCiudad, filtros }) {
     const replacements = { fechaInicio, fechaFin, tipoPeriodo };
@@ -252,32 +235,156 @@ async function obtenerPeriodosDimensionCuota({ cuotaTable, dimCol, fechaInicio, 
     return sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
 }
 
-async function calcularImpactosDimensionPeriodo({ dim, idVendedor, idDim, fechaInicio, fechaFin }) {
-    const dimCol = dim === 'proveedor' ? 'id_proveedor' : 'id_categoria';
-    const replacements = { idVendedor, idDim, fechaInicio, fechaFin };
+function escapeSqlString(value) {
+    if (value === null || value === undefined) return 'NULL';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+    return "'" + String(value).replace(/'/g, "''") + "'";
+}
 
-    // Para categoría se deduplica por (proveedor + cliente), no solo por cliente.
-    // Esto refleja que un mismo cliente comprando la misma categoría a proveedores
-    // distintos genera un impacto por cada proveedor en la categoría.
-    const countExpr = dim === 'categoria'
-        ? "COUNT(DISTINCT CONCAT(i.id_proveedor::text, '-', v.id_cliente::text))"
-        : 'COUNT(DISTINCT v.id_cliente)';
+function buildPeriodosValues(periodos, columns, types) {
+    return periodos.map(p => {
+        const vals = columns.map((col, idx) => {
+            const type = types ? types[idx] : null;
+            const val = escapeSqlString(p[col]);
+            if (type) {
+                return `${val}::${type}`;
+            }
+            if (col === 'fecha_inicio' || col === 'fecha_fin') {
+                return `DATE ${val}`;
+            }
+            return val;
+        });
+        return `(${vals.join(', ')})`;
+    }).join(',\n            ');
+}
+
+async function calcularImpactosVendedorBatch(periodos) {
+    if (!periodos || periodos.length === 0) return new Map();
+
+    const values = buildPeriodosValues(periodos, ['id_vendedor', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', null, null, null]);
 
     const sql = `
-        SELECT ${countExpr} AS impactos
-        FROM venta v
-        JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-        JOIN item i ON i.id_item = dv.id_item
-        WHERE v.id_vendedor = :idVendedor
-          AND i.${dimCol} = :idDim
-          AND v.valor_neto > 0
-          AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%'
-          AND v.fecha >= :fechaInicio
-          AND v.fecha <= :fechaFin
+        WITH periodos(id_vendedor, tipo_periodo, fecha_inicio, fecha_fin) AS (
+            VALUES ${values}
+        ),
+        cliente_subtotal AS (
+            SELECT
+                p.id_vendedor,
+                p.tipo_periodo,
+                p.fecha_inicio,
+                p.fecha_fin,
+                v.id_cliente,
+                SUM(
+                    CASE
+                        WHEN dv.subtotal = 0 THEN 0
+                        ELSE dv.subtotal
+                    END
+                ) AS subtotal_neto
+            FROM periodos p
+            JOIN venta v ON v.id_vendedor = p.id_vendedor
+              AND v.fecha >= p.fecha_inicio
+              AND v.fecha <= p.fecha_fin
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            GROUP BY p.id_vendedor, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, v.id_cliente
+        )
+        SELECT
+            id_vendedor,
+            tipo_periodo,
+            fecha_inicio,
+            fecha_fin,
+            COUNT(*) FILTER (WHERE subtotal_neto > 0) AS impactos
+        FROM cliente_subtotal
+        GROUP BY id_vendedor, tipo_periodo, fecha_inicio, fecha_fin
     `;
 
-    const [row] = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
-    return Number(row?.impactos || 0);
+    const rows = await sequelize.query(sql, { type: QueryTypes.SELECT });
+    const map = new Map();
+    rows.forEach(r => {
+        const key = `${r.id_vendedor}|${r.tipo_periodo}|${r.fecha_inicio}|${r.fecha_fin}`;
+        map.set(key, Number(r.impactos) || 0);
+    });
+    return map;
+}
+
+async function calcularImpactosDimensionBatch(periodos, dim) {
+    if (!periodos || periodos.length === 0) return new Map();
+
+    const dimCol = dim === 'proveedor' ? 'id_proveedor' : 'id_categoria';
+    const groupExpr = dim === 'categoria'
+        ? "CONCAT(i.id_proveedor::text, '-', v.id_cliente::text)"
+        : 'v.id_cliente';
+
+    const values = buildPeriodosValues(periodos, ['id_vendedor', 'id_dim', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', 'int', null, null, null]);
+
+    const sql = `
+        WITH periodos(id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin) AS (
+            VALUES ${values}
+        ),
+        grupo_subtotal AS (
+            SELECT
+                p.id_vendedor,
+                p.id_dim,
+                p.tipo_periodo,
+                p.fecha_inicio,
+                p.fecha_fin,
+                ${groupExpr} AS grupo,
+                SUM(
+                    CASE
+                        WHEN dv.subtotal = 0 THEN 0
+                        ELSE dv.subtotal
+                    END
+                ) AS subtotal_neto
+            FROM periodos p
+            JOIN venta v ON v.id_vendedor = p.id_vendedor
+              AND v.fecha >= p.fecha_inicio
+              AND v.fecha <= p.fecha_fin
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item i ON i.id_item = dv.id_item AND i.${dimCol} = p.id_dim
+            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, ${groupExpr}
+        )
+        SELECT
+            id_vendedor,
+            id_dim,
+            tipo_periodo,
+            fecha_inicio,
+            fecha_fin,
+            COUNT(*) FILTER (WHERE subtotal_neto > 0) AS impactos
+        FROM grupo_subtotal
+        GROUP BY id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin
+    `;
+
+    const rows = await sequelize.query(sql, { type: QueryTypes.SELECT });
+    const map = new Map();
+    rows.forEach(r => {
+        const key = `${r.id_vendedor}|${r.id_dim}|${r.tipo_periodo}|${r.fecha_inicio}|${r.fecha_fin}`;
+        map.set(key, Number(r.impactos) || 0);
+    });
+    return map;
+}
+
+// Wrappers para uso en diagnóstico (un solo período).
+async function calcularImpactosVendedorPeriodo({ idVendedor, fechaInicio, fechaFin }) {
+    const map = await calcularImpactosVendedorBatch([{
+        id_vendedor: idVendedor,
+        tipo_periodo: 'DIAGNOSTICO',
+        fecha_inicio: fechaInicio,
+        fecha_fin: fechaFin
+    }]);
+    const key = `${idVendedor}|DIAGNOSTICO|${fechaInicio}|${fechaFin}`;
+    return map.get(key) || 0;
+}
+
+async function calcularImpactosDimensionPeriodo({ dim, idVendedor, idDim, fechaInicio, fechaFin }) {
+    const map = await calcularImpactosDimensionBatch([{
+        id_vendedor: idVendedor,
+        id_dim: idDim,
+        tipo_periodo: 'DIAGNOSTICO',
+        fecha_inicio: fechaInicio,
+        fecha_fin: fechaFin
+    }], dim);
+    const key = `${idVendedor}|${idDim}|DIAGNOSTICO|${fechaInicio}|${fechaFin}`;
+    return map.get(key) || 0;
 }
 
 async function calcularVendedores(ctx) {
@@ -304,13 +411,12 @@ async function calcularVendedores(ctx) {
     );
     const vendedorMap = new Map(vendedorRows.map(v => [v.id_vendedor, v]));
 
+    const impactosMap = await calcularImpactosVendedorBatch(periodos);
+
     const rows = [];
     for (const periodo of periodos) {
-        const impactos = await calcularImpactosVendedorPeriodo({
-            idVendedor: periodo.id_vendedor,
-            fechaInicio: periodo.fecha_inicio,
-            fechaFin: periodo.fecha_fin
-        });
+        const key = `${periodo.id_vendedor}|${periodo.tipo_periodo}|${periodo.fecha_inicio}|${periodo.fecha_fin}`;
+        const impactos = impactosMap.get(key) || 0;
 
         const v = vendedorMap.get(periodo.id_vendedor);
         const cuota = Number(periodo.cuota_total) || 0;
@@ -371,15 +477,12 @@ async function calcularDimension(ctx, dim) {
     );
     const dimMap = new Map(dimRows.map(d => [d.id_dim, d]));
 
+    const impactosMap = await calcularImpactosDimensionBatch(periodos, dim);
+
     const rows = [];
     for (const periodo of periodos) {
-        const impactos = await calcularImpactosDimensionPeriodo({
-            dim,
-            idVendedor: periodo.id_vendedor,
-            idDim: periodo.id_dim,
-            fechaInicio: periodo.fecha_inicio,
-            fechaFin: periodo.fecha_fin
-        });
+        const key = `${periodo.id_vendedor}|${periodo.id_dim}|${periodo.tipo_periodo}|${periodo.fecha_inicio}|${periodo.fecha_fin}`;
+        const impactos = impactosMap.get(key) || 0;
 
         const v = vendedorMap.get(periodo.id_vendedor);
         const d = dimMap.get(periodo.id_dim);
@@ -492,40 +595,73 @@ async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodig
 
     if (tipo === 'cliente') {
         sqlDiagnostico = `
+            WITH cliente_resumen AS (
+                SELECT
+                    v.id_cliente,
+                    SUM(
+                        CASE
+                            WHEN dv.subtotal = 0 THEN 0
+                            ELSE dv.subtotal
+                        END
+                    ) AS subtotal_neto,
+                    COUNT(*) AS total_ventas_cliente
+                FROM venta v
+                JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+                WHERE v.id_vendedor = :idVendedor
+                  AND v.fecha >= :fechaInicio
+                  AND v.fecha <= :fechaFin
+                GROUP BY v.id_cliente
+            )
             SELECT
-                COUNT(*) AS total_ventas,
-                SUM(CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN 1 ELSE 0 END) AS ventas_validas,
-                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN 1 ELSE 0 END) AS nc_descartadas,
-                SUM(CASE WHEN v.valor_neto <= 0 THEN 1 ELSE 0 END) AS valor_invalido_descartado,
-                COUNT(DISTINCT CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN v.id_cliente END) AS clientes_unicos_validos
-            FROM venta v
-            WHERE v.id_vendedor = :idVendedor
-              AND v.fecha >= :fechaInicio
-              AND v.fecha <= :fechaFin
+                (SELECT COUNT(*) FROM venta WHERE id_vendedor = :idVendedor AND fecha >= :fechaInicio AND fecha <= :fechaFin) AS total_ventas,
+                (SELECT COUNT(*) FROM venta v JOIN detalle_venta dv ON dv.id_venta = v.id_venta WHERE v.id_vendedor = :idVendedor AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin AND dv.subtotal > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%') AS ventas_validas,
+                (SELECT COUNT(*) FROM venta WHERE id_vendedor = :idVendedor AND fecha >= :fechaInicio AND fecha <= :fechaFin AND UPPER(TRIM(numero_documento)) LIKE 'NC%') AS nc_descartadas,
+                (SELECT COUNT(*) FROM venta v JOIN detalle_venta dv ON dv.id_venta = v.id_venta WHERE v.id_vendedor = :idVendedor AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin AND dv.subtotal <= 0) AS valor_invalido_descartado,
+                COUNT(*) AS clientes_unicos_validos,
+                SUM(CASE WHEN subtotal_neto > 0 THEN 1 ELSE 0 END) AS clientes_con_subtotal_positivo,
+                SUM(CASE WHEN subtotal_neto <= 0 THEN 1 ELSE 0 END) AS clientes_excluidos_por_subtotal,
+                SUM(subtotal_neto) AS subtotal_total
+            FROM cliente_resumen
         `;
         impactos = await calcularImpactosVendedorPeriodo({ idVendedor, fechaInicio, fechaFin });
     } else {
         const dimCol = tipo === 'proveedor' ? 'id_proveedor' : 'id_categoria';
         replacements.idDim = idDim;
 
-        const clientesExpr = tipo === 'categoria'
-            ? "COUNT(DISTINCT CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN CONCAT(i.id_proveedor::text, '-', v.id_cliente::text) END)"
-            : "COUNT(DISTINCT CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN v.id_cliente END)";
+        const groupExpr = tipo === 'categoria'
+            ? "CONCAT(i.id_proveedor::text, '-', v.id_cliente::text)"
+            : 'v.id_cliente';
 
         sqlDiagnostico = `
+            WITH grupo_resumen AS (
+                SELECT
+                    ${groupExpr} AS grupo,
+                    SUM(
+                        CASE
+                            WHEN dv.subtotal = 0 THEN 0
+                            ELSE dv.subtotal
+                        END
+                    ) AS subtotal_neto,
+                    COUNT(*) AS total_ventas_grupo
+                FROM venta v
+                JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                WHERE v.id_vendedor = :idVendedor
+                  AND i.${dimCol} = :idDim
+                  AND v.fecha >= :fechaInicio
+                  AND v.fecha <= :fechaFin
+                GROUP BY ${groupExpr}
+            )
             SELECT
-                COUNT(*) AS total_ventas,
-                SUM(CASE WHEN v.valor_neto > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%' THEN 1 ELSE 0 END) AS ventas_validas,
-                SUM(CASE WHEN UPPER(TRIM(v.numero_documento)) LIKE 'NC%' THEN 1 ELSE 0 END) AS nc_descartadas,
-                SUM(CASE WHEN v.valor_neto <= 0 THEN 1 ELSE 0 END) AS valor_invalido_descartado,
-                ${clientesExpr} AS clientes_unicos_validos
-            FROM venta v
-            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            JOIN item i ON i.id_item = dv.id_item
-            WHERE v.id_vendedor = :idVendedor
-              AND i.${dimCol} = :idDim
-              AND v.fecha >= :fechaInicio
-              AND v.fecha <= :fechaFin
+                (SELECT COUNT(*) FROM venta v JOIN detalle_venta dv ON dv.id_venta = v.id_venta JOIN item i ON i.id_item = dv.id_item WHERE v.id_vendedor = :idVendedor AND i.${dimCol} = :idDim AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin) AS total_ventas,
+                (SELECT COUNT(*) FROM venta v JOIN detalle_venta dv ON dv.id_venta = v.id_venta JOIN item i ON i.id_item = dv.id_item WHERE v.id_vendedor = :idVendedor AND i.${dimCol} = :idDim AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin AND dv.subtotal > 0 AND UPPER(TRIM(v.numero_documento)) NOT LIKE 'NC%') AS ventas_validas,
+                (SELECT COUNT(*) FROM venta v JOIN detalle_venta dv ON dv.id_venta = v.id_venta JOIN item i ON i.id_item = dv.id_item WHERE v.id_vendedor = :idVendedor AND i.${dimCol} = :idDim AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin AND UPPER(TRIM(v.numero_documento)) LIKE 'NC%') AS nc_descartadas,
+                (SELECT COUNT(*) FROM venta v JOIN detalle_venta dv ON dv.id_venta = v.id_venta JOIN item i ON i.id_item = dv.id_item WHERE v.id_vendedor = :idVendedor AND i.${dimCol} = :idDim AND v.fecha >= :fechaInicio AND v.fecha <= :fechaFin AND dv.subtotal <= 0) AS valor_invalido_descartado,
+                COUNT(*) AS clientes_unicos_validos,
+                SUM(CASE WHEN subtotal_neto > 0 THEN 1 ELSE 0 END) AS clientes_con_subtotal_positivo,
+                SUM(CASE WHEN subtotal_neto <= 0 THEN 1 ELSE 0 END) AS clientes_excluidos_por_subtotal,
+                SUM(subtotal_neto) AS subtotal_total
+            FROM grupo_resumen
         `;
         impactos = await calcularImpactosDimensionPeriodo({ dim: tipo, idVendedor, idDim, fechaInicio, fechaFin });
     }
@@ -547,7 +683,10 @@ async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodig
             ventas_validas: Number(diagnostico.ventas_validas) || 0,
             nc_descartadas: Number(diagnostico.nc_descartadas) || 0,
             valor_invalido_descartado: Number(diagnostico.valor_invalido_descartado) || 0,
-            clientes_unicos_validos: Number(diagnostico.clientes_unicos_validos) || 0
+            clientes_unicos_validos: Number(diagnostico.clientes_unicos_validos) || 0,
+            clientes_con_subtotal_positivo: Number(diagnostico.clientes_con_subtotal_positivo) || 0,
+            clientes_excluidos_por_subtotal: Number(diagnostico.clientes_excluidos_por_subtotal) || 0,
+            subtotal_total: Number(diagnostico.subtotal_total) || 0
         },
         impactos
     };
