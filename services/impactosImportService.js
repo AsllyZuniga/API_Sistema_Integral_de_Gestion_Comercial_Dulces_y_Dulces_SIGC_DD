@@ -393,14 +393,15 @@ async function preloadVendedores() {
         const padded = formatVendedorCode(raw);
         const numKey = normalizeVendedorCode(raw);
 
-        // Preferir padded: no sobreescribir si ya existe la clave con padded
-        if (padded && !map.has(padded)) map.set(padded, v);
-
-        // numKey como respaldo, solo si no existe ya (así el padded prevalece)
-        if (numKey && !map.has(numKey)) map.set(numKey, v);
-
-        // clave cruda como último recurso
-        if (!map.has(raw)) map.set(raw, v);
+        if (raw === padded) {
+            // Código canónico padded: siempre gana para evitar que un código
+            // unpadded ("1") robe la clave del vendedor con código padded ("0001").
+            map.set(padded, v);
+        } else {
+            // Código unpadded: solo actúa como respaldo, nunca sobrescribe padded.
+            if (numKey && !map.has(numKey)) map.set(numKey, v);
+            if (!map.has(raw)) map.set(raw, v);
+        }
     });
 
     return map;

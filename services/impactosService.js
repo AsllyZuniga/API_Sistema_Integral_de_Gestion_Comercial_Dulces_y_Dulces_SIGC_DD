@@ -79,21 +79,44 @@ async function resolverVendedoresPorCodigo(codigos) {
     const list = toArr(codigos);
     if (!list.length) return [];
 
-    const expanded = new Set();
-    list.forEach(c => {
+    const ids = [];
+    for (const c of list) {
         const raw = String(c ?? '').trim();
-        expanded.add(raw);
-        if (/^\d+$/.test(raw)) {
-            expanded.add(String(Number(raw)));
-            expanded.add(String(Number(raw)).padStart(4, '0'));
-        }
-    });
+        if (!raw) continue;
 
-    const rows = await sequelize.query(
-        'SELECT id_vendedor FROM vendedor WHERE codigo_vendedor IN (:codigos)',
-        { replacements: { codigos: [...expanded] }, type: QueryTypes.SELECT }
-    );
-    return rows.map(r => r.id_vendedor);
+        // Fuente de verdad: el código padded (4 dígitos) siempre gana.
+        const padded = /^\d+$/.test(raw) ? String(Number(raw)).padStart(4, '0') : raw;
+        const [paddedRow] = await sequelize.query(
+            'SELECT id_vendedor FROM vendedor WHERE codigo_vendedor = :padded',
+            { replacements: { padded }, type: QueryTypes.SELECT }
+        );
+        if (paddedRow) {
+            ids.push(paddedRow.id_vendedor);
+            continue;
+        }
+
+        // Si no hay padded, buscar el raw exacto.
+        const [rawRow] = await sequelize.query(
+            'SELECT id_vendedor FROM vendedor WHERE codigo_vendedor = :raw',
+            { replacements: { raw }, type: QueryTypes.SELECT }
+        );
+        if (rawRow) {
+            ids.push(rawRow.id_vendedor);
+            continue;
+        }
+
+        // Último recurso: búsqueda por variantes numéricas.
+        if (/^\d+$/.test(raw)) {
+            const variants = [String(Number(raw))];
+            const rows = await sequelize.query(
+                'SELECT id_vendedor FROM vendedor WHERE codigo_vendedor IN (:variants)',
+                { replacements: { variants }, type: QueryTypes.SELECT }
+            );
+            if (rows.length) ids.push(rows[0].id_vendedor);
+        }
+    }
+
+    return [...new Set(ids)];
 }
 
 function buildCondCanalCiudad(idsCanalCiudad, column, replacements, key) {
@@ -301,6 +324,14 @@ async function calcularVendedores(ctx) {
         });
     }
 
+    rows.sort((a, b) => {
+        const cmpVendedor = String(a.vendedor).localeCompare(String(b.vendedor), 'es', { numeric: false, sensitivity: 'base' });
+        if (cmpVendedor !== 0) return cmpVendedor;
+        const cmpPeriodo = String(a.tipoPeriodo).localeCompare(String(b.tipoPeriodo));
+        if (cmpPeriodo !== 0) return cmpPeriodo;
+        return String(a.fechaInicio).localeCompare(String(b.fechaInicio));
+    });
+
     return { success: true, tipo: 'vendedores', total: rows.length, rows };
 }
 
@@ -363,6 +394,16 @@ async function calcularDimension(ctx, dim) {
             ...formatRow(cuota, impactos)
         });
     }
+
+    rows.sort((a, b) => {
+        const cmpVendedor = String(a.vendedor).localeCompare(String(b.vendedor), 'es', { numeric: false, sensitivity: 'base' });
+        if (cmpVendedor !== 0) return cmpVendedor;
+        const cmpDim = String(a[dimKey]).localeCompare(String(b[dimKey]), 'es', { sensitivity: 'base' });
+        if (cmpDim !== 0) return cmpDim;
+        const cmpPeriodo = String(a.tipoPeriodo).localeCompare(String(b.tipoPeriodo));
+        if (cmpPeriodo !== 0) return cmpPeriodo;
+        return String(a.fechaInicio).localeCompare(String(b.fechaInicio));
+    });
 
     return { success: true, tipo: isProv ? 'proveedores' : 'categorias', total: rows.length, rows };
 }
