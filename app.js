@@ -2,6 +2,13 @@ require('dotenv').config();
 var createError = require("http-errors");
 var express = require("express");
 var path = require("path");
+var fs = require("fs");
+
+// Crear directorio uploads/ si no existe (requerido por multer)
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 var authRouter = require("./routes/authRouter");
