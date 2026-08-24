@@ -20,9 +20,7 @@ function buildFiltros(q, scope) {
         proveedor: toArr(q.proveedor || q.codProveedor),
         categoria: toArr(q.categoria || q.codCategoria)
     };
-    if (scope.tipo === 'all') {
-        filtros.vendedor = toArr(q.vendedor || q.codVendedor);
-    }
+    filtros.vendedor = toArr(q.vendedor || q.codVendedor);
     return filtros;
 }
 
