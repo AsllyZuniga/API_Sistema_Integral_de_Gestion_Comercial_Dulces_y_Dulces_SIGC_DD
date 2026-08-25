@@ -402,7 +402,7 @@ class ImportadorVentasOptimizado {
                 this.maestros.tiposDocumento.set(clave, t);
             });
             clientes.forEach(c => {
-                const clave = c.nro_documento?.toLowerCase() || 'null';
+                const clave = `${(c.nro_documento || '').toLowerCase()}_${(c.sucursal || '').toLowerCase()}`;
                 this.maestros.clientes.set(clave, c);
             });
             items.forEach(i => {
@@ -577,7 +577,9 @@ class ImportadorVentasOptimizado {
         const clienteRazonSocial = fila['Razon social cliente factura']?.trim() || '';
         const clienteSucursal = fila['Sucursal factura']?.trim() || '';
         const clienteDireccion = fila['Direccion 1']?.trim() || '';
-        const clienteClave = clienteDocumento || `${clienteRazonSocial}_${clienteSucursal}_${clienteDireccion}`;
+        const clienteClave = clienteDocumento
+            ? `${clienteDocumento}_${clienteSucursal}`
+            : `${clienteRazonSocial}_${clienteSucursal}_${clienteDireccion}`;
 
         const cliente = await this.obtenerOCrearOptimizado(
             this.cliente, 'clientes',

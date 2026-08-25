@@ -149,6 +149,82 @@ function inferirTipoPeriodo(fechaInicio, fechaFin) {
     return ['MENSUAL'];
 }
 
+function buildPeriodosDesdeVentasSql(tipoPeriodo, tabla = 'venta', alias = 'v', condicionesAdicionales = '') {
+    const partes = [];
+    const whereBase = `${alias}.fecha >= :fechaInicio AND ${alias}.fecha <= :fechaFin${condicionesAdicionales ? ' AND ' + condicionesAdicionales : ''}`;
+
+    if (tipoPeriodo.includes('MENSUAL')) {
+        partes.push(`
+            SELECT DISTINCT ${alias}.id_vendedor, 'MENSUAL' AS tipo_periodo,
+                DATE_TRUNC('month', ${alias}.fecha)::date AS fecha_inicio,
+                (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date AS fecha_fin
+            FROM ${tabla} ${alias}
+            WHERE ${whereBase}
+        `);
+    }
+    if (tipoPeriodo.includes('SEMANAL')) {
+        partes.push(`
+            SELECT DISTINCT ${alias}.id_vendedor, 'SEMANAL' AS tipo_periodo,
+                DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
+                (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
+            FROM ${tabla} ${alias}
+            WHERE ${whereBase}
+        `);
+    }
+    if (tipoPeriodo.includes('DIARIO')) {
+        partes.push(`
+            SELECT DISTINCT ${alias}.id_vendedor, 'DIARIO' AS tipo_periodo,
+                ${alias}.fecha AS fecha_inicio,
+                ${alias}.fecha AS fecha_fin
+            FROM ${tabla} ${alias}
+            WHERE ${whereBase}
+        `);
+    }
+
+    return partes.join(' UNION ');
+}
+
+function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', condicionesAdicionales = '') {
+    const partes = [];
+    const whereBase = `${alias}.fecha >= :fechaInicio AND ${alias}.fecha <= :fechaFin${condicionesAdicionales ? ' AND ' + condicionesAdicionales : ''}`;
+
+    if (tipoPeriodo.includes('MENSUAL')) {
+        partes.push(`
+            SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'MENSUAL' AS tipo_periodo,
+                DATE_TRUNC('month', ${alias}.fecha)::date AS fecha_inicio,
+                (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date AS fecha_fin
+            FROM venta ${alias}
+            JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+            JOIN item i ON i.id_item = dv.id_item
+            WHERE ${whereBase}
+        `);
+    }
+    if (tipoPeriodo.includes('SEMANAL')) {
+        partes.push(`
+            SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'SEMANAL' AS tipo_periodo,
+                DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
+                (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
+            FROM venta ${alias}
+            JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+            JOIN item i ON i.id_item = dv.id_item
+            WHERE ${whereBase}
+        `);
+    }
+    if (tipoPeriodo.includes('DIARIO')) {
+        partes.push(`
+            SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'DIARIO' AS tipo_periodo,
+                ${alias}.fecha AS fecha_inicio,
+                ${alias}.fecha AS fecha_fin
+            FROM venta ${alias}
+            JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+            JOIN item i ON i.id_item = dv.id_item
+            WHERE ${whereBase}
+        `);
+    }
+
+    return partes.join(' UNION ');
+}
+
 function buildVentaValidaConds(prefix = 'v') {
     return [
         `${prefix}.valor_neto > 0`,
@@ -158,39 +234,69 @@ function buildVentaValidaConds(prefix = 'v') {
 
 async function obtenerPeriodosCuota({ cuotaTable, fechaInicio, fechaFin, tipoPeriodo, scope, idsCanalCiudad, filtros }) {
     const replacements = { fechaInicio, fechaFin, tipoPeriodo };
-    const conds = [
+    const cuotaConds = [
         'cu.fecha_fin >= :fechaInicio',
         'cu.fecha_inicio <= :fechaFin',
         'cu.tipo_periodo IN (:tipoPeriodo)'
     ];
+    const ventaConds = [];
 
     const scopeCuota = buildScopeCond(scope, 'cu.id_vendedor', replacements, 'cq');
-    if (scopeCuota) conds.push(scopeCuota);
+    if (scopeCuota) cuotaConds.push(scopeCuota);
+    const scopeVenta = buildScopeCond(scope, 'v.id_vendedor', replacements, 'vq');
+    if (scopeVenta) ventaConds.push(scopeVenta);
 
     const condCcCuota = buildCondCanalCiudad(idsCanalCiudad, 'cu.id_vendedor', replacements, 'ccCuota');
-    if (condCcCuota) conds.push(condCcCuota);
+    if (condCcCuota) cuotaConds.push(condCcCuota);
+    const condCcVenta = buildCondCanalCiudad(idsCanalCiudad, 'v.id_vendedor', replacements, 'ccVenta');
+    if (condCcVenta) ventaConds.push(condCcVenta);
 
     if (filtros && filtros.vendedor && toArr(filtros.vendedor).length) {
         const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
         if (ids.length) {
             replacements.vendFiltro = ids;
-            conds.push('cu.id_vendedor IN (:vendFiltro)');
+            cuotaConds.push('cu.id_vendedor IN (:vendFiltro)');
+            ventaConds.push('v.id_vendedor IN (:vendFiltro)');
         } else {
-            conds.push('cu.id_vendedor = -1');
+            cuotaConds.push('cu.id_vendedor = -1');
+            ventaConds.push('v.id_vendedor = -1');
         }
     }
 
+    const ventasPeriodosSql = buildPeriodosDesdeVentasSql(tipoPeriodo, 'venta', 'v', ventaConds.join(' AND '));
+
     const sql = `
-        SELECT
-            cu.id_vendedor,
-            cu.tipo_periodo,
-            cu.fecha_inicio,
-            cu.fecha_fin,
-            SUM(cu.cuota)::numeric AS cuota_total
-        FROM ${cuotaTable} cu
-        WHERE ${conds.join(' AND ')}
-        GROUP BY cu.id_vendedor, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
-        ORDER BY cu.id_vendedor, cu.tipo_periodo, cu.fecha_inicio
+        WITH cuota_periodos AS (
+            SELECT
+                cu.id_vendedor,
+                cu.tipo_periodo,
+                cu.fecha_inicio,
+                cu.fecha_fin,
+                SUM(cu.cuota)::numeric AS cuota_total
+            FROM ${cuotaTable} cu
+            WHERE ${cuotaConds.join(' AND ')}
+            GROUP BY cu.id_vendedor, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
+        ),
+        venta_periodos AS (
+            ${ventasPeriodosSql}
+        ),
+        venta_periodos_sin_cuota AS (
+            SELECT vp.*
+            FROM venta_periodos vp
+            WHERE NOT EXISTS (
+                SELECT 1 FROM cuota_periodos cp
+                WHERE cp.id_vendedor = vp.id_vendedor
+                  AND cp.tipo_periodo = vp.tipo_periodo
+                  AND cp.fecha_inicio <= vp.fecha_fin
+                  AND cp.fecha_fin >= vp.fecha_inicio
+            )
+        )
+        SELECT id_vendedor, tipo_periodo, fecha_inicio, fecha_fin, cuota_total
+        FROM cuota_periodos
+        UNION ALL
+        SELECT id_vendedor, tipo_periodo, fecha_inicio, fecha_fin, 0 AS cuota_total
+        FROM venta_periodos_sin_cuota
+        ORDER BY id_vendedor, tipo_periodo, fecha_inicio
     `;
 
     return sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
@@ -200,46 +306,78 @@ async function obtenerPeriodosCuota({ cuotaTable, fechaInicio, fechaFin, tipoPer
 
 async function obtenerPeriodosDimensionCuota({ cuotaTable, dimCol, fechaInicio, fechaFin, tipoPeriodo, scope, idsCanalCiudad, filtros }) {
     const replacements = { fechaInicio, fechaFin, tipoPeriodo };
-    const conds = [
+    const cuotaConds = [
         'cu.fecha_fin >= :fechaInicio',
         'cu.fecha_inicio <= :fechaFin',
         'cu.tipo_periodo IN (:tipoPeriodo)'
     ];
+    const ventaConds = [];
 
     const scopeCuota = buildScopeCond(scope, 'cu.id_vendedor', replacements, 'cq');
-    if (scopeCuota) conds.push(scopeCuota);
+    if (scopeCuota) cuotaConds.push(scopeCuota);
+    const scopeVenta = buildScopeCond(scope, 'v.id_vendedor', replacements, 'vq');
+    if (scopeVenta) ventaConds.push(scopeVenta);
 
     const condCcCuota = buildCondCanalCiudad(idsCanalCiudad, 'cu.id_vendedor', replacements, 'ccCuota');
-    if (condCcCuota) conds.push(condCcCuota);
+    if (condCcCuota) cuotaConds.push(condCcCuota);
+    const condCcVenta = buildCondCanalCiudad(idsCanalCiudad, 'v.id_vendedor', replacements, 'ccVenta');
+    if (condCcVenta) ventaConds.push(condCcVenta);
 
     if (filtros && filtros.vendedor && toArr(filtros.vendedor).length) {
         const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
         if (ids.length) {
             replacements.vendFiltro = ids;
-            conds.push('cu.id_vendedor IN (:vendFiltro)');
+            cuotaConds.push('cu.id_vendedor IN (:vendFiltro)');
+            ventaConds.push('v.id_vendedor IN (:vendFiltro)');
         } else {
-            conds.push('cu.id_vendedor = -1');
+            cuotaConds.push('cu.id_vendedor = -1');
+            ventaConds.push('v.id_vendedor = -1');
         }
     }
 
     const dimFilters = filtros ? (dimCol === 'id_proveedor' ? toArr(filtros.proveedor) : toArr(filtros.categoria)) : [];
     if (dimFilters.length) {
         replacements.dimFiltro = dimFilters;
-        conds.push(`cu.${dimCol} IN (:dimFiltro)`);
+        cuotaConds.push(`cu.${dimCol} IN (:dimFiltro)`);
+        ventaConds.push(`i.${dimCol} IN (:dimFiltro)`);
     }
 
+    const ventasPeriodosSql = buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, 'v', ventaConds.join(' AND '));
+
     const sql = `
-        SELECT
-            cu.id_vendedor,
-            cu.${dimCol} AS id_dim,
-            cu.tipo_periodo,
-            cu.fecha_inicio,
-            cu.fecha_fin,
-            SUM(cu.cuota)::numeric AS cuota_total
-        FROM ${cuotaTable} cu
-        WHERE ${conds.join(' AND ')}
-        GROUP BY cu.id_vendedor, cu.${dimCol}, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
-        ORDER BY cu.id_vendedor, cu.${dimCol}, cu.tipo_periodo, cu.fecha_inicio
+        WITH cuota_periodos AS (
+            SELECT
+                cu.id_vendedor,
+                cu.${dimCol} AS id_dim,
+                cu.tipo_periodo,
+                cu.fecha_inicio,
+                cu.fecha_fin,
+                SUM(cu.cuota)::numeric AS cuota_total
+            FROM ${cuotaTable} cu
+            WHERE ${cuotaConds.join(' AND ')}
+            GROUP BY cu.id_vendedor, cu.${dimCol}, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
+        ),
+        venta_periodos AS (
+            ${ventasPeriodosSql}
+        ),
+        venta_periodos_sin_cuota AS (
+            SELECT vp.*
+            FROM venta_periodos vp
+            WHERE NOT EXISTS (
+                SELECT 1 FROM cuota_periodos cp
+                WHERE cp.id_vendedor = vp.id_vendedor
+                  AND cp.id_dim = vp.id_dim
+                  AND cp.tipo_periodo = vp.tipo_periodo
+                  AND cp.fecha_inicio <= vp.fecha_fin
+                  AND cp.fecha_fin >= vp.fecha_inicio
+            )
+        )
+        SELECT id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin, cuota_total
+        FROM cuota_periodos
+        UNION ALL
+        SELECT id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin, 0 AS cuota_total
+        FROM venta_periodos_sin_cuota
+        ORDER BY id_vendedor, id_dim, tipo_periodo, fecha_inicio
     `;
 
     return sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
@@ -736,10 +874,16 @@ async function calcularImpactos(tipo, filtros = {}, scope = null) {
     }
 
     const replacements = {};
-    const dateRow = await sequelize.query(
+    let dateRow = await sequelize.query(
         `SELECT MIN(fecha_inicio) AS mi, MAX(fecha_fin) AS mf FROM ${cfg.cuotaTable}`,
         { type: QueryTypes.SELECT, plain: true }
     );
+    if (!dateRow?.mi) {
+        dateRow = await sequelize.query(
+            `SELECT MIN(fecha) AS mi, MAX(fecha) AS mf FROM venta`,
+            { type: QueryTypes.SELECT, plain: true }
+        );
+    }
     const fechaInicio = filtros.fechaInicio || dateRow?.mi || null;
     const fechaFin = filtros.fechaFin || dateRow?.mf || null;
     const tipoPeriodo = toArr(filtros.tipoPeriodo).length
