@@ -149,6 +149,19 @@ function inferirTipoPeriodo(fechaInicio, fechaFin) {
     return ['MENSUAL'];
 }
 
+function normalizeReporteProvName(dvAlias = 'dv', prAlias = 'pr') {
+    return `UPPER(TRIM(REGEXP_REPLACE(
+        REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(
+                COALESCE(TRIM(${dvAlias}.reporte_prov_con_obs), COALESCE(TRIM(${prAlias}.nombre), 'SIN LINEA')),
+                '^[0-9]+ - ', ''
+            )),
+            '[^a-zA-Z0-9 ]', ' ', 'g'
+        ),
+        ' +', ' ', 'g'
+    )))`;
+}
+
 function buildPeriodosDesdeVentasSql(tipoPeriodo, tabla = 'venta', alias = 'v', condicionesAdicionales = '') {
     const partes = [];
     const whereBase = `${alias}.fecha >= :fechaInicio AND ${alias}.fecha <= :fechaFin${condicionesAdicionales ? ' AND ' + condicionesAdicionales : ''}`;
@@ -188,38 +201,95 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
     const partes = [];
     const whereBase = `${alias}.fecha >= :fechaInicio AND ${alias}.fecha <= :fechaFin${condicionesAdicionales ? ' AND ' + condicionesAdicionales : ''}`;
 
+    const esProveedor = dimCol === 'id_proveedor';
+
     if (tipoPeriodo.includes('MENSUAL')) {
-        partes.push(`
-            SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'MENSUAL' AS tipo_periodo,
-                DATE_TRUNC('month', ${alias}.fecha)::date AS fecha_inicio,
-                (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date AS fecha_fin
-            FROM venta ${alias}
-            JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
-            JOIN item i ON i.id_item = dv.id_item
-            WHERE ${whereBase}
-        `);
+        if (esProveedor) {
+            partes.push(`
+                SELECT DISTINCT ${alias}.id_vendedor, pr.id_proveedor AS id_dim, 'MENSUAL' AS tipo_periodo,
+                    DATE_TRUNC('month', ${alias}.fecha)::date AS fecha_inicio,
+                    (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date AS fecha_fin
+                FROM venta ${alias}
+                JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                JOIN proveedor pr ON UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')),
+                        '^[0-9]+ - ', ''
+                    ),
+                    '[^a-zA-Z0-9 ]', ' ', 'g'
+                ))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                WHERE ${whereBase}
+            `);
+        } else {
+            partes.push(`
+                SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'MENSUAL' AS tipo_periodo,
+                    DATE_TRUNC('month', ${alias}.fecha)::date AS fecha_inicio,
+                    (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date AS fecha_fin
+                FROM venta ${alias}
+                JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                WHERE ${whereBase}
+            `);
+        }
     }
     if (tipoPeriodo.includes('SEMANAL')) {
-        partes.push(`
-            SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'SEMANAL' AS tipo_periodo,
-                DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
-                (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
-            FROM venta ${alias}
-            JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
-            JOIN item i ON i.id_item = dv.id_item
-            WHERE ${whereBase}
-        `);
+        if (esProveedor) {
+            partes.push(`
+                SELECT DISTINCT ${alias}.id_vendedor, pr.id_proveedor AS id_dim, 'SEMANAL' AS tipo_periodo,
+                    DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
+                    (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
+                FROM venta ${alias}
+                JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                JOIN proveedor pr ON UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')),
+                        '^[0-9]+ - ', ''
+                    ),
+                    '[^a-zA-Z0-9 ]', ' ', 'g'
+                ))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                WHERE ${whereBase}
+            `);
+        } else {
+            partes.push(`
+                SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'SEMANAL' AS tipo_periodo,
+                    DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
+                    (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
+                FROM venta ${alias}
+                JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                WHERE ${whereBase}
+            `);
+        }
     }
     if (tipoPeriodo.includes('DIARIO')) {
-        partes.push(`
-            SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'DIARIO' AS tipo_periodo,
-                ${alias}.fecha AS fecha_inicio,
-                ${alias}.fecha AS fecha_fin
-            FROM venta ${alias}
-            JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
-            JOIN item i ON i.id_item = dv.id_item
-            WHERE ${whereBase}
-        `);
+        if (esProveedor) {
+            partes.push(`
+                SELECT DISTINCT ${alias}.id_vendedor, pr.id_proveedor AS id_dim, 'DIARIO' AS tipo_periodo,
+                    ${alias}.fecha AS fecha_inicio, ${alias}.fecha AS fecha_fin
+                FROM venta ${alias}
+                JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                JOIN proveedor pr ON UPPER(TRIM(REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')),
+                        '^[0-9]+ - ', ''
+                    ),
+                    '[^a-zA-Z0-9 ]', ' ', 'g'
+                ))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                WHERE ${whereBase}
+            `);
+        } else {
+            partes.push(`
+                SELECT DISTINCT ${alias}.id_vendedor, i.${dimCol} AS id_dim, 'DIARIO' AS tipo_periodo,
+                    ${alias}.fecha AS fecha_inicio, ${alias}.fecha AS fecha_fin
+                FROM venta ${alias}
+                JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
+                JOIN item i ON i.id_item = dv.id_item
+                WHERE ${whereBase}
+            `);
+        }
     }
 
     return partes.join(' UNION ');
@@ -472,11 +542,43 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
     if (!periodos || periodos.length === 0) return new Map();
 
     const dimCol = dim === 'proveedor' ? 'id_proveedor' : 'id_categoria';
+    const esProveedor = dim === 'proveedor';
     const groupExpr = dim === 'categoria'
         ? "CONCAT(i.id_proveedor::text, '-', v.id_cliente::text)"
         : 'v.id_cliente';
 
     const values = buildPeriodosValues(periodos, ['id_vendedor', 'id_dim', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', 'int', null, null, null]);
+
+    let grupoSubtotalJoin;
+    if (esProveedor) {
+        grupoSubtotalJoin = `
+            FROM periodos p
+            JOIN venta v ON v.id_vendedor = p.id_vendedor
+              AND v.fecha >= p.calc_fecha_inicio
+              AND v.fecha <= p.calc_fecha_fin
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item i ON i.id_item = dv.id_item
+            JOIN proveedor pr_dim ON pr_dim.id_proveedor = p.id_dim
+            WHERE (
+                (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
+                    AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr_dim.nombre), 'SIN LINEA')), '^[0-9]+ - ', ''), '[^a-zA-Z0-9 ]', ' ', 'g')))
+                    = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr_dim.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                )
+                OR (i.id_proveedor = p.id_dim)
+            )
+            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, ${groupExpr}
+        `;
+    } else {
+        grupoSubtotalJoin = `
+            FROM periodos p
+            JOIN venta v ON v.id_vendedor = p.id_vendedor
+              AND v.fecha >= p.calc_fecha_inicio
+              AND v.fecha <= p.calc_fecha_fin
+            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN item i ON i.id_item = dv.id_item AND i.${dimCol} = p.id_dim
+            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, ${groupExpr}
+        `;
+    }
 
     const sql = `
         WITH periodos_raw(id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin) AS (
@@ -507,13 +609,7 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
                         ELSE dv.subtotal
                     END
                 ) AS subtotal_neto
-            FROM periodos p
-            JOIN venta v ON v.id_vendedor = p.id_vendedor
-              AND v.fecha >= p.calc_fecha_inicio
-              AND v.fecha <= p.calc_fecha_fin
-            JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            JOIN item i ON i.id_item = dv.id_item AND i.${dimCol} = p.id_dim
-            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, ${groupExpr}
+            ${grupoSubtotalJoin}
         )
         SELECT
             id_vendedor,
