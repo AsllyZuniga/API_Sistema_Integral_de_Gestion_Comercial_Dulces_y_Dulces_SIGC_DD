@@ -212,13 +212,15 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
-                JOIN proveedor pr ON UPPER(TRIM(REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')),
-                        '^[0-9]+ - ', ''
-                    ),
-                    '[^a-zA-Z0-9 ]', ' ', 'g'
-                ))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                JOIN proveedor pr ON (
+                    (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
+                        AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(
+                            COALESCE(TRIM(dv.reporte_prov_con_obs), ''),
+                            '^[0-9]+ - ', ''
+                        ), '[^a-zA-Z0-9 ]', ' ', 'g'))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), ''), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                    )
+                    OR (COALESCE(TRIM(dv.reporte_prov_con_obs), '') = '' AND pr.id_proveedor = i.id_proveedor)
+                )
                 WHERE ${whereBase}
             `);
         } else {
@@ -242,13 +244,15 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
-                JOIN proveedor pr ON UPPER(TRIM(REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')),
-                        '^[0-9]+ - ', ''
-                    ),
-                    '[^a-zA-Z0-9 ]', ' ', 'g'
-                ))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                JOIN proveedor pr ON (
+                    (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
+                        AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(
+                            COALESCE(TRIM(dv.reporte_prov_con_obs), ''),
+                            '^[0-9]+ - ', ''
+                        ), '[^a-zA-Z0-9 ]', ' ', 'g'))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), ''), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                    )
+                    OR (COALESCE(TRIM(dv.reporte_prov_con_obs), '') = '' AND pr.id_proveedor = i.id_proveedor)
+                )
                 WHERE ${whereBase}
             `);
         } else {
@@ -271,13 +275,15 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
-                JOIN proveedor pr ON UPPER(TRIM(REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr.nombre), 'SIN LINEA')),
-                        '^[0-9]+ - ', ''
-                    ),
-                    '[^a-zA-Z0-9 ]', ' ', 'g'
-                ))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                JOIN proveedor pr ON (
+                    (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
+                        AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(
+                            COALESCE(TRIM(dv.reporte_prov_con_obs), ''),
+                            '^[0-9]+ - ', ''
+                        ), '[^a-zA-Z0-9 ]', ' ', 'g'))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), ''), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
+                    )
+                    OR (COALESCE(TRIM(dv.reporte_prov_con_obs), '') = '' AND pr.id_proveedor = i.id_proveedor)
+                )
                 WHERE ${whereBase}
             `);
         } else {
