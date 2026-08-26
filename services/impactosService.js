@@ -206,22 +206,13 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
     if (tipoPeriodo.includes('MENSUAL')) {
         if (esProveedor) {
             partes.push(`
-                SELECT DISTINCT ${alias}.id_vendedor, pr.id_proveedor AS id_dim, 'MENSUAL' AS tipo_periodo,
+                SELECT DISTINCT ${alias}.id_vendedor, i.id_proveedor AS id_dim, 'MENSUAL' AS tipo_periodo,
                     DATE_TRUNC('month', ${alias}.fecha)::date AS fecha_inicio,
                     (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date AS fecha_fin
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
-                JOIN proveedor pr ON (
-                    (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
-                        AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(
-                            COALESCE(TRIM(dv.reporte_prov_con_obs), ''),
-                            '^[0-9]+ - ', ''
-                        ), '[^a-zA-Z0-9 ]', ' ', 'g'))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), ''), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
-                    )
-                    OR (COALESCE(TRIM(dv.reporte_prov_con_obs), '') = '' AND pr.id_proveedor = i.id_proveedor)
-                )
-                WHERE ${whereBase}
+                WHERE ${whereBase} AND i.id_proveedor IS NOT NULL
             `);
         } else {
             partes.push(`
@@ -238,22 +229,13 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
     if (tipoPeriodo.includes('SEMANAL')) {
         if (esProveedor) {
             partes.push(`
-                SELECT DISTINCT ${alias}.id_vendedor, pr.id_proveedor AS id_dim, 'SEMANAL' AS tipo_periodo,
+                SELECT DISTINCT ${alias}.id_vendedor, i.id_proveedor AS id_dim, 'SEMANAL' AS tipo_periodo,
                     DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
                     (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
-                JOIN proveedor pr ON (
-                    (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
-                        AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(
-                            COALESCE(TRIM(dv.reporte_prov_con_obs), ''),
-                            '^[0-9]+ - ', ''
-                        ), '[^a-zA-Z0-9 ]', ' ', 'g'))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), ''), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
-                    )
-                    OR (COALESCE(TRIM(dv.reporte_prov_con_obs), '') = '' AND pr.id_proveedor = i.id_proveedor)
-                )
-                WHERE ${whereBase}
+                WHERE ${whereBase} AND i.id_proveedor IS NOT NULL
             `);
         } else {
             partes.push(`
@@ -270,21 +252,12 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
     if (tipoPeriodo.includes('DIARIO')) {
         if (esProveedor) {
             partes.push(`
-                SELECT DISTINCT ${alias}.id_vendedor, pr.id_proveedor AS id_dim, 'DIARIO' AS tipo_periodo,
+                SELECT DISTINCT ${alias}.id_vendedor, i.id_proveedor AS id_dim, 'DIARIO' AS tipo_periodo,
                     ${alias}.fecha AS fecha_inicio, ${alias}.fecha AS fecha_fin
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
-                JOIN proveedor pr ON (
-                    (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
-                        AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(
-                            COALESCE(TRIM(dv.reporte_prov_con_obs), ''),
-                            '^[0-9]+ - ', ''
-                        ), '[^a-zA-Z0-9 ]', ' ', 'g'))) = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr.nombre), ''), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
-                    )
-                    OR (COALESCE(TRIM(dv.reporte_prov_con_obs), '') = '' AND pr.id_proveedor = i.id_proveedor)
-                )
-                WHERE ${whereBase}
+                WHERE ${whereBase} AND i.id_proveedor IS NOT NULL
             `);
         } else {
             partes.push(`
@@ -563,15 +536,7 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
               AND v.fecha >= p.calc_fecha_inicio
               AND v.fecha <= p.calc_fecha_fin
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            JOIN item i ON i.id_item = dv.id_item
-            JOIN proveedor pr_dim ON pr_dim.id_proveedor = p.id_dim
-            WHERE (
-                (dv.reporte_prov_con_obs IS NOT NULL AND TRIM(dv.reporte_prov_con_obs) <> ''
-                    AND UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(dv.reporte_prov_con_obs), COALESCE(TRIM(pr_dim.nombre), 'SIN LINEA')), '^[0-9]+ - ', ''), '[^a-zA-Z0-9 ]', ' ', 'g')))
-                    = UPPER(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(TRIM(pr_dim.nombre), 'SIN LINEA'), '[^a-zA-Z0-9 ]', ' ', 'g'), ' +', ' ', 'g')))
-                )
-                OR (i.id_proveedor = p.id_dim)
-            )
+            JOIN item i ON i.id_item = dv.id_item AND i.id_proveedor = p.id_dim
             GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, ${groupExpr}
         `;
     } else {
