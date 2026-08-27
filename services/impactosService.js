@@ -561,22 +561,24 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
 
     let ventasWithDimCte;
     if (tempTable) {
-        ventasWithDimCte = `ventas_with_dim(id_vendedor, fecha, id_cliente, id_dim, subtotal) AS (SELECT id_vendedor, fecha, id_cliente, id_dim, subtotal FROM ${tempTable})`;
+        ventasWithDimCte = `ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal) AS (SELECT id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal FROM ${tempTable})`;
     } else if (esProveedor) {
         ventasWithDimCte = `
-        ventas_with_dim(id_vendedor, fecha, id_cliente, id_dim, subtotal) AS (
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, pm.id_dim, dv.subtotal
+            ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal) AS (
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, pm.id_dim, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN cliente c ON c.id_cliente = v.id_cliente
             JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
             WHERE ${getCodigoProvExpr('dv')} != ''
         )`;
     } else {
         ventasWithDimCte = `
-        ventas_with_dim(id_vendedor, fecha, id_cliente, id_dim, subtotal) AS (
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, i.${dimCol}, dv.subtotal
+            ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal) AS (
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, i.${dimCol}, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN cliente c ON c.id_cliente = v.id_cliente
             JOIN item i ON i.id_item = dv.id_item
         )`;
     }
@@ -602,13 +604,14 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
             SELECT
                 p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin,
                 vw.id_cliente,
-                SUM(CASE WHEN vw.subtotal = 0 THEN 0 ELSE vw.subtotal END) AS subtotal_neto
+                vw.nro_documento,
+                BOOL_OR(vw.subtotal > 0) AS tiene_venta
             FROM ventas_with_dim vw
             JOIN periodos p ON p.id_vendedor = vw.id_vendedor
               AND p.id_dim = vw.id_dim
               AND vw.fecha >= p.calc_fecha_inicio
               AND vw.fecha <= p.calc_fecha_fin
-            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, vw.id_cliente
+            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, vw.id_cliente, vw.nro_documento
         )
         SELECT
             id_vendedor,
@@ -616,7 +619,7 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
             tipo_periodo,
             fecha_inicio,
             fecha_fin,
-            COUNT(*) FILTER (WHERE subtotal_neto > 0) AS impactos
+            COUNT(*) FILTER (WHERE tiene_venta) AS impactos
         FROM ventas_asignadas
         GROUP BY id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin
     `;
@@ -724,9 +727,10 @@ async function calcularDimension(ctx, dim) {
         await sequelize.query(`
             CREATE TEMP TABLE ${tempTable} AS
             WITH ${getProvMapCte()}
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, pm.id_dim, dv.subtotal
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, pm.id_dim, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+            JOIN cliente c ON c.id_cliente = v.id_cliente
             JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
             WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin
               AND ${getCodigoProvExpr('dv')} != ''
@@ -765,6 +769,50 @@ async function calcularDimension(ctx, dim) {
 
         const impactosMap = await calcularImpactosDimensionBatch(periodos, dim, fechaInicio, fechaFin, tempTable);
 
+        if (isProv) {
+            const uniqueSql = `
+                SELECT id_dim, COUNT(DISTINCT nro_documento) AS impactos
+                FROM ${tempTable}
+                WHERE subtotal > 0
+                GROUP BY id_dim
+            `;
+            const uniqueRows = await sequelize.query(uniqueSql, { type: QueryTypes.SELECT });
+            const uniqueMap = new Map(uniqueRows.map(r => [r.id_dim, Number(r.impactos) || 0]));
+
+            const grouped = new Map();
+            for (const periodo of periodos) {
+                const gKey = `${periodo.id_dim}|${periodo.tipo_periodo}|${periodo.fecha_inicio}|${periodo.fecha_fin}`;
+                if (!grouped.has(gKey)) {
+                    grouped.set(gKey, { ...periodo, cuota_total: 0 });
+                }
+                grouped.get(gKey).cuota_total += Number(periodo.cuota_total) || 0;
+            }
+
+            const rows = [];
+            for (const [gKey, periodo] of grouped) {
+                const d = dimMap.get(periodo.id_dim);
+                const impactos = uniqueMap.get(periodo.id_dim) || 0;
+                const cuota = Number(periodo.cuota_total) || 0;
+                rows.push({
+                    [dimKey]: d?.nombre,
+                    tipoPeriodo: periodo.tipo_periodo,
+                    fechaInicio: periodo.fecha_inicio,
+                    fechaFin: periodo.fecha_fin,
+                    ...formatRow(cuota, impactos)
+                });
+            }
+
+            rows.sort((a, b) => {
+                const cmpDim = String(a[dimKey]).localeCompare(String(b[dimKey]), 'es', { sensitivity: 'base' });
+                if (cmpDim !== 0) return cmpDim;
+                const cmpPeriodo = String(a.tipoPeriodo).localeCompare(String(b.tipoPeriodo));
+                if (cmpPeriodo !== 0) return cmpPeriodo;
+                return String(a.fechaInicio).localeCompare(String(b.fechaInicio));
+            });
+
+            return { success: true, tipo: 'proveedores', total: rows.length, rows };
+        }
+
         const rows = [];
         for (const periodo of periodos) {
             const key = `${periodo.id_vendedor}|${periodo.id_dim}|${periodo.tipo_periodo}|${periodo.fecha_inicio}|${periodo.fecha_fin}`;
@@ -785,10 +833,12 @@ async function calcularDimension(ctx, dim) {
         }
 
         rows.sort((a, b) => {
-            const cmpVendedor = String(a.vendedor).localeCompare(String(b.vendedor), 'es', { numeric: false, sensitivity: 'base' });
-            if (cmpVendedor !== 0) return cmpVendedor;
             const cmpDim = String(a[dimKey]).localeCompare(String(b[dimKey]), 'es', { sensitivity: 'base' });
-            if (cmpDim !== 0) return cmpDim;
+            const cmpVendedor = String(a.vendedor).localeCompare(String(b.vendedor), 'es', { numeric: false, sensitivity: 'base' });
+            const first = isProv ? cmpDim : cmpVendedor;
+            if (first !== 0) return first;
+            const second = isProv ? cmpVendedor : cmpDim;
+            if (second !== 0) return second;
             const cmpPeriodo = String(a.tipoPeriodo).localeCompare(String(b.tipoPeriodo));
             if (cmpPeriodo !== 0) return cmpPeriodo;
             return String(a.fechaInicio).localeCompare(String(b.fechaInicio));
