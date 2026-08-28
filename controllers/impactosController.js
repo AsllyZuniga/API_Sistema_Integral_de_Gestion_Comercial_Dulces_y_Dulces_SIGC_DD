@@ -38,6 +38,7 @@ async function handle(req, res, tipo) {
         setNoCacheHeaders(res);
         return res.status(200).send(data);
     } catch (error) {
+        console.error(`[impactos:${tipo}]`, error);
         return res.status(400).send({ success: false, error: error.message });
     }
 }

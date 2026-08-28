@@ -561,11 +561,11 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
 
     let ventasWithDimCte;
     if (tempTable) {
-        ventasWithDimCte = `ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal) AS (SELECT id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal FROM ${tempTable})`;
+        ventasWithDimCte = `ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, sucursal, id_dim, subtotal) AS (SELECT id_vendedor, fecha, id_cliente, nro_documento, sucursal, id_dim, subtotal FROM ${tempTable})`;
     } else if (esProveedor) {
         ventasWithDimCte = `
-            ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal) AS (
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, pm.id_dim, dv.subtotal
+            ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, sucursal, id_dim, subtotal) AS (
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal, pm.id_dim, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN cliente c ON c.id_cliente = v.id_cliente
@@ -574,8 +574,8 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
         )`;
     } else {
         ventasWithDimCte = `
-            ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, id_dim, subtotal) AS (
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, i.${dimCol}, dv.subtotal
+            ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, sucursal, id_dim, subtotal) AS (
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal, i.${dimCol}, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN cliente c ON c.id_cliente = v.id_cliente
@@ -605,13 +605,14 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
                 p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin,
                 vw.id_cliente,
                 vw.nro_documento,
-                BOOL_OR(vw.subtotal > 0) AS tiene_venta
+                vw.sucursal,
+                ${esProveedor ? 'SUM(vw.subtotal) > 0' : 'BOOL_OR(vw.subtotal > 0)'} AS tiene_venta
             FROM ventas_with_dim vw
             JOIN periodos p ON p.id_vendedor = vw.id_vendedor
               AND p.id_dim = vw.id_dim
               AND vw.fecha >= p.calc_fecha_inicio
               AND vw.fecha <= p.calc_fecha_fin
-            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, vw.id_cliente, vw.nro_documento
+            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, vw.id_cliente, vw.nro_documento, vw.sucursal
         )
         SELECT
             id_vendedor,
@@ -723,11 +724,11 @@ async function calcularDimension(ctx, dim) {
 
     let tempTable = null;
     if (isProv) {
-        tempTable = `_ventas_dim_${Date.now()}`;
+        tempTable = `_ventas_dim_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         await sequelize.query(`
-            CREATE TEMP TABLE ${tempTable} AS
+            CREATE UNLOGGED TABLE ${tempTable} AS
             WITH ${getProvMapCte()}
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, pm.id_dim, dv.subtotal
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal, pm.id_dim, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN cliente c ON c.id_cliente = v.id_cliente
@@ -771,9 +772,13 @@ async function calcularDimension(ctx, dim) {
 
         if (isProv) {
             const uniqueSql = `
-                SELECT id_dim, COUNT(DISTINCT nro_documento) AS impactos
-                FROM ${tempTable}
-                WHERE subtotal > 0
+                SELECT id_dim, COUNT(*) AS impactos
+                FROM (
+                    SELECT id_dim, nro_documento, sucursal
+                    FROM ${tempTable}
+                    GROUP BY id_dim, nro_documento, sucursal
+                    HAVING SUM(subtotal) > 0
+                ) clientes_validos
                 GROUP BY id_dim
             `;
             const uniqueRows = await sequelize.query(uniqueSql, { type: QueryTypes.SELECT });
