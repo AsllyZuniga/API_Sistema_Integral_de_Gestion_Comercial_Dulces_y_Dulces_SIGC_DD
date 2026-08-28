@@ -605,7 +605,7 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
                 p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin,
                 vw.id_cliente,
                 vw.nro_documento,
-                BOOL_OR(vw.subtotal > 0) AS tiene_venta
+                ${esProveedor ? 'SUM(vw.subtotal) > 0' : 'BOOL_OR(vw.subtotal > 0)'} AS tiene_venta
             FROM ventas_with_dim vw
             JOIN periodos p ON p.id_vendedor = vw.id_vendedor
               AND p.id_dim = vw.id_dim
@@ -723,9 +723,9 @@ async function calcularDimension(ctx, dim) {
 
     let tempTable = null;
     if (isProv) {
-        tempTable = `_ventas_dim_${Date.now()}`;
+        tempTable = `_ventas_dim_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
         await sequelize.query(`
-            CREATE TEMP TABLE ${tempTable} AS
+            CREATE UNLOGGED TABLE ${tempTable} AS
             WITH ${getProvMapCte()}
             SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, pm.id_dim, dv.subtotal
             FROM venta v
@@ -771,9 +771,13 @@ async function calcularDimension(ctx, dim) {
 
         if (isProv) {
             const uniqueSql = `
-                SELECT id_dim, COUNT(DISTINCT nro_documento) AS impactos
-                FROM ${tempTable}
-                WHERE subtotal > 0
+                SELECT id_dim, COUNT(*) AS impactos
+                FROM (
+                    SELECT id_dim, nro_documento
+                    FROM ${tempTable}
+                    GROUP BY id_dim, nro_documento
+                    HAVING SUM(subtotal) > 0
+                ) clientes_validos
                 GROUP BY id_dim
             `;
             const uniqueRows = await sequelize.query(uniqueSql, { type: QueryTypes.SELECT });
