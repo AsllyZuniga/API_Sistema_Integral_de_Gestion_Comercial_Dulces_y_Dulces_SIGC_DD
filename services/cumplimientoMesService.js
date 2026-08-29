@@ -88,7 +88,15 @@ const buildProveedorCondition = (proveedores, replacements) => {
     if (!proveedores || proveedores.length === 0) return null;
     const placeholders = proveedores.map((_, i) => `:fProv${i}`).join(',');
     proveedores.forEach((p, i) => { replacements[`fProv${i}`] = p; });
-    return `it.id_proveedor IN (${placeholders})`;
+    const codigoReporte = `TRIM(REPLACE(TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1)), '"', ''))`;
+    return `(
+        ${codigoReporte} IN (${placeholders})
+        OR ${codigoReporte} IN (
+            SELECT DISTINCT TRIM(REPLACE(TRIM(codigo), '"', ''))
+            FROM proveedor
+            WHERE CAST(id_proveedor AS TEXT) IN (${placeholders})
+        )
+    )`;
 };
 
 const buildVentasFilters = (filters = {}, replacements = {}) => {
