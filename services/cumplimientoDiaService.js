@@ -98,7 +98,15 @@ const buildDetalleFilters = (filters = {}, replacements = {}) => {
         joinItem = true;
         const placeholders = proveedores.map((_, i) => `:diaProv${i}`).join(',');
         proveedores.forEach((p, i) => { replacements[`diaProv${i}`] = String(p).trim(); });
-        condiciones.push(`CAST(i.id_proveedor AS TEXT) IN (${placeholders})`);
+        const codigoReporte = `TRIM(REPLACE(TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1)), '"', ''))`;
+        condiciones.push(`(
+            ${codigoReporte} IN (${placeholders})
+            OR ${codigoReporte} IN (
+                SELECT DISTINCT TRIM(REPLACE(TRIM(codigo), '"', ''))
+                FROM proveedor
+                WHERE CAST(id_proveedor AS TEXT) IN (${placeholders})
+            )
+        )`);
     }
 
     if (categorias.length) {
