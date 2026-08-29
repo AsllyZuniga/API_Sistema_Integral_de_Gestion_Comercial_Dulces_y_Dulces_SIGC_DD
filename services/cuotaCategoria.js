@@ -311,12 +311,22 @@ const getCuotaCategoriaGeneral = async (filters = {}, auth = null) => {
 		extraVentaWhere += ` AND it.id_categoria IN (${placeholdersVenta}) `;
 	}
 
-	// Filtro por proveedor(es) - match exacto via item.id_proveedor
+	// Filtro por proveedor(es): el proveedor comercial de la venta proviene de
+	// reporte_prov_con_obs. No usar it.id_proveedor porque ese valor representa
+	// el proveedor maestro del item y puede ser distinto al reporte de SIESA.
 	let extraProvVenta = '';
 	if (proveedoresFiltro && proveedoresFiltro.length) {
 		const placeholders = proveedoresFiltro.map((_, i) => `:fProv${i}`).join(',');
 		proveedoresFiltro.forEach((p, i) => { replacements[`fProv${i}`] = p; });
-		extraProvVenta = ` AND it.id_proveedor IN (${placeholders}) `;
+		const codigoReporte = `TRIM(REPLACE(TRIM(SPLIT_PART(COALESCE(TRIM(dv.reporte_prov_con_obs), ''), ' - ', 1)), '"', ''))`;
+		extraProvVenta = ` AND (
+			${codigoReporte} IN (${placeholders})
+			OR ${codigoReporte} IN (
+				SELECT DISTINCT TRIM(REPLACE(TRIM(codigo), '"', ''))
+				FROM proveedor
+				WHERE CAST(id_proveedor AS TEXT) IN (${placeholders})
+			)
+		) `;
 	}
 
 	// Filtro por ciudad - id_ciudad_original de detalle_venta
