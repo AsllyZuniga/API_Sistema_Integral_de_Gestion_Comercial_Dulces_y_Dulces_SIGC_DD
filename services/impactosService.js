@@ -23,10 +23,14 @@ function padCode(value) {
 }
 
 function extractCategoryName(dbNombre) {
-    const raw = String(dbNombre ?? '').trim();
-    const match = raw.match(/(?:\d+\s*-\s*)?(?:\d+\s*-)?\s*(.+)$/);
-    if (match && match[1]) return match[1].trim();
-    return raw;
+    let nombre = String(dbNombre ?? '').trim();
+
+    // Algunas categorías tienen más de un prefijo: "7710 - 0601 ALIVIO...".
+    // Se eliminan los códigos iniciales, pero se conserva el nombre visible.
+    while (/^\d+\s*-\s*/.test(nombre)) {
+        nombre = nombre.replace(/^\d+\s*-\s*/, '').trim();
+    }
+    return nombre.replace(/^\d+\s+/, '').trim();
 }
 
 function buildScopeCond(scope, column, replacements, prefix) {
@@ -43,6 +47,60 @@ function buildScopeCond(scope, column, replacements, prefix) {
         return `${column} = :${prefix}0`;
     }
     return '';
+}
+
+async function addCrossDimensionFilters({ cuotaConds, ventaConds, filtros, replacements, dimension }) {
+    const proveedores = await resolverProveedores(filtros?.proveedor);
+    const categorias = toArr(filtros?.categoria);
+
+    if (filtros?.proveedor && toArr(filtros.proveedor).length && !proveedores.length) {
+        cuotaConds.push('cu.id_vendedor = -1');
+        ventaConds.push('v.id_vendedor = -1');
+    } else if (proveedores.length) {
+        replacements.filtroProveedores = proveedores;
+        const vendedoresPorProveedor = `(
+            SELECT DISTINCT ip.id_vendedor
+            FROM impactos_proveedor ip
+            WHERE ip.id_proveedor IN (:filtroProveedores)
+              AND ip.fecha_fin >= :fechaInicio AND ip.fecha_inicio <= :fechaFin
+              AND ip.tipo_periodo IN (:tipoPeriodo)
+            UNION
+            SELECT DISTINCT vx.id_vendedor
+            FROM venta vx
+            JOIN detalle_venta dvx ON dvx.id_venta = vx.id_venta
+            JOIN item ix ON ix.id_item = dvx.id_item
+            WHERE vx.fecha >= :fechaInicio AND vx.fecha <= :fechaFin
+              AND ix.id_proveedor IN (:filtroProveedores)
+        )`;
+
+        cuotaConds.push(`cu.id_vendedor IN ${vendedoresPorProveedor}`);
+        // También debe restringir la rama de periodos derivados de ventas;
+        // de lo contrario el UNION vuelve a incorporar todos los vendedores.
+        ventaConds.push(`v.id_vendedor IN ${vendedoresPorProveedor}`);
+        if (dimension === 'categoria') ventaConds.push('i.id_proveedor IN (:filtroProveedores)');
+    }
+
+    if (categorias.length) {
+        replacements.filtroCategorias = categorias;
+        const vendedoresPorCategoria = `(
+            SELECT DISTINCT ic.id_vendedor
+            FROM impactos_categoria ic
+            WHERE ic.id_categoria IN (:filtroCategorias)
+              AND ic.fecha_fin >= :fechaInicio AND ic.fecha_inicio <= :fechaFin
+              AND ic.tipo_periodo IN (:tipoPeriodo)
+            UNION
+            SELECT DISTINCT vx.id_vendedor
+            FROM venta vx
+            JOIN detalle_venta dvx ON dvx.id_venta = vx.id_venta
+            JOIN item ix ON ix.id_item = dvx.id_item
+            WHERE vx.fecha >= :fechaInicio AND vx.fecha <= :fechaFin
+              AND ix.id_categoria IN (:filtroCategorias)
+        )`;
+
+        cuotaConds.push(`cu.id_vendedor IN ${vendedoresPorCategoria}`);
+        ventaConds.push(`v.id_vendedor IN ${vendedoresPorCategoria}`);
+        if (dimension === 'proveedor') ventaConds.push('i.id_categoria IN (:filtroCategorias)');
+    }
 }
 
 async function resolverVendedoresPorCanalCiudad(filtros) {
@@ -117,6 +175,20 @@ async function resolverVendedoresPorCodigo(codigos) {
     }
 
     return [...new Set(ids)];
+}
+
+async function resolverProveedores(valores) {
+    const list = toArr(valores);
+    if (!list.length) return [];
+
+    const filas = await sequelize.query(
+        `SELECT DISTINCT id_proveedor
+         FROM proveedor
+         WHERE CAST(id_proveedor AS TEXT) IN (:valores)
+            OR TRIM(CAST(codigo AS TEXT)) IN (:valores)`,
+        { replacements: { valores: list }, type: QueryTypes.SELECT }
+    );
+    return filas.map(f => f.id_proveedor);
 }
 
 function buildCondCanalCiudad(idsCanalCiudad, column, replacements, key) {
@@ -239,7 +311,7 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
 
         if (periodosTipo.length > 0) {
             partes.push(`
-                SELECT DISTINCT ${alias}.id_vendedor, pm.id_dim, p.tipo_periodo,
+                SELECT DISTINCT ${alias}.id_vendedor, COALESCE(pm.id_dim, i.id_proveedor) AS id_dim, p.tipo_periodo,
                     CASE p.tipo_periodo
                         WHEN 'MENSUAL' THEN DATE_TRUNC('month', ${alias}.fecha)::date
                         WHEN 'SEMANAL' THEN DATE_TRUNC('week', ${alias}.fecha)::date
@@ -252,10 +324,11 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                     END AS fecha_fin
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
-                JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
+                JOIN item i ON i.id_item = dv.id_item
+                LEFT JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
                 CROSS JOIN (VALUES ${periodosTipo.map(t => `((${t}))`).join(', ')}) AS p(tipo_periodo)
                 WHERE ${whereBase}
-                  AND ${getCodigoProvExpr('dv')} != ''
+                  AND (pm.id_dim IS NOT NULL OR i.id_proveedor IS NOT NULL)
             `);
         }
     } else {
@@ -298,7 +371,6 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
 
 function buildVentaValidaConds(prefix = 'v') {
     return [
-        `${prefix}.valor_neto > 0`,
         `UPPER(TRIM(${prefix}.numero_documento)) NOT LIKE 'NC%'`
     ];
 }
@@ -333,6 +405,8 @@ async function obtenerPeriodosCuota({ cuotaTable, fechaInicio, fechaFin, tipoPer
             ventaConds.push('v.id_vendedor = -1');
         }
     }
+
+    await addCrossDimensionFilters({ cuotaConds, ventaConds, filtros, replacements, dimension: 'vendedor' });
 
     const ventasPeriodosSql = buildPeriodosDesdeVentasSql(tipoPeriodo, 'venta', 'v', ventaConds.join(' AND '));
 
@@ -406,17 +480,23 @@ async function obtenerPeriodosDimensionCuota({ cuotaTable, dimCol, fechaInicio, 
         }
     }
 
-    const dimFilters = filtros ? (dimCol === 'id_proveedor' ? toArr(filtros.proveedor) : toArr(filtros.categoria)) : [];
+    const dimFilters = filtros
+        ? (dimCol === 'id_proveedor'
+            ? await resolverProveedores(filtros.proveedor)
+            : toArr(filtros.categoria))
+        : [];
     const esProveedor = dimCol === 'id_proveedor';
     if (dimFilters.length) {
         replacements.dimFiltro = dimFilters;
         cuotaConds.push(`cu.${dimCol} IN (:dimFiltro)`);
         if (esProveedor) {
-            ventaConds.push(`pm.id_dim IN (:dimFiltro)`);
+            ventaConds.push(`COALESCE(pm.id_dim, i.id_proveedor) IN (:dimFiltro)`);
         } else {
             ventaConds.push(`i.${dimCol} IN (:dimFiltro)`);
         }
     }
+
+    await addCrossDimensionFilters({ cuotaConds, ventaConds, filtros, replacements, dimension: esProveedor ? 'proveedor' : 'categoria' });
 
     const ventasPeriodosSql = buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, 'v', ventaConds.join(' AND '));
 
@@ -486,10 +566,25 @@ function buildPeriodosValues(periodos, columns, types) {
     }).join(',\n            ');
 }
 
-async function calcularImpactosVendedorBatch(periodos, fechaInicioGlobal, fechaFinGlobal) {
+async function calcularImpactosVendedorBatch(periodos, fechaInicioGlobal, fechaFinGlobal, filtros = {}) {
     if (!periodos || periodos.length === 0) return new Map();
 
     const values = buildPeriodosValues(periodos, ['id_vendedor', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', null, null, null]);
+    const replacements = { fechaInicio: fechaInicioGlobal, fechaFin: fechaFinGlobal };
+    const dimensionConds = [];
+    const proveedores = await resolverProveedores(filtros.proveedor);
+    const categorias = toArr(filtros.categoria);
+
+    if (proveedores.length) {
+        replacements.impactoProveedores = proveedores;
+        dimensionConds.push('i.id_proveedor IN (:impactoProveedores)');
+    } else if (filtros.proveedor && toArr(filtros.proveedor).length) {
+        dimensionConds.push('1 = 0');
+    }
+    if (categorias.length) {
+        replacements.impactoCategorias = categorias;
+        dimensionConds.push('i.id_categoria IN (:impactoCategorias)');
+    }
 
     const sql = `
         WITH periodos_raw(id_vendedor, tipo_periodo, fecha_inicio, fecha_fin) AS (
@@ -511,19 +606,21 @@ async function calcularImpactosVendedorBatch(periodos, fechaInicioGlobal, fechaF
                 p.tipo_periodo,
                 p.fecha_inicio,
                 p.fecha_fin,
-                v.id_cliente,
-                SUM(
-                    CASE
-                        WHEN dv.subtotal = 0 THEN 0
-                        ELSE dv.subtotal
-                    END
-                ) AS subtotal_neto
+                c.nro_documento,
+                c.sucursal,
+                SUM(dv.subtotal) AS subtotal_neto
             FROM periodos p
             JOIN venta v ON v.id_vendedor = p.id_vendedor
               AND v.fecha >= p.calc_fecha_inicio
               AND v.fecha <= p.calc_fecha_fin
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
-            GROUP BY p.id_vendedor, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, v.id_cliente
+            JOIN item i ON i.id_item = dv.id_item
+            JOIN cliente c ON c.id_cliente = v.id_cliente
+            WHERE 1 = 1
+              ${dimensionConds.length ? `AND ${dimensionConds.join(' AND ')}` : ''}
+            GROUP BY p.id_vendedor, p.tipo_periodo, p.fecha_inicio, p.fecha_fin,
+                     c.nro_documento, c.sucursal
+            HAVING SUM(dv.subtotal) > 0
         )
         SELECT
             id_vendedor,
@@ -536,7 +633,7 @@ async function calcularImpactosVendedorBatch(periodos, fechaInicioGlobal, fechaF
     `;
 
     const rows = await sequelize.query(sql, {
-        replacements: { fechaInicio: fechaInicioGlobal, fechaFin: fechaFinGlobal },
+        replacements,
         type: QueryTypes.SELECT
     });
     const map = new Map();
@@ -547,17 +644,20 @@ async function calcularImpactosVendedorBatch(periodos, fechaInicioGlobal, fechaF
     return map;
 }
 
-async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, fechaFinGlobal, tempTable = null) {
+async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, fechaFinGlobal, tempTable = null, filtros = {}) {
     if (!periodos || periodos.length === 0) return new Map();
 
     const dimCol = dim === 'proveedor' ? 'id_proveedor' : 'id_categoria';
     const esProveedor = dim === 'proveedor';
-    const groupExpr = dim === 'categoria'
-        ? "CONCAT(i.id_proveedor::text, '-', v.id_cliente::text)"
-        : 'v.id_cliente';
-
     const values = buildPeriodosValues(periodos, ['id_vendedor', 'id_dim', 'tipo_periodo', 'fecha_inicio', 'fecha_fin'], ['int', 'int', null, null, null]);
     const provMapCte = (esProveedor && !tempTable) ? `${getProvMapCte()},` : '';
+    const dimensionReplacements = { fechaInicio: fechaInicioGlobal, fechaFin: fechaFinGlobal };
+    const dimensionVentaConds = [];
+    if (!esProveedor && filtros?.proveedor && toArr(filtros.proveedor).length) {
+        const proveedores = await resolverProveedores(filtros.proveedor);
+        dimensionReplacements.dimensionProveedores = proveedores.length ? proveedores : [-1];
+        dimensionVentaConds.push('i.id_proveedor IN (:dimensionProveedores)');
+    }
 
     let ventasWithDimCte;
     if (tempTable) {
@@ -565,12 +665,14 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
     } else if (esProveedor) {
         ventasWithDimCte = `
             ventas_with_dim(id_vendedor, fecha, id_cliente, nro_documento, sucursal, id_dim, subtotal) AS (
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal, pm.id_dim, dv.subtotal
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal,
+                   COALESCE(pm.id_dim, i.id_proveedor) AS id_dim, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN cliente c ON c.id_cliente = v.id_cliente
-            JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
-            WHERE ${getCodigoProvExpr('dv')} != ''
+            JOIN item i ON i.id_item = dv.id_item
+            LEFT JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
+            WHERE (pm.id_dim IS NOT NULL OR i.id_proveedor IS NOT NULL)
         )`;
     } else {
         ventasWithDimCte = `
@@ -580,6 +682,8 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN cliente c ON c.id_cliente = v.id_cliente
             JOIN item i ON i.id_item = dv.id_item
+            WHERE 1 = 1
+              ${dimensionVentaConds.length ? `AND ${dimensionVentaConds.join(' AND ')}` : ''}
         )`;
     }
 
@@ -603,16 +707,16 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
         ventas_asignadas AS (
             SELECT
                 p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin,
-                vw.id_cliente,
                 vw.nro_documento,
                 vw.sucursal,
-                ${esProveedor ? 'SUM(vw.subtotal) > 0' : 'BOOL_OR(vw.subtotal > 0)'} AS tiene_venta
+                SUM(vw.subtotal) AS subtotal_neto
             FROM ventas_with_dim vw
             JOIN periodos p ON p.id_vendedor = vw.id_vendedor
               AND p.id_dim = vw.id_dim
               AND vw.fecha >= p.calc_fecha_inicio
               AND vw.fecha <= p.calc_fecha_fin
-            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, vw.id_cliente, vw.nro_documento, vw.sucursal
+            GROUP BY p.id_vendedor, p.id_dim, p.tipo_periodo, p.fecha_inicio, p.fecha_fin, vw.nro_documento, vw.sucursal
+            HAVING SUM(vw.subtotal) > 0
         )
         SELECT
             id_vendedor,
@@ -620,13 +724,13 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
             tipo_periodo,
             fecha_inicio,
             fecha_fin,
-            COUNT(*) FILTER (WHERE tiene_venta) AS impactos
+            COUNT(*) AS impactos
         FROM ventas_asignadas
         GROUP BY id_vendedor, id_dim, tipo_periodo, fecha_inicio, fecha_fin
     `;
 
     const rows = await sequelize.query(sql, {
-        replacements: { fechaInicio: fechaInicioGlobal, fechaFin: fechaFinGlobal },
+        replacements: dimensionReplacements,
         type: QueryTypes.SELECT
     });
     const map = new Map();
@@ -685,7 +789,7 @@ async function calcularVendedores(ctx) {
     );
     const vendedorMap = new Map(vendedorRows.map(v => [v.id_vendedor, v]));
 
-    const impactosMap = await calcularImpactosVendedorBatch(periodos, fechaInicio, fechaFin);
+    const impactosMap = await calcularImpactosVendedorBatch(periodos, fechaInicio, fechaFin, filtros);
 
     const rows = [];
     for (const periodo of periodos) {
@@ -725,17 +829,43 @@ async function calcularDimension(ctx, dim) {
     let tempTable = null;
     if (isProv) {
         tempTable = `_ventas_dim_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const tempReplacements = { fechaInicio, fechaFin };
+        const tempConds = [
+            'v.fecha >= :fechaInicio',
+            'v.fecha <= :fechaFin',
+        ];
+
+        const scopeTemp = buildScopeCond(scope, 'v.id_vendedor', tempReplacements, 'sc_temp');
+        if (scopeTemp) tempConds.push(scopeTemp);
+
+        if (filtros?.vendedor && toArr(filtros.vendedor).length) {
+            const ids = await resolverVendedoresPorCodigo(filtros.vendedor);
+            tempReplacements.tempVendedores = ids.length ? ids : [-1];
+            tempConds.push('v.id_vendedor IN (:tempVendedores)');
+        }
+        if (filtros?.proveedor && toArr(filtros.proveedor).length) {
+            tempReplacements.tempProveedores = await resolverProveedores(filtros.proveedor);
+            if (!tempReplacements.tempProveedores.length) tempReplacements.tempProveedores = [-1];
+            tempConds.push('COALESCE(pm.id_dim, i.id_proveedor) IN (:tempProveedores)');
+        }
+        if (filtros?.categoria && toArr(filtros.categoria).length) {
+            tempReplacements.tempCategorias = toArr(filtros.categoria);
+            tempConds.push('i.id_categoria IN (:tempCategorias)');
+        }
+
         await sequelize.query(`
             CREATE UNLOGGED TABLE ${tempTable} AS
             WITH ${getProvMapCte()}
-            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal, pm.id_dim, dv.subtotal
+            SELECT v.id_vendedor, v.fecha, v.id_cliente, c.nro_documento, c.sucursal,
+                   COALESCE(pm.id_dim, i.id_proveedor) AS id_dim, dv.subtotal
             FROM venta v
             JOIN detalle_venta dv ON dv.id_venta = v.id_venta
             JOIN cliente c ON c.id_cliente = v.id_cliente
-            JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
-            WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin
-              AND ${getCodigoProvExpr('dv')} != ''
-        `, { replacements: { fechaInicio, fechaFin } });
+            JOIN item i ON i.id_item = dv.id_item
+            LEFT JOIN prov_map pm ON pm.codigo = ${getCodigoProvExpr('dv')}
+            WHERE ${tempConds.join(' AND ')}
+              AND (pm.id_dim IS NOT NULL OR i.id_proveedor IS NOT NULL)
+        `, { replacements: tempReplacements });
     }
 
     try {
@@ -768,7 +898,7 @@ async function calcularDimension(ctx, dim) {
         );
         const dimMap = new Map(dimRows.map(d => [d.id_dim, d]));
 
-        const impactosMap = await calcularImpactosDimensionBatch(periodos, dim, fechaInicio, fechaFin, tempTable);
+        const impactosMap = await calcularImpactosDimensionBatch(periodos, dim, fechaInicio, fechaFin, tempTable, filtros);
 
         if (isProv) {
             const uniqueSql = `
@@ -840,9 +970,9 @@ async function calcularDimension(ctx, dim) {
         rows.sort((a, b) => {
             const cmpDim = String(a[dimKey]).localeCompare(String(b[dimKey]), 'es', { sensitivity: 'base' });
             const cmpVendedor = String(a.vendedor).localeCompare(String(b.vendedor), 'es', { numeric: false, sensitivity: 'base' });
-            const first = isProv ? cmpDim : cmpVendedor;
+            const first = cmpDim;
             if (first !== 0) return first;
-            const second = isProv ? cmpVendedor : cmpDim;
+            const second = cmpVendedor;
             if (second !== 0) return second;
             const cmpPeriodo = String(a.tipoPeriodo).localeCompare(String(b.tipoPeriodo));
             if (cmpPeriodo !== 0) return cmpPeriodo;
@@ -943,20 +1073,17 @@ async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodig
         sqlDiagnostico = `
             WITH cliente_resumen AS (
                 SELECT
-                    v.id_cliente,
-                    SUM(
-                        CASE
-                            WHEN dv.subtotal = 0 THEN 0
-                            ELSE dv.subtotal
-                        END
-                    ) AS subtotal_neto,
+                    c.nro_documento,
+                    c.sucursal,
+                    SUM(dv.subtotal) AS subtotal_neto,
                     COUNT(*) AS total_ventas_cliente
                 FROM venta v
                 JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+                JOIN cliente c ON c.id_cliente = v.id_cliente
                 WHERE v.id_vendedor = :idVendedor
                   AND v.fecha >= :fechaInicio
                   AND v.fecha <= :fechaFin
-                GROUP BY v.id_cliente
+                GROUP BY c.nro_documento, c.sucursal
             )
             SELECT
                 (SELECT COUNT(*) FROM venta WHERE id_vendedor = :idVendedor AND fecha >= :fechaInicio AND fecha <= :fechaFin) AS total_ventas,
@@ -975,8 +1102,8 @@ async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodig
         replacements.idDim = idDim;
 
         const groupExpr = tipo === 'categoria'
-            ? "CONCAT(i.id_proveedor::text, '-', v.id_cliente::text)"
-            : 'v.id_cliente';
+            ? "CONCAT_WS('¦', i.id_proveedor::text, c.nro_documento, c.sucursal)"
+            : "CONCAT_WS('¦', c.nro_documento, c.sucursal)";
 
         if (tipo === 'proveedor') {
             sqlDiagnostico = `
@@ -991,15 +1118,11 @@ async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodig
                 grupo_resumen AS (
                     SELECT
                         ${groupExpr} AS grupo,
-                        SUM(
-                            CASE
-                                WHEN dv.subtotal = 0 THEN 0
-                                ELSE dv.subtotal
-                            END
-                        ) AS subtotal_neto,
+                        SUM(dv.subtotal) AS subtotal_neto,
                         COUNT(*) AS total_ventas_grupo
                     FROM venta v
                     JOIN detalle_venta dv ON dv.id_venta = v.id_venta
+                    JOIN cliente c ON c.id_cliente = v.id_cliente
                     JOIN prov_map pm ON pm.id_dim = :idDim AND pm.codigo = ${getCodigoProvExpr('dv')}
                     WHERE v.id_vendedor = :idVendedor
                       AND v.fecha >= :fechaInicio
@@ -1022,16 +1145,12 @@ async function diagnosticarImpactos({ tipo = 'cliente', codigoVendedor, dimCodig
                 WITH grupo_resumen AS (
                     SELECT
                         ${groupExpr} AS grupo,
-                        SUM(
-                            CASE
-                                WHEN dv.subtotal = 0 THEN 0
-                                ELSE dv.subtotal
-                            END
-                        ) AS subtotal_neto,
+                        SUM(dv.subtotal) AS subtotal_neto,
                         COUNT(*) AS total_ventas_grupo
                     FROM venta v
                     JOIN detalle_venta dv ON dv.id_venta = v.id_venta
                     JOIN item i ON i.id_item = dv.id_item
+                    JOIN cliente c ON c.id_cliente = v.id_cliente
                     WHERE v.id_vendedor = :idVendedor
                       AND i.${dimCol} = :idDim
                       AND v.fecha >= :fechaInicio

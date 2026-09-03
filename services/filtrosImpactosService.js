@@ -93,6 +93,20 @@ async function resolverCodigosProveedor(ids) {
     return filas.map(f => String(f.codigo).trim()).filter(Boolean);
 }
 
+async function resolverProveedores(valores) {
+    const list = toArr(valores);
+    if (!list.length) return [];
+
+    const filas = await sequelize.query(
+        `SELECT DISTINCT id_proveedor
+         FROM proveedor
+         WHERE CAST(id_proveedor AS TEXT) IN (:valores)
+            OR TRIM(CAST(codigo AS TEXT)) IN (:valores)`,
+        { replacements: { valores: list }, type: QueryTypes.SELECT }
+    );
+    return filas.map(f => f.id_proveedor);
+}
+
 async function getOpcionesFiltrosImpactos(params, scope) {
     const { fechaInicio, fechaFin, codVendedor, codProveedor, codCategoria } = params;
     const tipoPeriodo = inferirTipoPeriodo();
@@ -108,7 +122,9 @@ async function getOpcionesFiltrosImpactos(params, scope) {
         vendedorIds.forEach((id, i) => { replacements[`vf${i}`] = id; });
     }
 
-    const proveedorIds = toArr(codProveedor);
+    // El frontend puede enviar el id interno o el código de reporte (por
+    // ejemplo, 270 para NESTLE). Trabajamos internamente siempre con IDs.
+    const proveedorIds = await resolverProveedores(codProveedor);
     if (proveedorIds.length > 0) {
         proveedorIds.forEach((id, i) => { replacements[`pf${i}`] = id; });
     }
@@ -141,6 +157,12 @@ async function getOpcionesFiltrosImpactos(params, scope) {
                 ON pr.codigo = UPPER(TRIM(SPLIT_PART(COALESCE(dv.reporte_prov_con_obs, ''), ' - ', 1)))
             WHERE v2.fecha >= :fechaInicio AND v2.fecha <= :fechaFin
             AND pr.codigo IN (${pcByIds})` : ''}
+            ${pfByIds ? `UNION
+            SELECT DISTINCT v2b.id_vendedor FROM venta v2b
+            JOIN detalle_venta dv2b ON dv2b.id_venta = v2b.id_venta
+            JOIN item i2b ON i2b.id_item = dv2b.id_item
+            WHERE v2b.fecha >= :fechaInicio AND v2b.fecha <= :fechaFin
+            AND i2b.id_proveedor IN (${pfByIds})` : ''}
         )` : '';
 
     const vdByCat = cfByIds ? `
@@ -175,6 +197,37 @@ async function getOpcionesFiltrosImpactos(params, scope) {
                 ON pr3.codigo = UPPER(TRIM(SPLIT_PART(COALESCE(dv3.reporte_prov_con_obs, ''), ' - ', 1)))
             WHERE v4.fecha >= :fechaInicio AND v4.fecha <= :fechaFin
             AND i3.id_categoria IN (${cfByIds})
+            UNION
+            SELECT DISTINCT i3b.id_proveedor
+            FROM venta v4b
+            JOIN detalle_venta dv3b ON dv3b.id_venta = v4b.id_venta
+            JOIN item i3b ON i3b.id_item = dv3b.id_item
+            WHERE v4b.fecha >= :fechaInicio AND v4b.fecha <= :fechaFin
+            AND i3b.id_categoria IN (${cfByIds})
+        )` : '';
+
+    // Una categoría debe limitarse también por el proveedor seleccionado.
+    // La relación canónica es item.id_proveedor -> item.id_categoria; se
+    // conserva además la relación histórica de las tablas de impactos para
+    // que sigan apareciendo categorías con cuota aunque no exista una venta
+    // en el rango consultado.
+    const catByProv = pfByIds ? `
+        AND cat.id_categoria IN (
+            SELECT DISTINCT ic4.id_categoria
+            FROM impactos_categoria ic4
+            INNER JOIN impactos_proveedor ip4 ON ip4.id_vendedor = ic4.id_vendedor
+            WHERE ip4.id_proveedor IN (${pfByIds})
+            AND ic4.fecha_fin >= :fechaInicio AND ic4.fecha_inicio <= :fechaFin
+            AND ic4.tipo_periodo IN (:tipoPeriodo)
+            AND ip4.fecha_fin >= :fechaInicio AND ip4.fecha_inicio <= :fechaFin
+            AND ip4.tipo_periodo IN (:tipoPeriodo)
+            UNION
+            SELECT DISTINCT i5.id_categoria
+            FROM venta v7
+            JOIN detalle_venta dv6 ON dv6.id_venta = v7.id_venta
+            JOIN item i5 ON i5.id_item = dv6.id_item
+            WHERE v7.fecha >= :fechaInicio AND v7.fecha <= :fechaFin
+            AND i5.id_proveedor IN (${pfByIds})
         )` : '';
 
     const provByVd = vdByIds ? `
@@ -191,6 +244,13 @@ async function getOpcionesFiltrosImpactos(params, scope) {
                 ON pr4.codigo = UPPER(TRIM(SPLIT_PART(COALESCE(dv4.reporte_prov_con_obs, ''), ' - ', 1)))
             WHERE v5.fecha >= :fechaInicio AND v5.fecha <= :fechaFin
             AND v5.id_vendedor IN (${vdByIds})
+            UNION
+            SELECT DISTINCT i5b.id_proveedor
+            FROM venta v5b
+            JOIN detalle_venta dv4b ON dv4b.id_venta = v5b.id_venta
+            JOIN item i5b ON i5b.id_item = dv4b.id_item
+            WHERE v5b.fecha >= :fechaInicio AND v5b.fecha <= :fechaFin
+            AND v5b.id_vendedor IN (${vdByIds})
         )` : '';
 
     const catByVd = vdByIds ? `
@@ -242,6 +302,13 @@ async function getOpcionesFiltrosImpactos(params, scope) {
                     ON pr2.codigo = UPPER(TRIM(SPLIT_PART(COALESCE(dv.reporte_prov_con_obs, ''), ' - ', 1)))
                 WHERE v.fecha >= :fechaInicio AND v.fecha <= :fechaFin
                 ${scopeV ? 'AND ' + scopeV : ''}
+                UNION
+                SELECT DISTINCT i0.id_proveedor
+                FROM venta v0
+                JOIN detalle_venta dv0 ON dv0.id_venta = v0.id_venta
+                JOIN item i0 ON i0.id_item = dv0.id_item
+                WHERE v0.fecha >= :fechaInicio AND v0.fecha <= :fechaFin
+                ${scopeV ? 'AND ' + scopeV.replace(/\bv\./g, 'v0.') : ''}
             )
             ${provByVd}
             ${provByCat}
@@ -265,6 +332,7 @@ async function getOpcionesFiltrosImpactos(params, scope) {
                 ${scopeV ? 'AND ' + scopeV : ''}
             )
             ${catByVd}
+            ${catByProv}
             ORDER BY cat.nombre
         `, { replacements: { ...replacements }, type: QueryTypes.SELECT })
     ]);
