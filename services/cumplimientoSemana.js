@@ -127,20 +127,6 @@ async function getLineasPorVendedor(codigoVendedor, filters = {}) {
         FROM cuotas_deduplicadas cq
         LEFT JOIN ventas_por_proveedor vp
             ON vp.nombre_norm = cq.nombre_norm
-        UNION ALL
-        -- Ventas sin cuota asignada (proveedor no está en vendedorCuotaProveedor)
-        SELECT
-            vp.id_proveedor,
-            vp.reporte_prov_con_obs AS codigo_linea,
-            vp.reporte_prov_con_obs AS nombre_linea,
-            vp.reporte_prov_con_obs AS reporte_prov_con_obs,
-            0 AS cuota_proveedor,
-            vp.venta_total AS venta
-        FROM ventas_por_proveedor vp
-        WHERE NOT EXISTS (
-            SELECT 1 FROM cuotas_deduplicadas cq
-            WHERE vp.nombre_norm = cq.nombre_norm
-        )
         ORDER BY venta DESC
     `;
 
@@ -1044,19 +1030,6 @@ const getLineasGeneralSemana = async (filters = {}, auth = null) => {
         FROM cuotas_deduplicadas cq
         ${hayFiltroReductor ? 'JOIN' : 'LEFT JOIN'} ventas_por_proveedor vp
             ON vp.nombre_norm = cq.nombre_norm
-        UNION ALL
-        SELECT
-            vp.id_proveedor,
-            vp.reporte_prov_con_obs AS codigo_linea,
-            vp.reporte_prov_con_obs AS nombre_linea,
-            vp.reporte_prov_con_obs AS reporte_prov_con_obs,
-            0 AS cuota_proveedor_total,
-            vp.venta_total AS venta
-        FROM ventas_por_proveedor vp
-        WHERE NOT EXISTS (
-            SELECT 1 FROM cuotas_deduplicadas cq
-            WHERE vp.nombre_norm = cq.nombre_norm
-        )
         ORDER BY venta DESC
     `;
 
