@@ -262,15 +262,28 @@ function getCodigoProvExpr(alias) {
     return `UPPER(TRIM(SPLIT_PART(COALESCE(${alias}.reporte_prov_con_obs, ''), ' - ', 1)))`;
 }
 
-// Consolida id_categoria duplicados que comparten el mismo nombre crudo
-// (la tabla categoria tiene múltiples id_categoria para el mismo nombre).
+// Nombre de categoría sin el/los prefijo(s) numérico(s), en SQL. Debe
+// coincidir con el criterio usado para poblar cat_map.nombre_limpio.
+function getCategoriaLimpiaExpr(alias) {
+    return `TRIM(REGEXP_REPLACE(REGEXP_REPLACE(${alias}.nombre, '^(\\d+\\s*-\\s*)+', ''), '^\\d+\\s+', ''))`;
+}
+
+// Consolida id_categoria duplicados que comparten el mismo nombre visible
+// (la tabla categoria tiene múltiples id_categoria con distinto prefijo
+// numérico pero el mismo nombre tras quitarlo, ej. "4500 - 2500-POSTRES"
+// y "1950 - 1000-POSTRES"). La expresión replica extractCategoryName().
 function getCatMapCte() {
     return `cat_map AS (
-        SELECT DISTINCT ON (nombre)
+        SELECT DISTINCT ON (nombre_limpio)
             id_categoria AS id_dim,
-            nombre
-        FROM categoria
-        ORDER BY nombre, id_categoria
+            nombre,
+            nombre_limpio
+        FROM (
+            SELECT id_categoria, nombre,
+                TRIM(REGEXP_REPLACE(REGEXP_REPLACE(nombre, '^(\\d+\\s*-\\s*)+', ''), '^\\d+\\s+', '')) AS nombre_limpio
+            FROM categoria
+        ) c
+        ORDER BY nombre_limpio, id_categoria
     )`;
 }
 
@@ -297,7 +310,7 @@ function buildPeriodosDesdeVentasSql(tipoPeriodo, tabla = 'venta', alias = 'v', 
         partes.push(`
             SELECT DISTINCT ${alias}.id_vendedor, 'SEMANAL' AS tipo_periodo,
                 DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
-                (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
+                (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '5 days')::date AS fecha_fin
             FROM ${tabla} ${alias}
             WHERE ${whereBase}
         `);
@@ -337,7 +350,7 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                     END AS fecha_inicio,
                     CASE p.tipo_periodo
                         WHEN 'MENSUAL' THEN (DATE_TRUNC('month', ${alias}.fecha) + INTERVAL '1 month - 1 day')::date
-                        WHEN 'SEMANAL' THEN (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date
+                        WHEN 'SEMANAL' THEN (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '5 days')::date
                         ELSE ${alias}.fecha
                     END AS fecha_fin
                 FROM venta ${alias}
@@ -359,7 +372,7 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
                 LEFT JOIN categoria cat ON cat.id_categoria = i.${dimCol}
-                LEFT JOIN cat_map cm ON cm.nombre = cat.nombre
+                LEFT JOIN cat_map cm ON cm.nombre_limpio = ${getCategoriaLimpiaExpr('cat')}
                 WHERE ${whereBase}
             `);
         }
@@ -367,12 +380,12 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
             partes.push(`
                 SELECT DISTINCT ${alias}.id_vendedor, COALESCE(cm.id_dim, i.${dimCol}) AS id_dim, 'SEMANAL' AS tipo_periodo,
                     DATE_TRUNC('week', ${alias}.fecha)::date AS fecha_inicio,
-                    (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '6 days')::date AS fecha_fin
+                    (DATE_TRUNC('week', ${alias}.fecha) + INTERVAL '5 days')::date AS fecha_fin
                 FROM venta ${alias}
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
                 LEFT JOIN categoria cat ON cat.id_categoria = i.${dimCol}
-                LEFT JOIN cat_map cm ON cm.nombre = cat.nombre
+                LEFT JOIN cat_map cm ON cm.nombre_limpio = ${getCategoriaLimpiaExpr('cat')}
                 WHERE ${whereBase}
             `);
         }
@@ -384,7 +397,7 @@ function buildPeriodosDimensionDesdeVentasSql(tipoPeriodo, dimCol, alias = 'v', 
                 JOIN detalle_venta dv ON dv.id_venta = ${alias}.id_venta
                 JOIN item i ON i.id_item = dv.id_item
                 LEFT JOIN categoria cat ON cat.id_categoria = i.${dimCol}
-                LEFT JOIN cat_map cm ON cm.nombre = cat.nombre
+                LEFT JOIN cat_map cm ON cm.nombre_limpio = ${getCategoriaLimpiaExpr('cat')}
                 WHERE ${whereBase}
             `);
         }
@@ -542,7 +555,7 @@ async function obtenerPeriodosDimensionCuota({ cuotaTable, dimCol, fechaInicio, 
                 SUM(cu.cuota)::numeric AS cuota_total
             FROM ${cuotaTable} cu
             ${esProveedor ? '' : `LEFT JOIN categoria cat ON cat.id_categoria = cu.${dimCol}
-            LEFT JOIN cat_map cm ON cm.nombre = cat.nombre`}
+            LEFT JOIN cat_map cm ON cm.nombre_limpio = ${getCategoriaLimpiaExpr('cat')}`}
             WHERE ${cuotaConds.join(' AND ')}
             GROUP BY cu.id_vendedor, ${cuotaDimExpr}, cu.tipo_periodo, cu.fecha_inicio, cu.fecha_fin
         ),
@@ -715,7 +728,7 @@ async function calcularImpactosDimensionBatch(periodos, dim, fechaInicioGlobal, 
             JOIN cliente c ON c.id_cliente = v.id_cliente
             JOIN item i ON i.id_item = dv.id_item
             LEFT JOIN categoria cat ON cat.id_categoria = i.${dimCol}
-            LEFT JOIN cat_map cm ON cm.nombre = cat.nombre
+            LEFT JOIN cat_map cm ON cm.nombre_limpio = ${getCategoriaLimpiaExpr('cat')}
             WHERE ${buildClienteValidoCond('c')}
               ${dimensionVentaConds.length ? `AND ${dimensionVentaConds.join(' AND ')}` : ''}
         )`;
@@ -938,7 +951,7 @@ async function calcularDimension(ctx, dim) {
             JOIN cliente c ON c.id_cliente = v.id_cliente
             JOIN item i ON i.id_item = dv.id_item
             LEFT JOIN categoria cat ON cat.id_categoria = i.id_categoria
-            LEFT JOIN cat_map cm ON cm.nombre = cat.nombre
+            LEFT JOIN cat_map cm ON cm.nombre_limpio = ${getCategoriaLimpiaExpr('cat')}
             WHERE ${tempConds.join(' AND ')}
         `, { replacements: tempReplacements });
     }
