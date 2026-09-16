@@ -3,11 +3,9 @@ url: http://localhost:3000/api/auth/login
 method: POST
 body:
   type: json
-  content: "{\r
-
-    \    \"username\": \"0990\",\r
-
-    \    \"password\":\"Ana2026\"\r
-
-    }"
+  content: |-
+    {
+      "username": "{{USERNAME}}",
+      "password": "{{PASSWORD}}"
+    }
 order: 1000

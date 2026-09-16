@@ -5,8 +5,8 @@ body:
   type: json
   content: |-
     {
-        "username": "Aslly Zuñiga",
-        "password": "zuñiga2026",
+        "username": "{{ADMIN_USERNAME}}",
+        "password": "{{ADMIN_PASSWORD}}",
         "estado": 1,
         "id_rol": 1
       }
